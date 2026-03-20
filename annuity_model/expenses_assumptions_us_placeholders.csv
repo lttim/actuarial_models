@@ -1,0 +1,4 @@
+key,value,unit,notes
+policy_expense_dollars,250,absolute,one-time expense at issue (per policy)
+premium_expense_rate,0.01,percent,expense at issue as a fraction of single premium
+monthly_expense_dollars,25,absolute_per_month,ongoing expense paid monthly while in-force (assumed to stop at death)
