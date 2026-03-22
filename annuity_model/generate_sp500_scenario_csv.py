@@ -3,7 +3,7 @@ Generate a synthetic monthly S&P 500 *proxy* index path for SPIA scenario CSV.
 
 This is illustrative only (geometric random walk), not an official index print.
 Usage:
-    python generate_sp500_scenario_csv.py --months 540 --out sp500_scenario_projection_monthly.csv
+    python generate_sp500_scenario_csv.py --months 600 --out sp500_scenario_projection_monthly.csv
 """
 
 from __future__ import annotations
@@ -32,7 +32,12 @@ def write_scenario_csv(out_path: Path, n_months: int, *, seed: int = 42, s0: flo
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--months", type=int, default=540, help="Number of payment months (rows 0..months)")
+    p.add_argument(
+        "--months",
+        type=int,
+        default=600,
+        help="Max month index in CSV = this value (rows month=0..months); 600 covers 50y e.g. age 60→110",
+    )
     p.add_argument("--out", type=Path, default=Path("sp500_scenario_projection_monthly.csv"))
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--s0", type=float, default=5000.0)

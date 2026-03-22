@@ -65,8 +65,12 @@ def load_index_scenario_monthly_csv(
     """
     Load index levels for payment months 0..n_months.
 
-    The CSV must include rows for month=0 (issue / index at first accrual date) and
-    month=1..n_months (index at each monthly payment date), in any order (sorted internally).
+    The CSV must include month=0 and a **contiguous** block of integer months
+    ``0..M`` with no gaps (extra months beyond ``n_months`` are ignored).
+
+    If ``M < n_months``, the level at month ``M`` is **held flat** for
+    ``M+1..n_months`` (zero index returns on the extended tail). If the file
+    already covers ``0..n_months`` or more, no extension is applied.
 
     Returns
     -------
@@ -91,22 +95,45 @@ def load_index_scenario_monthly_csv(
     months = months[order]
     levels = levels[order]
 
-    required = set(range(0, n_months + 1))
-    got = set(months.tolist())
-    if got != required:
-        missing = sorted(required - got)
-        extra = sorted(got - required)
-        msg = f"Index scenario must contain exactly months 0..{n_months}."
+    month_levels: dict[int, float] = {}
+    for m, lev in zip(months.tolist(), levels.tolist()):
+        mi = int(m)
+        if mi < 0:
+            raise ValueError("Index scenario month indices must be non-negative.")
+        month_levels[mi] = float(lev)
+
+    if 0 not in month_levels:
+        raise ValueError("Index scenario must include month 0.")
+
+    m_max = max(month_levels.keys())
+    expected_keys = set(range(m_max + 1))
+    if set(month_levels.keys()) != expected_keys:
+        missing = sorted(expected_keys - set(month_levels.keys()))
+        extra = sorted(set(month_levels.keys()) - expected_keys)
+        msg = (
+            f"Index scenario months must be contiguous from 0 through {m_max} with no gaps "
+            f"(got non-contiguous or duplicate-spanning keys)."
+        )
         if missing:
-            msg += f" Missing: {missing[:20]}{'...' if len(missing) > 20 else ''}."
+            msg += f" Missing in prefix: {missing[:20]}{'...' if len(missing) > 20 else ''}."
         if extra:
-            msg += f" Extra: {extra[:20]}{'...' if len(extra) > 20 else ''}."
+            msg += f" Unexpected: {extra[:20]}{'...' if len(extra) > 20 else ''}."
         raise ValueError(msg)
 
-    s0 = float(levels[months == 0][0])
+    if m_max < n_months:
+        last = float(month_levels[m_max])
+        for m in range(m_max + 1, n_months + 1):
+            month_levels[m] = last
+
+    required = range(0, n_months + 1)
+    for m in required:
+        if m not in month_levels:
+            raise ValueError(f"Index scenario internal error: missing month {m} after load/extend.")
+
+    s0 = float(month_levels[0])
     levels_payment = np.zeros(n_months, dtype=float)
     for k in range(1, n_months + 1):
-        levels_payment[k - 1] = float(levels[months == k][0])
+        levels_payment[k - 1] = float(month_levels[k])
     return s0, levels_payment
 
 

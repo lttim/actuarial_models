@@ -310,12 +310,24 @@ def test_load_mp2016_male_improvement_smoke():
 # --- index scenario & expense inflation ---
 
 
-def test_load_index_scenario_requires_all_months(tmp_path):
-    """Index CSV must include month 0..n with no gaps."""
+def test_load_index_scenario_rejects_non_contiguous_months(tmp_path):
+    """Index CSV months from 0 must be contiguous (no gaps in the prefix)."""
     p = tmp_path / "idx.csv"
-    p.write_text("month,sp500_level\n0,100\n1,101\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="exactly months"):
+    p.write_text("month,sp500_level\n0,100\n2,102\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="contiguous"):
         sp.load_index_scenario_monthly_csv(str(p), n_months=3)
+
+
+def test_load_index_scenario_extends_short_file_with_flat_tail(tmp_path):
+    """Shorter contiguous CSV is extended by holding the last level flat (zero forward returns)."""
+    p = tmp_path / "idx.csv"
+    p.write_text("month,sp500_level\n0,100\n1,110\n", encoding="utf-8")
+    s0, lv = sp.load_index_scenario_monthly_csv(str(p), n_months=3)
+    assert s0 == 100.0
+    assert lv.shape == (3,)
+    assert lv[0] == pytest.approx(110.0)
+    assert lv[1] == pytest.approx(110.0)
+    assert lv[2] == pytest.approx(110.0)
 
 
 def test_flat_index_zero_inflation_matches_level_benefits():
