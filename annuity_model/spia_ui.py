@@ -25,7 +25,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import spia_projection as sp
-from build_spia_excel_workbook import build_workbook_from_spec, excel_spec_from_launcher
+from build_spia_excel_workbook import ExcelPythonSnapshot, build_workbook_from_spec, excel_spec_from_launcher
 from test_dashboard import render_unit_tests_page
 
 
@@ -436,7 +436,17 @@ def _render_run_and_results() -> None:
                     index_levels_at_payment=res.index_level_at_payment,
                     expense_annual_inflation=float(res.expense_annual_inflation),
                 )
-                st.session_state["pricing_xlsx_bytes"] = build_workbook_from_spec(spec, out_path=None)
+                st.session_state["pricing_xlsx_bytes"] = build_workbook_from_spec(
+                    spec,
+                    out_path=None,
+                    python_snapshot=ExcelPythonSnapshot(
+                        pv_benefit=float(res.pv_benefit),
+                        pv_monthly_expenses=float(res.pv_monthly_expenses),
+                        pv_monthly_total=float(res.pv_benefit + res.pv_monthly_expenses),
+                        single_premium=float(res.single_premium),
+                        annuity_factor=float(res.annuity_factor),
+                    ),
+                )
                 st.session_state.pop("pricing_xlsx_built_error", None)
             except Exception as ex:
                 st.session_state["pricing_xlsx_bytes"] = None
@@ -489,7 +499,7 @@ def _render_run_and_results() -> None:
                     data=xb,
                     file_name="spia_recalc_model.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help="Formula-driven workbook matching this run (yield nodes, q_x, MP grid, expenses).",
+                    help="Formula workbook for this run; ModelCheck sheet embeds Python PV/premium to verify Excel recalc vs Inputs (especially spread B9).",
                 )
             elif st.session_state.get("pricing_xlsx_built_error"):
                 st.caption(f"Excel export unavailable: {st.session_state['pricing_xlsx_built_error']}")

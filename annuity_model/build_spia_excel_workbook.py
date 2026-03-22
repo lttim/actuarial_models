@@ -18,6 +18,17 @@ OUT_XLSX = BASE_DIR / "spia_projection_model.xlsx"
 
 
 @dataclass(frozen=True)
+class ExcelPythonSnapshot:
+    """Pricing metrics from the Python run used to build the workbook (for cross-checking formulas)."""
+
+    pv_benefit: float
+    pv_monthly_expenses: float
+    pv_monthly_total: float
+    single_premium: float
+    annuity_factor: float
+
+
+@dataclass(frozen=True)
 class ExcelBuildSpec:
     """Inputs for a formula-driven SPIA workbook aligned with `spia_ui.py` / `spia_projection.py`."""
 
@@ -193,6 +204,8 @@ def _write_inputs(ws, spec: ExcelBuildSpec) -> None:
     ws["D7"] = "Discount factors use log-linear interpolation on DF nodes (matches Python YieldCurve)."
     ws["D8"] = "Benefits: return indexation from IndexScenario; expenses: monthly CPI-style from B17."
     ws["D9"] = "Changing horizon/issue age does not auto-resize sheets; regenerate from the launcher."
+    ws["D10"] = "Spread B9 is added to zero rates. Negative B9 lowers discount yields and raises PV—must match launcher."
+    ws["D11"] = "See ModelCheck: Python snapshot vs Projection! formulas; large |Difference| means inputs/recalc issues."
 
 
 def _write_simple_table(ws, title: str, df: pd.DataFrame) -> None:
@@ -270,7 +283,7 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
     headers = [
         "Month",
         "t_years",
-        "AttainedAge",
+        "AttainedAgeQx",
         "IntAge",
         "CalendarYear",
         "IndexLevel",
@@ -302,7 +315,8 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
     for r in range(first, last + 1):
         ws[f"A{r}"] = r - first + 1
         ws[f"B{r}"] = f"=A{r}/Inputs!$B$6"
-        ws[f"C{r}"] = f"=Inputs!$B$3+B{r}"
+        # Fractional age at start of (month A) interval — matches Python monthly_survival_to_payment q_x lookup.
+        ws[f"C{r}"] = f"=Inputs!$B$3+(A{r}-1)/Inputs!$B$6"
         ws[f"D{r}"] = f"=INT(C{r})"
         ws[f"E{r}"] = f"=Inputs!$B$7+1+INT((A{r}-1)/Inputs!$B$6)"
         ws[f"F{r}"] = f'=IFERROR(INDEX({br},MATCH(A{r},{ir},0)),"")'
@@ -473,6 +487,55 @@ def _write_dashboard(wb: Workbook, n_months: int) -> None:
         ws[f"F{r}"].number_format = "#,##0.00"
 
 
+def _write_model_check_sheet(wb: Workbook, snap: ExcelPythonSnapshot) -> None:
+    """Embed Python pricing outputs next to Projection summary formulas for troubleshooting."""
+    ws = wb.create_sheet("ModelCheck")
+    ws["A1"] = "Python snapshot vs Excel (Projection sheet)"
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A2"] = (
+        "Column B was frozen when this workbook was generated. Column C references Projection formulas; "
+        "column D should be ~0 after a full recalc if Inputs match the launcher and calculation is automatic."
+    )
+    ws.merge_cells("A2:D2")
+
+    headers = ("Metric", "Python snapshot", "Excel (formula)", "Difference (Excel − Python)")
+    for c, h in enumerate(headers, start=1):
+        cell = ws.cell(row=4, column=c, value=h)
+        cell.font = Font(bold=True)
+
+    rows: list[tuple[str, float, str]] = [
+        ("PV benefits", snap.pv_benefit, "=Projection!X4"),
+        ("PV monthly expenses", snap.pv_monthly_expenses, "=Projection!X5"),
+        ("PV monthly total (ben+exp)", snap.pv_monthly_total, "=Projection!X7"),
+        ("Single premium", snap.single_premium, "=Projection!X8"),
+        ("Annuity factor", snap.annuity_factor, "=Projection!X6"),
+    ]
+    for i, (label, val, xls_ref) in enumerate(rows, start=5):
+        ws.cell(row=i, column=1, value=label)
+        ws.cell(row=i, column=2, value=float(val))
+        ws.cell(row=i, column=3, value=xls_ref)
+        ws.cell(row=i, column=4, value=f"=C{i}-B{i}")
+        if label == "Annuity factor":
+            ws.cell(row=i, column=2).number_format = "0.000000"
+            ws.cell(row=i, column=4).number_format = "0.000000"
+        else:
+            ws.cell(row=i, column=2).number_format = "#,##0.00"
+            ws.cell(row=i, column=4).number_format = "#,##0.00"
+
+    ws["A12"] = "Troubleshooting"
+    ws["A12"].font = Font(bold=True)
+    ws["A13"] = (
+        "A ~3–4% higher Excel PV vs column B usually means Inputs!B9 (spread) is negative or does not match "
+        "the Streamlit run (e.g. spreadsheet edited after download). Confirm valuation year B7 and all Inputs."
+    )
+    ws.merge_cells("A13:D15")
+
+    ws.column_dimensions["A"].width = 30
+    ws.column_dimensions["B"].width = 22
+    ws.column_dimensions["C"].width = 22
+    ws.column_dimensions["D"].width = 26
+
+
 def _write_python_tab(wb: Workbook) -> None:
     ws = wb.create_sheet("Python_Runbook")
     ws["A1"] = "Python / Launcher Runbook"
@@ -517,15 +580,24 @@ def _write_python_tab(wb: Workbook) -> None:
     ws.column_dimensions["B"].width = 120
 
 
-def build_workbook_from_spec(spec: ExcelBuildSpec, out_path: Path | None = None) -> Path | bytes:
+def build_workbook_from_spec(
+    spec: ExcelBuildSpec,
+    out_path: Path | None = None,
+    *,
+    python_snapshot: ExcelPythonSnapshot | None = None,
+) -> Path | bytes:
     """
     Write a workbook to `out_path`. If `out_path` is None, return the file as bytes (for downloads).
+
+    Optional ``python_snapshot`` embeds the launcher run on the ModelCheck sheet for formula validation.
     """
     yc = spec.yield_curve_df.copy()
     if "maturity_years" not in yc.columns or "zero_rate" not in yc.columns:
         raise ValueError("yield_curve_df must have columns maturity_years, zero_rate")
 
     wb = Workbook()
+    wb.calculation.calcMode = "auto"
+    wb.calculation.fullCalcOnLoad = True
     ws_inputs = wb.active
     _write_inputs(ws_inputs, spec)
 
@@ -561,6 +633,9 @@ def build_workbook_from_spec(spec: ExcelBuildSpec, out_path: Path | None = None)
 
     ws_proj = wb.create_sheet("Projection")
     _write_projection(ws_proj, n_months=n_months, y_last_row=y_last_row, idx_last_row=idx_last_row)
+
+    if python_snapshot is not None:
+        _write_model_check_sheet(wb, python_snapshot)
 
     _write_dashboard(wb, n_months=n_months)
     _write_python_tab(wb)
