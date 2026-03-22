@@ -1,31 +1,98 @@
-import numpy as np
+"""
+Save illustration charts for SPIA projection (with index scenario + expense inflation).
+
+Default: uses treasury zero curve, RP-2014 + MP-2016 when workbooks exist, synthetic index CSV,
+and 2.5%/year expense inflation. Index return charts can be saved as PNGs or toggled interactively.
+
+Examples:
+    python illustrate_spia_projection.py
+    python illustrate_spia_projection.py --index-return all
+    python illustrate_spia_projection.py --interactive
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+
 import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.widgets import RadioButtons
 
 from spia_projection import (
+    DEFAULT_SP500_SCENARIO_CSV,
+    ExpenseAssumptions,
+    MortalityTableRP2014MP2016,
     SPIAContract,
     YieldCurve,
-    MortalityTableRP2014MP2016,
     ensure_mp2016_male_improvement_csv,
     ensure_rp2014_male_healthy_annuitant_qx_csv,
+    load_index_scenario_monthly_csv,
     price_spia_single_premium,
-    ExpenseAssumptions,
 )
 
 
 def _safe_mkdir(path: str) -> None:
-    import os
-
     os.makedirs(path, exist_ok=True)
 
 
+def _plot_return_panel(ax, ages: np.ndarray, res, mode: str) -> None:
+    if mode == "simple":
+        y = res.index_simple_return
+        title = "S&P proxy: month-over-month simple return"
+        ylab = "Return"
+    elif mode == "log":
+        y = res.index_log_return
+        title = "S&P proxy: month-over-month log return"
+        ylab = "Log return"
+    elif mode == "cumulative":
+        y = res.index_cumulative_return
+        title = "S&P proxy: cumulative return from month 0"
+        ylab = "S_k/S_0 - 1"
+    else:
+        y = res.index_level_at_payment
+        title = "S&P proxy: index level"
+        ylab = "Level"
+    ax.plot(ages, y, linewidth=1.5)
+    ax.set_title(title)
+    ax.set_xlabel("Attained age at payment")
+    ax.set_ylabel(ylab)
+    ax.grid(True, alpha=0.3)
+
+
 def main() -> None:
-    # Policy inputs (from conversation)
+    p = argparse.ArgumentParser(description="SPIA illustration plots")
+    p.add_argument(
+        "--index-return",
+        choices=["all", "simple", "log", "cumulative", "level"],
+        default="all",
+        help="Which index return chart(s) to save (ignored with --interactive).",
+    )
+    p.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Open one figure with a radio-button toggle between return views.",
+    )
+    p.add_argument(
+        "--expense-inflation-pct",
+        type=float,
+        default=2.5,
+        help="Annual expense inflation percent (maintenance expenses only).",
+    )
+    p.add_argument(
+        "--scenario-csv",
+        type=str,
+        default=DEFAULT_SP500_SCENARIO_CSV,
+        help="Monthly index CSV (month, sp500_level for 0..N). Use empty string for flat index.",
+    )
+    args = p.parse_args()
+
     contract = SPIAContract(issue_age=65, sex="male", benefit_annual=100_000.0)
     horizon_age = 110
     spread = 0.0
-    valuation_year = 2025  # 12/31/2025 valuation date
+    valuation_year = 2025
+    expense_annual_inflation = float(args.expense_inflation_pct) / 100.0
 
-    # Files in working folder
     zero_curve_csv = "treasury_zero_rate_curve_latest.csv"
     rp2014_xlsx = "rp2014_mort_tab_rates_exposure.xlsx"
     mp2016_xlsx = "mp2016_rates.xlsx"
@@ -33,7 +100,6 @@ def main() -> None:
     out_dir = "illustrations"
     _safe_mkdir(out_dir)
 
-    # Load curves / mortality
     yc = YieldCurve.load_zero_curve_csv(zero_curve_csv)
     base_qx = ensure_rp2014_male_healthy_annuitant_qx_csv(
         rp2014_xlsx_path=rp2014_xlsx,
@@ -51,7 +117,22 @@ def main() -> None:
         base_year=2014,
     )
 
-    # Compute projection
+    dt = 1.0 / 12.0
+    n_months = max(1, int(round((horizon_age - contract.issue_age) / dt)))
+    scen_path = args.scenario_csv.strip()
+    if scen_path:
+        idx_path = scen_path
+        try:
+            load_index_scenario_monthly_csv(idx_path, n_months=n_months)
+        except FileNotFoundError:
+            print(f"Scenario not found: {idx_path}, using flat index.")
+            idx_path = None
+        except ValueError as e:
+            print(f"Scenario validation failed ({e}); using flat index.")
+            idx_path = None
+    else:
+        idx_path = None
+
     res = price_spia_single_premium(
         contract=contract,
         yield_curve=yc,
@@ -59,115 +140,115 @@ def main() -> None:
         horizon_age=horizon_age,
         spread=spread,
         valuation_year=valuation_year,
+        expenses=ExpenseAssumptions(0.0, 0.0, 0.0),
+        index_scenario_csv_path=idx_path,
+        expense_annual_inflation=expense_annual_inflation,
     )
 
-    dt = 1.0 / 12.0
-    b_month = contract.benefit_annual / 12.0
-    expected_payment_pv = b_month * res.survival_to_payment * res.discount_factors
-    expected_benefit_cashflows = res.expected_benefit_cashflows
-    expected_expense_cashflows = res.expected_expense_cashflows
-    expected_total_cashflows = res.expected_total_cashflows
-
-    # Economic reserves are stored at t=0 plus each monthly payment date.
+    ages_pay = res.ages_at_payment
+    expected_payment_pv = res.expected_benefit_cashflows * res.discount_factors
+    cumulative_pv = np.cumsum(expected_payment_pv)
     ages_at_reserve = contract.issue_age + res.reserve_times_years
 
-    # Plot 1: survival
-    plt.figure(figsize=(9, 5))
-    plt.plot(res.ages_at_payment, res.survival_to_payment, linewidth=2)
-    plt.title("SPIA: Survival Probability to Each Monthly Payment Date")
-    plt.xlabel("Attained Age at Payment")
-    plt.ylabel("P(alive at payment)")
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(f"{out_dir}/spia_survival_vs_age.png", dpi=160)
-    plt.close()
+    def save_core_plots() -> None:
+        plt.figure(figsize=(9, 5))
+        plt.plot(ages_pay, res.survival_to_payment, linewidth=2)
+        plt.title("SPIA: Survival Probability to Each Monthly Payment Date")
+        plt.xlabel("Attained Age at Payment")
+        plt.ylabel("P(alive at payment)")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f"{out_dir}/spia_survival_vs_age.png", dpi=160)
+        plt.close()
 
-    # Plot 2: expected PV contribution per payment date
-    plt.figure(figsize=(9, 5))
-    plt.plot(res.ages_at_payment, expected_payment_pv, linewidth=2)
-    plt.title("SPIA: Expected PV Contribution per Monthly Payment")
-    plt.xlabel("Attained Age at Payment")
-    plt.ylabel("Expected Present Value of Payment ($)")
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(f"{out_dir}/spia_expected_pv_contribution_vs_age.png", dpi=160)
-    plt.close()
+        plt.figure(figsize=(9, 5))
+        plt.plot(ages_pay, expected_payment_pv, linewidth=2)
+        plt.title("SPIA: Expected PV Contribution per Monthly Benefit")
+        plt.xlabel("Attained Age at Payment")
+        plt.ylabel("Expected Present Value ($)")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f"{out_dir}/spia_expected_pv_contribution_vs_age.png", dpi=160)
+        plt.close()
 
-    # Plot 3: cumulative PV
-    cumulative_pv = np.cumsum(expected_payment_pv)
-    plt.figure(figsize=(9, 5))
-    plt.plot(res.ages_at_payment, cumulative_pv, linewidth=2)
-    plt.title("SPIA: Cumulative PV of Expected Payments")
-    plt.xlabel("Attained Age at Payment")
-    plt.ylabel("Cumulative Present Value ($)")
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(f"{out_dir}/spia_cumulative_pv_vs_age.png", dpi=160)
-    plt.close()
+        plt.figure(figsize=(9, 5))
+        plt.plot(ages_pay, cumulative_pv, linewidth=2)
+        plt.title("SPIA: Cumulative PV of Expected Benefit Payments")
+        plt.xlabel("Attained Age at Payment")
+        plt.ylabel("Cumulative Present Value ($)")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f"{out_dir}/spia_cumulative_pv_vs_age.png", dpi=160)
+        plt.close()
 
-    # Plot 4: projected monthly benefit cashflows (expected nominal)
-    plt.figure(figsize=(9, 5))
-    plt.plot(res.ages_at_payment, expected_benefit_cashflows, linewidth=2, color="tab:blue")
-    plt.title("SPIA: Expected Monthly Benefit Payments (Nominal)")
-    plt.xlabel("Attained Age at Payment")
-    plt.ylabel("Expected Benefit Payment ($)")
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(f"{out_dir}/spia_expected_benefit_cashflows_vs_age.png", dpi=160)
-    plt.close()
+        plt.figure(figsize=(9, 5))
+        plt.plot(ages_pay, res.expected_benefit_cashflows, linewidth=2, color="tab:blue")
+        plt.title("SPIA: Expected Monthly Benefit Payments (Nominal)")
+        plt.xlabel("Attained Age at Payment")
+        plt.ylabel("Expected Benefit Payment ($)")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f"{out_dir}/spia_expected_benefit_cashflows_vs_age.png", dpi=160)
+        plt.close()
 
-    # Plot 5: projected monthly expense cashflows (expected nominal)
-    plt.figure(figsize=(9, 5))
-    plt.plot(res.ages_at_payment, expected_expense_cashflows, linewidth=2, color="tab:orange")
-    plt.title("SPIA: Expected Monthly Expense Cashflows (Nominal)")
-    plt.xlabel("Attained Age at Payment")
-    plt.ylabel("Expected Expense Payment ($)")
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(f"{out_dir}/spia_expected_expense_cashflows_vs_age.png", dpi=160)
-    plt.close()
+        plt.figure(figsize=(9, 5))
+        plt.plot(ages_pay, res.expected_expense_cashflows, linewidth=2, color="tab:orange")
+        plt.title("SPIA: Expected Monthly Expense Cashflows (Nominal)")
+        plt.xlabel("Attained Age at Payment")
+        plt.ylabel("Expected Expense Payment ($)")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f"{out_dir}/spia_expected_expense_cashflows_vs_age.png", dpi=160)
+        plt.close()
 
-    # Plot 6: projected economic reserves
-    plt.figure(figsize=(9, 5))
-    plt.plot(ages_at_reserve, res.economic_reserve, linewidth=2, color="tab:green")
-    plt.title("SPIA: Projected Economic Reserves (Benefit + Monthly Expenses)")
-    plt.xlabel("Attained Age")
-    plt.ylabel("Economic Reserve ($, PV at valuation time)")
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(f"{out_dir}/spia_economic_reserve_vs_age.png", dpi=160)
-    plt.close()
+        plt.figure(figsize=(9, 5))
+        plt.plot(ages_at_reserve, res.economic_reserve, linewidth=2, color="tab:green")
+        plt.title("SPIA: Projected Economic Reserves (Benefit + Monthly Expenses)")
+        plt.xlabel("Attained Age")
+        plt.ylabel("Economic Reserve ($, PV at valuation time)")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f"{out_dir}/spia_economic_reserve_vs_age.png", dpi=160)
+        plt.close()
 
-    # Print a small verification summary
-    checkpoints = [65, 70, 75, 80, 85, 90, 100, 110]
+    save_core_plots()
+
+    modes = ["simple", "log", "cumulative", "level"]
+    if args.interactive:
+        fig, ax = plt.subplots(figsize=(9, 5))
+        plt.subplots_adjust(left=0.25)
+
+        def redraw(mode: str) -> None:
+            ax.clear()
+            _plot_return_panel(ax, ages_pay, res, mode)
+            fig.canvas.draw_idle()
+
+        redraw("simple")
+        rax = plt.axes((0.02, 0.4, 0.18, 0.2))
+        radio = RadioButtons(rax, ("Simple", "Log", "Cumulative", "Level"))
+        radio.on_clicked(lambda label: redraw(label.lower()))
+        plt.suptitle("Toggle: S&P proxy return view (illustrative series)")
+        plt.show()
+    else:
+        to_save = modes if args.index_return == "all" else [args.index_return]
+        for m in to_save:
+            fig, ax = plt.subplots(figsize=(9, 5))
+            _plot_return_panel(ax, ages_pay, res, m)
+            plt.tight_layout()
+            plt.savefig(f"{out_dir}/spia_index_return_{m}.png", dpi=160)
+            plt.close()
+
     print("SPIA illustration (policy):")
     print(f"  Issue age: {contract.issue_age}, benefit annual: {contract.benefit_annual:,.0f}")
     print(f"  Valuation year: {valuation_year}, horizon age: {horizon_age}, spread: {spread}")
+    print(f"  Expense inflation (annual): {expense_annual_inflation:.4f}")
     print(f"  Single premium (incl. issue expenses): {res.single_premium:,.2f}")
     print(f"  PV benefits: {res.pv_benefit:,.2f}")
     print(f"  PV monthly expenses: {res.pv_monthly_expenses:,.2f}")
-    print(f"  Annuity factor: {res.annuity_factor:,.6f}")
+    print(f"  Annuity factor (level $1): {res.annuity_factor:,.6f}")
     print("")
-    for age in checkpoints:
-        # Find nearest payment date age
-        idx = int(np.argmin(np.abs(res.ages_at_payment - age)))
-        t = res.times_years[idx]
-        print(
-            f"  Age~{age}: t={t:.3f}y, "
-            f"S(t)={res.survival_to_payment[idx]:.6f}, "
-            f"DF(t)={res.discount_factors[idx]:.6f}, "
-            f"Expected payment PV=${expected_payment_pv[idx]:,.2f}"
-        )
-    print("")
-    print("Saved plots to:")
-    print(f"  {out_dir}/spia_survival_vs_age.png")
-    print(f"  {out_dir}/spia_expected_pv_contribution_vs_age.png")
-    print(f"  {out_dir}/spia_cumulative_pv_vs_age.png")
-    print(f"  {out_dir}/spia_expected_benefit_cashflows_vs_age.png")
-    print(f"  {out_dir}/spia_expected_expense_cashflows_vs_age.png")
-    print(f"  {out_dir}/spia_economic_reserve_vs_age.png")
+    print("Saved plots under illustrations/ (plus index return PNGs unless --interactive).")
 
 
 if __name__ == "__main__":
     main()
-

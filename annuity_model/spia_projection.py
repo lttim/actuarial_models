@@ -3,12 +3,17 @@ Single Premium Immediate Annuity (SPIA) projection scaffolding.
 
 Contract assumptions (set from the conversation):
 - Single life
-- Level monthly payments, benefit is provided as an annual amount (default: 100_000)
+- Monthly payments; annual benefit sets the starting monthly accrual before indexation
+- Benefits can grow by monthly **return indexation** from an external index level path (CSV)
+- Maintenance expenses can grow by a fixed **annual inflation** rate (monthly compounding), separate from the index
 - Payment timing: end of period
 - Payments stop at death (i.e., pay at time t_k iff alive at that payment date)
 
 Pricing (single premium):
-    Premium = sum_{k=1..N} (B_annual/12) * P(alive at t_k) * DF(t_k)
+    Premium = policy_expense + PV(benefits + monthly expenses), grossed up for premium tax,
+    where monthly benefits can grow by **return indexation** from an S&P 500 proxy scenario
+    (monthly index levels by payment month) and monthly expenses grow by a **fixed annual
+    inflation** rate compounded monthly (independent of the equity index).
 
 Interest:
 - Uses continuous-compounding "zero rates" z(t).
@@ -47,6 +52,119 @@ DEFAULT_MP2016_XLSX = "mp2016_rates.xlsx"
 DEFAULT_RP2014_MALE_HEALTHY_QX_CSV = "rp2014_male_healthy_annuitant_qx_2014.csv"
 DEFAULT_MP2016_MALE_IMPROVEMENT_CSV = "mp2016_male_improvement_rates.csv"
 DEFAULT_EXPENSES_CSV = "expenses_assumptions_us_placeholders.csv"
+DEFAULT_SP500_SCENARIO_CSV = "sp500_scenario_projection_monthly.csv"
+
+
+def load_index_scenario_monthly_csv(
+    path: str,
+    *,
+    n_months: int,
+    month_col: str = "month",
+    level_col: str = "sp500_level",
+) -> tuple[float, np.ndarray]:
+    """
+    Load index levels for payment months 0..n_months.
+
+    The CSV must include rows for month=0 (issue / index at first accrual date) and
+    month=1..n_months (index at each monthly payment date), in any order (sorted internally).
+
+    Returns
+    -------
+    s0:
+        Index level at month 0.
+    levels_payment:
+        Shape (n_months,); levels_payment[k-1] is the index at payment month k.
+    """
+    if n_months < 1:
+        raise ValueError("n_months must be positive.")
+
+    df = pd.read_csv(path)
+    if month_col not in df.columns or level_col not in df.columns:
+        raise ValueError(f"CSV must contain columns '{month_col}' and '{level_col}'.")
+
+    months = df[month_col].to_numpy(dtype=int)
+    levels = df[level_col].to_numpy(dtype=float)
+    if np.any(levels <= 0.0) or np.any(np.isnan(levels)):
+        raise ValueError("Index levels must be finite and strictly positive.")
+
+    order = np.argsort(months)
+    months = months[order]
+    levels = levels[order]
+
+    required = set(range(0, n_months + 1))
+    got = set(months.tolist())
+    if got != required:
+        missing = sorted(required - got)
+        extra = sorted(got - required)
+        msg = f"Index scenario must contain exactly months 0..{n_months}."
+        if missing:
+            msg += f" Missing: {missing[:20]}{'...' if len(missing) > 20 else ''}."
+        if extra:
+            msg += f" Extra: {extra[:20]}{'...' if len(extra) > 20 else ''}."
+        raise ValueError(msg)
+
+    s0 = float(levels[months == 0][0])
+    levels_payment = np.zeros(n_months, dtype=float)
+    for k in range(1, n_months + 1):
+        levels_payment[k - 1] = float(levels[months == k][0])
+    return s0, levels_payment
+
+
+def flat_index_scenario(n_months: int, *, level: float = 100.0) -> tuple[float, np.ndarray]:
+    """Constant index (zero returns) for n_months payments after month-0 level."""
+    s0 = float(level)
+    return s0, np.full(n_months, s0, dtype=float)
+
+
+def monthly_rate_from_annual_inflation(annual_inflation: float) -> float:
+    """Convert annual CPI-style inflation to an equivalent monthly compound rate."""
+    if annual_inflation < -0.9999:
+        raise ValueError("annual_inflation must be > -1 (approximately).")
+    return float((1.0 + annual_inflation) ** (1.0 / 12.0) - 1.0)
+
+
+def _benefit_expense_and_index_returns(
+    *,
+    base_monthly: float,
+    monthly_expense: float,
+    s0: float,
+    levels_payment: np.ndarray,
+    expense_annual_inflation: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Return-indexed benefits, inflation-only expenses, and per-payment index return metrics.
+
+    Benefit month k (1-based payment): b_k = b_{k-1} * (S_k / S_{k-1}) with
+    b_1 = base_monthly * (S_1 / S_0).
+    """
+    n = int(levels_payment.shape[0])
+    if n < 1:
+        raise ValueError("levels_payment must be non-empty.")
+
+    b = np.zeros(n, dtype=float)
+    e = np.zeros(n, dtype=float)
+    b[0] = float(base_monthly) * (float(levels_payment[0]) / float(s0))
+    e[0] = float(monthly_expense)
+    g = monthly_rate_from_annual_inflation(float(expense_annual_inflation)) if expense_annual_inflation else 0.0
+
+    for k in range(1, n):
+        if levels_payment[k - 1] <= 0.0:
+            raise ValueError("Index levels must stay positive for return indexation.")
+        b[k] = b[k - 1] * (float(levels_payment[k]) / float(levels_payment[k - 1]))
+        e[k] = e[k - 1] * (1.0 + g)
+
+    simple = np.zeros(n, dtype=float)
+    logret = np.zeros(n, dtype=float)
+    cumu = np.zeros(n, dtype=float)
+    prev = float(s0)
+    for k in range(n):
+        cur = float(levels_payment[k])
+        simple[k] = cur / prev - 1.0
+        logret[k] = math.log(cur / prev) if cur > 0.0 and prev > 0.0 else float("nan")
+        cumu[k] = cur / float(s0) - 1.0
+        prev = cur
+
+    return b, e, simple, logret, cumu
 
 
 @dataclass(frozen=True)
@@ -678,7 +796,7 @@ class ExpenseAssumptions:
 class SPIAContract:
     issue_age: int
     sex: Literal["male", "female"]
-    benefit_annual: float  # level annual benefit amount paid as monthly instalments
+    benefit_annual: float  # annual analogue; first monthly accrual scales with index S1/S0, then return-indexed
     payment_freq_per_year: int = 12
     benefit_timing: Literal["end_of_period"] = "end_of_period"
     payment_cessation: Literal["at_death"] = "at_death"
@@ -694,7 +812,7 @@ class SPIAProjectionResult:
     # PV and pricing
     pv_benefit: float  # PV of benefit cashflows only
     pv_monthly_expenses: float  # PV of monthly expense cashflows only
-    annuity_factor: float  # sum_k P(alive at t_k)*DF(t_k) over monthly payment dates
+    annuity_factor: float  # sum_k P(alive at t_k)*DF(t_k) (level-$1 survival-weighted DF sum)
     single_premium: float  # priced premium including issue expense load
     # Expected cashflows (nominal, NOT discounted)
     expected_benefit_cashflows: np.ndarray
@@ -703,6 +821,15 @@ class SPIAProjectionResult:
     # Economic reserves: PV of remaining benefit+monthly expense at each time
     reserve_times_years: np.ndarray  # includes t=0 point
     economic_reserve: np.ndarray  # length n_months + 1
+    # Index / inflation scaffolding (length n_months; aligned with payment months 1..N)
+    index_level_at_payment: np.ndarray
+    index_simple_return: np.ndarray  # S_k/S_{k-1} - 1 with S_{-1} := S_0 at issue
+    index_log_return: np.ndarray
+    index_cumulative_return: np.ndarray  # S_k / S_0 - 1
+    benefit_nominal_scheduled: np.ndarray  # per-payment benefit if alive (before × survival in expected_*)
+    expense_nominal_scheduled: np.ndarray
+    expense_annual_inflation: float
+    index_s0: float
 
 
 def price_spia_single_premium(
@@ -715,10 +842,18 @@ def price_spia_single_premium(
     valuation_year: int | None = None,
     expenses: ExpenseAssumptions | None = None,
     expenses_csv_path: str = DEFAULT_EXPENSES_CSV,
+    index_scenario_csv_path: str | None = None,
+    expense_annual_inflation: float = 0.0,
 ) -> SPIAProjectionResult:
     """
-    Price a SPIA with level monthly benefits paying at the end of each month
-    conditional on survival to that payment date.
+    Price a SPIA with monthly benefits at month-end conditional on survival.
+
+    Benefits grow by **return indexation** from monthly index levels in ``index_scenario_csv_path``
+    (columns ``month``, ``sp500_level`` for months 0..N). If ``index_scenario_csv_path`` is None,
+    the index is flat (zero equity returns) and benefits are level in nominal terms.
+
+    Monthly maintenance expenses grow by ``expense_annual_inflation`` (e.g. 0.025 for 2.5%/year),
+    compounded monthly, independent of the equity index.
     """
     if contract.payment_freq_per_year != 12:
         raise ValueError("This scaffold currently assumes monthly payments (12 per year).")
@@ -744,7 +879,7 @@ def price_spia_single_premium(
     # Discount factors.
     df = yield_curve.discount_factors(times_years, spread=spread)
 
-    # Level monthly benefit amount.
+    # Level monthly benefit amount (base before indexation).
     b_month = contract.benefit_annual / contract.payment_freq_per_year
 
     annuity_factor = float(np.sum(survival * df))
@@ -762,9 +897,27 @@ def price_spia_single_premium(
             )
 
     monthly_expense_amount = float(expenses.monthly_expense_dollars)
-    pv_benefit = float(b_month * annuity_factor)
-    pv_monthly_expenses = float(monthly_expense_amount * annuity_factor)
-    pv_monthly_total_outflows = float((b_month + monthly_expense_amount) * annuity_factor)
+
+    if index_scenario_csv_path is None:
+        s0, levels_payment = flat_index_scenario(n_months)
+    else:
+        s0, levels_payment = load_index_scenario_monthly_csv(index_scenario_csv_path, n_months=n_months)
+
+    ben_sched, exp_sched, simp_ret, log_ret, cumu_ret = _benefit_expense_and_index_returns(
+        base_monthly=b_month,
+        monthly_expense=monthly_expense_amount,
+        s0=s0,
+        levels_payment=levels_payment,
+        expense_annual_inflation=float(expense_annual_inflation),
+    )
+
+    expected_benefit_cashflows = ben_sched * survival
+    expected_expense_cashflows = exp_sched * survival
+    expected_total_cashflows = expected_benefit_cashflows + expected_expense_cashflows
+
+    pv_benefit = float(np.sum(expected_benefit_cashflows * df))
+    pv_monthly_expenses = float(np.sum(expected_expense_cashflows * df))
+    pv_monthly_total_outflows = pv_benefit + pv_monthly_expenses
 
     # Solve for the single premium under issue-time premium expense load:
     #   premium = policy_expense + pv_monthly_total_outflows + premium_expense_rate * premium
@@ -774,32 +927,23 @@ def price_spia_single_premium(
         raise ValueError("premium_expense_rate must be < 1.")
     single_premium = float((float(expenses.policy_expense_dollars) + pv_monthly_total_outflows) / (1.0 - rate))
 
-    expected_benefit_cashflows = b_month * survival
-    expected_expense_cashflows = monthly_expense_amount * survival
-    expected_total_cashflows = expected_benefit_cashflows + expected_expense_cashflows
-
-    # Economic reserve:
-    # Reserve at t=0 (before first payment) is PV(issue->future) of benefit+monthly expenses.
-    # Reserve at each payment time t_k *after paying that month's cashflow* excludes CF at t_k.
-    amount_total = b_month + monthly_expense_amount
+    # Economic reserve: after payment at t_{i+1}, roll forward PV of remaining expected nominal CFs.
     reserve_times_years = np.concatenate(([0.0], times_years))
-
-    # i=0 corresponds to t_1 in the monthly grid.
-    survival_df = survival * df
-    tail_sum = np.cumsum(survival_df[::-1])[::-1]  # tail_sum[i] = sum_{j=i..n-1} survival_df[j]
-
     economic_reserve = np.zeros(n_months + 1, dtype=float)
-    economic_reserve[0] = float(amount_total * annuity_factor)
+    pv_remaining = np.zeros(n_months + 1, dtype=float)
+    pv_remaining[n_months] = 0.0
+    for i in range(n_months - 1, -1, -1):
+        pv_remaining[i] = float(expected_total_cashflows[i] * df[i] + pv_remaining[i + 1])
+    economic_reserve[0] = float(pv_remaining[0])
 
     for i in range(n_months):
-        # Reserve after payment at t_{i+1} => remaining payments are indices > i
         if i + 1 >= n_months:
             economic_reserve[i + 1] = 0.0
             continue
         if survival[i] <= 0.0 or df[i] <= 0.0:
             economic_reserve[i + 1] = 0.0
             continue
-        future_pv_at_issue = float(amount_total * tail_sum[i + 1])
+        future_pv_at_issue = float(pv_remaining[i + 1])
         economic_reserve[i + 1] = future_pv_at_issue / (survival[i] * df[i])
 
     return SPIAProjectionResult(
@@ -817,6 +961,14 @@ def price_spia_single_premium(
         expected_total_cashflows=expected_total_cashflows,
         reserve_times_years=reserve_times_years,
         economic_reserve=economic_reserve,
+        index_level_at_payment=levels_payment,
+        index_simple_return=simp_ret,
+        index_log_return=log_ret,
+        index_cumulative_return=cumu_ret,
+        benefit_nominal_scheduled=ben_sched,
+        expense_nominal_scheduled=exp_sched,
+        expense_annual_inflation=float(expense_annual_inflation),
+        index_s0=float(s0),
     )
 
 

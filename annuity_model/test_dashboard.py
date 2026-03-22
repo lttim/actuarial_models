@@ -4,6 +4,10 @@ Browser dashboard for SPIA unit tests: descriptions, run controls, and outcomes.
 Run from the annuity_model folder:
     streamlit run test_dashboard.py
 Or double-click run_test_dashboard.bat (Windows).
+
+For the full model workspace (pricing + charts + these tests), use:
+    streamlit run spia_ui.py
+Or run_spia_ui.bat.
 """
 
 from __future__ import annotations
@@ -121,13 +125,18 @@ def parse_junit_results() -> dict[str, dict[str, Any]]:
     return out
 
 
-def main() -> None:
-    st.set_page_config(page_title="SPIA unit tests", layout="wide")
-    st.title("SPIA unit test dashboard")
-    st.caption(
-        "Each row is one automated check of `spia_projection.py`. "
-        "Descriptions are taken from the test’s docstring in `tests/test_spia_projection.py`."
-    )
+def render_unit_tests_page(*, embedded: bool = False) -> None:
+    """
+    Render the pytest discovery / run / results UI.
+
+    When embedded=True, sidebar controls are inlined so a parent app can own the sidebar.
+    """
+    if not embedded:
+        st.title("SPIA unit test dashboard")
+        st.caption(
+            "Each row is one automated check of `spia_projection.py`. "
+            "Descriptions are taken from the test’s docstring in `tests/test_spia_projection.py`."
+        )
 
     meta = discover_tests_metadata()
     if not meta:
@@ -140,20 +149,36 @@ def main() -> None:
     elif notify == "fail":
         st.warning("Last test run reported failures, errors, or a non-zero pytest exit code. See expanders below.")
 
-    with st.sidebar:
-        st.header("Run")
-        if st.button("Run all tests", type="primary", use_container_width=True):
-            with st.spinner("Running pytest…"):
-                code, log_tail = run_pytest_junit()
-            st.session_state["last_exit_code"] = code
-            st.session_state["last_log_tail"] = log_tail
-            st.session_state["last_results"] = parse_junit_results()
-            st.session_state["last_notify"] = "pass" if code == 0 else "fail"
-        st.divider()
-        st.markdown(
-            "**First time setup:** in a terminal here, run  \n`python -m pip install -r requirements-dev.txt`"
+    def _run_clicked() -> None:
+        with st.spinner("Running pytest…"):
+            code, log_tail = run_pytest_junit()
+        st.session_state["last_exit_code"] = code
+        st.session_state["last_log_tail"] = log_tail
+        st.session_state["last_results"] = parse_junit_results()
+        st.session_state["last_notify"] = "pass" if code == 0 else "fail"
+
+    if embedded:
+        st.subheader("Unit tests")
+        st.caption(
+            "Automated checks for `spia_projection.py`. Descriptions come from test docstrings in "
+            "`tests/test_spia_projection.py`."
         )
-        st.markdown("**CLI alternative:** `python -m pytest` or `run_tests_report.bat` for HTML.")
+        b1, b2 = st.columns(2)
+        with b1:
+            if st.button("Run all tests", type="primary", use_container_width=True, key="pytest_run_embedded"):
+                _run_clicked()
+        with b2:
+            st.caption("Setup: `python -m pip install -r requirements-dev.txt`")
+    else:
+        with st.sidebar:
+            st.header("Run")
+            if st.button("Run all tests", type="primary", use_container_width=True):
+                _run_clicked()
+            st.divider()
+            st.markdown(
+                "**First time setup:** in a terminal here, run  \n`python -m pip install -r requirements-dev.txt`"
+            )
+            st.markdown("**CLI alternative:** `python -m pytest` or `run_tests_report.bat` for HTML.")
 
     results: dict[str, dict[str, Any]] = st.session_state.get("last_results") or {}
 
@@ -200,4 +225,10 @@ def main() -> None:
             st.code(st.session_state["last_log_tail"], language="text")
 
 
-main()
+def main() -> None:
+    st.set_page_config(page_title="SPIA unit tests", layout="wide")
+    render_unit_tests_page(embedded=False)
+
+
+if __name__ == "__main__":
+    main()

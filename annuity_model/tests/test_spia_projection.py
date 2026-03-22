@@ -305,3 +305,103 @@ def test_load_mp2016_male_improvement_smoke():
     ages, years, mat = sp.load_mp2016_male_improvement_rates_multiplicative(sp.DEFAULT_MP2016_XLSX)
     assert len(ages) > 10 and len(years) > 10
     assert mat.shape == (len(ages), len(years))
+
+
+# --- index scenario & expense inflation ---
+
+
+def test_load_index_scenario_requires_all_months(tmp_path):
+    """Index CSV must include month 0..n with no gaps."""
+    p = tmp_path / "idx.csv"
+    p.write_text("month,sp500_level\n0,100\n1,101\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="exactly months"):
+        sp.load_index_scenario_monthly_csv(str(p), n_months=3)
+
+
+def test_flat_index_zero_inflation_matches_level_benefits():
+    """Flat index and zero expense inflation reproduce level-benefit PV vs legacy-style schedule."""
+    contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=120_000.0)
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    mort = _minimal_mortality()
+    ex = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    res = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        expenses=ex,
+        index_scenario_csv_path=None,
+        expense_annual_inflation=0.0,
+    )
+    b0 = contract.benefit_annual / 12.0
+    af = float(np.sum(res.survival_to_payment * res.discount_factors))
+    assert res.pv_benefit == pytest.approx(b0 * af, rel=1e-9)
+    np.testing.assert_allclose(res.benefit_nominal_scheduled, np.full_like(res.benefit_nominal_scheduled, b0))
+    assert np.max(np.abs(res.index_simple_return)) < 1e-12
+
+
+def test_expense_inflation_increases_pv_expense(tmp_path):
+    """Positive expense inflation strictly increases PV of expenses when survival/curve fixed."""
+    p = tmp_path / "idx.csv"
+    rows = ["month,sp500_level"]
+    for m in range(13):
+        rows.append(f"{m},100.0")
+    p.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    contract = sp.SPIAContract(issue_age=40, sex="male", benefit_annual=0.0)
+    yc = sp.YieldCurve.from_flat_rate(0.03)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.full_like(ages, 0.01, dtype=float)
+    mort = sp.MortalityTableQx(ages, qx)
+    ex = sp.ExpenseAssumptions(0.0, 0.0, 50.0)
+
+    r0 = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=41,
+        expenses=ex,
+        index_scenario_csv_path=str(p),
+        expense_annual_inflation=0.0,
+    )
+    r1 = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=41,
+        expenses=ex,
+        index_scenario_csv_path=str(p),
+        expense_annual_inflation=0.12,
+    )
+    assert r1.pv_monthly_expenses > r0.pv_monthly_expenses
+    assert r1.expense_nominal_scheduled[-1] > r1.expense_nominal_scheduled[0]
+
+
+def test_return_indexation_doubles_with_doubling_index(tmp_path):
+    """If index doubles every month, scheduled benefit doubles each month after the first."""
+    p = tmp_path / "idx.csv"
+    rows = ["month,sp500_level"]
+    for m in range(13):
+        rows.append(f"{m},{100.0 * (2.0 ** m)}")
+    p.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    contract = sp.SPIAContract(issue_age=30, sex="male", benefit_annual=120_000.0)
+    yc = sp.YieldCurve.from_flat_rate(0.02)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.full_like(ages, 0.001, dtype=float)
+    mort = sp.MortalityTableQx(ages, qx)
+    ex = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    res = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=31,
+        expenses=ex,
+        index_scenario_csv_path=str(p),
+        expense_annual_inflation=0.0,
+    )
+    b = res.benefit_nominal_scheduled
+    assert b.shape == (12,)
+    assert b[0] == pytest.approx(10_000.0 * 200.0 / 100.0)  # base * S1/S0
+    for k in range(1, 12):
+        assert b[k] == pytest.approx(2.0 * b[k - 1])
