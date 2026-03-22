@@ -1,8 +1,9 @@
 # Runtime dependencies for spia_ui.py (Streamlit Cloud: see ../requirements.txt at repo root)
+# streamlit>=1.41: avoids altair 5+/6 vs streamlit 1.19 vegalite.v4 import crash (uv resolution).
 numpy
 pandas
 pyarrow
-streamlit
+streamlit>=1.41.0
 matplotlib
 openpyxl
 pytest

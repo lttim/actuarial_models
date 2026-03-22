@@ -3,5 +3,5 @@ pandas
 openpyxl
 pytest
 pytest-html
-streamlit
+streamlit>=1.41.0
 matplotlib
