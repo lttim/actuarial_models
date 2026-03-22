@@ -307,6 +307,34 @@ def test_load_mp2016_male_improvement_smoke():
     assert mat.shape == (len(ages), len(years))
 
 
+@pytest.mark.skipif(
+    not Path(sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV).is_file()
+    or not Path(sp.DEFAULT_MP2016_MALE_IMPROVEMENT_CSV).is_file(),
+    reason="Cached RP-2014 / MP-2016 CSV extracts not present",
+)
+def test_mp2016_period_qx_stops_at_last_published_year():
+    """Excel SUMIFS sums MP rows only through the last calendar year on the grid (no terminal repeat)."""
+    sp.ensure_rp2014_male_healthy_annuitant_qx_csv(
+        rp2014_xlsx_path=sp.DEFAULT_RP2014_XLSX,
+        out_csv_path=sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV,
+    )
+    base = sp.MortalityTableQx.load_qx_csv(sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV)
+    ages, years, mat = sp.ensure_mp2016_male_improvement_csv(
+        mp2016_xlsx_path=sp.DEFAULT_MP2016_XLSX,
+        out_csv_path=sp.DEFAULT_MP2016_MALE_IMPROVEMENT_CSV,
+    )
+    mort = sp.MortalityTableRP2014MP2016(
+        base_qx_2014=base,
+        mp2016_ages=ages,
+        mp2016_years=years,
+        mp2016_i_matrix=mat,
+    )
+    y_last = int(years[-1])
+    q_near = mort.qx_at_int_age_and_calendar_year(age_int=50, calendar_year=y_last + 2)
+    q_far = mort.qx_at_int_age_and_calendar_year(age_int=50, calendar_year=y_last + 40)
+    assert q_near == pytest.approx(q_far, rel=1e-12)
+
+
 # --- index scenario & expense inflation ---
 
 

@@ -669,9 +669,11 @@ class MortalityTableRP2014MP2016:
     - MP-2016 improvement scale applied over calendar years (period mortality).
 
     This implementation computes annual qx(age, calendar_year) by:
-    1. mapping the attained age and calendar year back to the implied age at base year 2014,
-    2. applying cumulative MP log-improvements along calendar years from 2014 up to (calendar_year-1),
-    3. scaling the base qx by exp(cumulative_log_improvement).
+    1. taking RP-2014 base q_x at integer attained age,
+    2. applying cumulative MP factors i(age, y) for calendar years y from 2014 through
+       min(calendar_year - 1, last year on the MP grid)—matching Excel SUMIFS over the
+       published MP table without repeating the terminal column for later years,
+    3. scaling: q_x = q_x(2014) * exp(sum of i).
     """
 
     base_qx_2014: MortalityTableQx
@@ -706,8 +708,15 @@ class MortalityTableRP2014MP2016:
         # by attained age.
         base_qx = self.base_qx_2014.qx_at_int_age(age_int)
 
+        # Sum i(age, y) for y = base_year .. calendar_year-1, but only for years that exist
+        # on the MP grid. Excel's SUMIFS(MP..., year,">=2014", year,"<"&E) sums table rows
+        # and does not repeat the terminal column for later calendar years. Previously,
+        # clamping inside `_mp_i` re-applied the last column for every y beyond the grid,
+        # which overstated q_x when terminal rates are positive (long horizons vs Excel).
+        y_last = int(self.mp2016_years[-1])
+        last_y = min(int(calendar_year) - 1, y_last)
         cumulative_log = 0.0
-        for y in range(self.base_year, calendar_year):
+        for y in range(self.base_year, last_y + 1):
             cumulative_log += self._mp_i(age_int, y)
 
         qx = base_qx * math.exp(cumulative_log)
