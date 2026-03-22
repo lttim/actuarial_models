@@ -1,1 +1,9 @@
--r annuity_model/requirements.txt
+# Streamlit Cloud reads this from the repo root when main file is streamlit_app.py.
+# Keep in sync with annuity_model/requirements.txt
+numpy
+pandas
+pyarrow
+streamlit
+matplotlib
+openpyxl
+pytest

@@ -1,6 +1,7 @@
-# Runtime dependencies for Streamlit Cloud / spia_ui.py
+# Runtime dependencies for spia_ui.py (Streamlit Cloud: see ../requirements.txt at repo root)
 numpy
 pandas
+pyarrow
 streamlit
 matplotlib
 openpyxl

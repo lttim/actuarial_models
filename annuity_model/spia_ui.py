@@ -9,9 +9,12 @@ Or: run_spia_ui.bat (Windows).
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Literal
+
+os.environ.setdefault("MPLBACKEND", "Agg")
 
 import numpy as np
 import pandas as pd
