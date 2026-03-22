@@ -9,6 +9,7 @@ Or: run_spia_ui.bat (Windows).
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Literal
 
@@ -16,11 +17,13 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import spia_projection as sp
 from build_spia_excel_workbook import build_workbook_from_spec, excel_spec_from_launcher
 from test_dashboard import render_unit_tests_page
-
-ROOT = Path(__file__).resolve().parent
 
 
 def _resolve_path(p: str) -> Path:
