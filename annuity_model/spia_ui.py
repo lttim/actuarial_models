@@ -687,7 +687,7 @@ def _render_excel_replicator() -> None:
             )
         stats_df = pd.DataFrame(stat_rows)
         _num_cfg = {
-            c: st.column_config.NumberColumn(format=",.4f")
+            c: st.column_config.NumberColumn(format="%.4f")
             for c in ["Mean", "Std Dev", "P5", "P25", "Median", "P75", "P95"]
         }
         st.dataframe(stats_df, use_container_width=True, hide_index=True, column_config=_num_cfg)
