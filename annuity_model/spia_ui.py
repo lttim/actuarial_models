@@ -352,7 +352,7 @@ def _render_run_and_results() -> None:
             help="Applied monthly as (1 + annual)^(1/12) to maintenance expenses only.",
         )
 
-    with st.expander("Monte Carlo (stochastic index assumption)", expanded=False):
+    with st.expander("Monte Carlo (stochastic index assumption)", expanded=True):
         mc_enable = st.checkbox(
             "Enable Monte Carlo on index returns",
             value=True,
@@ -508,9 +508,11 @@ def _render_run_and_results() -> None:
                     ),
                     mc_snapshot=mc_snap_for_excel,
                 )
+                st.session_state["pricing_xlsx_has_mc"] = mc_snap_for_excel is not None
                 st.session_state.pop("pricing_xlsx_built_error", None)
             except Exception as ex:
                 st.session_state["pricing_xlsx_bytes"] = None
+                st.session_state.pop("pricing_xlsx_has_mc", None)
                 st.session_state["pricing_xlsx_built_error"] = repr(ex)
         except Exception as e:
             st.session_state["pricing_err"] = repr(e)
@@ -520,6 +522,7 @@ def _render_run_and_results() -> None:
             st.session_state.pop("pricing_xlsx_built_error", None)
             st.session_state.pop("pricing_mc", None)
             st.session_state.pop("pricing_mc_params", None)
+            st.session_state.pop("pricing_xlsx_has_mc", None)
 
     err = st.session_state.get("pricing_err")
     res = st.session_state.get("pricing_res")
@@ -724,15 +727,27 @@ def _render_excel_replicator() -> None:
 
     st.divider()
     xb = st.session_state.get("pricing_xlsx_bytes")
+    xlsx_has_mc: bool = st.session_state.get("pricing_xlsx_has_mc", False)
     if isinstance(xb, bytes) and xb:
-        mc_label = " + MC_Summary" if mc_res is not None else ""
+        if xlsx_has_mc:
+            st.success(
+                "Workbook includes **MC_Summary** sheet with distribution statistics table and premium histogram chart.",
+                icon="✅",
+            )
+        else:
+            st.warning(
+                "Workbook does **not** include MC_Summary — MC was disabled or not run when this workbook was built. "
+                "Enable Monte Carlo in Run & results and click **Run pricing** again to regenerate.",
+                icon="⚠️",
+            )
+        mc_label = " + MC_Summary" if xlsx_has_mc else ""
         st.download_button(
             f"Download Excel recalculation workbook{mc_label}",
             data=xb,
             file_name="spia_recalc_model.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             help="Workbook includes ModelCheck for Python-vs-Excel parity validation"
-            + (", plus an MC_Summary sheet with the distribution statistics and chart." if mc_res is not None else "."),
+            + (", plus MC_Summary sheet with statistics and premium distribution chart." if xlsx_has_mc else "."),
             type="primary",
         )
     elif st.session_state.get("pricing_xlsx_built_error"):
