@@ -25,7 +25,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import spia_projection as sp
-from build_spia_excel_workbook import ExcelPythonSnapshot, build_workbook_from_spec, excel_spec_from_launcher
+from build_spia_excel_workbook import (
+    ExcelPythonSnapshot,
+    MCExcelSnapshot,
+    build_workbook_from_spec,
+    excel_spec_from_launcher,
+    mc_excel_snapshot_from_result,
+)
 from test_dashboard import render_unit_tests_page
 
 
@@ -435,6 +441,45 @@ def _render_run_and_results() -> None:
                 "mortality_mode": m_mode,
                 "expense_mode": expense_mode,
             }
+
+            # --- Monte Carlo (run before Excel so MC sheet can be embedded) ---
+            mc_snap_for_excel: MCExcelSnapshot | None = None
+            if mc_enable:
+                mc = sp.price_spia_single_premium_monte_carlo(
+                    contract=contract,
+                    yield_curve=yc,
+                    mortality=mort,
+                    horizon_age=int(horizon_age),
+                    spread=float(spread),
+                    valuation_year=vy,
+                    expenses=expenses_arg,
+                    expenses_csv_path=str(_resolve_path(expenses_csv)),
+                    expense_annual_inflation=expense_annual_inflation,
+                    n_sims=int(mc_n_sims),
+                    annual_drift=float(mc_drift_pct) / 100.0,
+                    annual_vol=float(mc_vol_pct) / 100.0,
+                    seed=int(mc_seed),
+                    s0=float(mc_s0),
+                )
+                st.session_state["pricing_mc"] = mc
+                st.session_state["pricing_mc_params"] = {
+                    "annual_drift": float(mc_drift_pct) / 100.0,
+                    "annual_vol": float(mc_vol_pct) / 100.0,
+                    "s0": float(mc_s0),
+                    "n_sims": int(mc_n_sims),
+                    "seed": int(mc_seed),
+                }
+                mc_snap_for_excel = mc_excel_snapshot_from_result(
+                    mc,
+                    annual_drift=float(mc_drift_pct) / 100.0,
+                    annual_vol=float(mc_vol_pct) / 100.0,
+                    s0=float(mc_s0),
+                )
+            else:
+                st.session_state.pop("pricing_mc", None)
+                st.session_state.pop("pricing_mc_params", None)
+
+            # --- Excel workbook (built after MC so MC_Summary sheet can be included) ---
             try:
                 spec = excel_spec_from_launcher(
                     contract=contract,
@@ -461,31 +506,12 @@ def _render_run_and_results() -> None:
                         single_premium=float(res.single_premium),
                         annuity_factor=float(res.annuity_factor),
                     ),
+                    mc_snapshot=mc_snap_for_excel,
                 )
                 st.session_state.pop("pricing_xlsx_built_error", None)
             except Exception as ex:
                 st.session_state["pricing_xlsx_bytes"] = None
                 st.session_state["pricing_xlsx_built_error"] = repr(ex)
-            if mc_enable:
-                mc = sp.price_spia_single_premium_monte_carlo(
-                    contract=contract,
-                    yield_curve=yc,
-                    mortality=mort,
-                    horizon_age=int(horizon_age),
-                    spread=float(spread),
-                    valuation_year=vy,
-                    expenses=expenses_arg,
-                    expenses_csv_path=str(_resolve_path(expenses_csv)),
-                    expense_annual_inflation=expense_annual_inflation,
-                    n_sims=int(mc_n_sims),
-                    annual_drift=float(mc_drift_pct) / 100.0,
-                    annual_vol=float(mc_vol_pct) / 100.0,
-                    seed=int(mc_seed),
-                    s0=float(mc_s0),
-                )
-                st.session_state["pricing_mc"] = mc
-            else:
-                st.session_state.pop("pricing_mc", None)
         except Exception as e:
             st.session_state["pricing_err"] = repr(e)
             st.session_state["pricing_res"] = None
@@ -493,6 +519,7 @@ def _render_run_and_results() -> None:
             st.session_state.pop("pricing_xlsx_bytes", None)
             st.session_state.pop("pricing_xlsx_built_error", None)
             st.session_state.pop("pricing_mc", None)
+            st.session_state.pop("pricing_mc_params", None)
 
     err = st.session_state.get("pricing_err")
     res = st.session_state.get("pricing_res")
@@ -618,14 +645,94 @@ def _render_excel_replicator() -> None:
         "if Inputs match this run (especially spread B9 and valuation year)."
     )
 
+    # --- Monte Carlo distribution dashboard ---
+    mc_res = st.session_state.get("pricing_mc")
+    mc_params = st.session_state.get("pricing_mc_params") or {}
+    if mc_res is not None:
+        st.divider()
+        st.subheader("Monte Carlo distribution statistics")
+        n_sims_disp = mc_params.get("n_sims", mc_res.n_sims)
+        drift_disp = mc_params.get("annual_drift", 0.0)
+        vol_disp = mc_params.get("annual_vol", 0.0)
+        s0_disp = mc_params.get("s0", 100.0)
+        st.caption(
+            f"{n_sims_disp:,} simulations | GBM drift {drift_disp * 100:.1f}% | "
+            f"vol {vol_disp * 100:.1f}% | S\u2080 {s0_disp:.2f} | "
+            "Mortality, yield curve, and expense inflation are deterministic across paths."
+        )
+
+        _mc_metrics: list[tuple[str, np.ndarray]] = [
+            ("Single Premium ($)", mc_res.single_premium),
+            ("PV Benefit ($)", mc_res.pv_benefit),
+            ("PV Monthly Expenses ($)", mc_res.pv_monthly_expenses),
+            ("PV Monthly Total ($)", mc_res.pv_monthly_total),
+            ("Annuity Factor", mc_res.annuity_factor),
+        ]
+        stat_rows = []
+        for name, arr in _mc_metrics:
+            stat_rows.append(
+                {
+                    "Metric": name,
+                    "Mean": float(np.mean(arr)),
+                    "Std Dev": float(np.std(arr)),
+                    "P5": float(np.percentile(arr, 5)),
+                    "P25": float(np.percentile(arr, 25)),
+                    "Median": float(np.median(arr)),
+                    "P75": float(np.percentile(arr, 75)),
+                    "P95": float(np.percentile(arr, 95)),
+                }
+            )
+        stats_df = pd.DataFrame(stat_rows)
+        _num_cfg = {
+            c: st.column_config.NumberColumn(format=",.4f")
+            for c in ["Mean", "Std Dev", "P5", "P25", "Median", "P75", "P95"]
+        }
+        st.dataframe(stats_df, use_container_width=True, hide_index=True, column_config=_num_cfg)
+
+        st.markdown("**Premium & key metric distributions**")
+        ch1, ch2 = st.columns(2)
+
+        def _hist_df(arr: np.ndarray, n_bins: int = 35) -> pd.DataFrame:
+            counts, edges = np.histogram(arr, bins=n_bins)
+            mids = 0.5 * (edges[:-1] + edges[1:])
+            return pd.DataFrame({"bin": np.round(mids, 2), "count": counts}).set_index("bin")
+
+        with ch1:
+            st.markdown("Single premium")
+            st.bar_chart(_hist_df(mc_res.single_premium))
+        with ch2:
+            st.markdown("PV benefit")
+            st.bar_chart(_hist_df(mc_res.pv_benefit))
+
+        ch3, ch4 = st.columns(2)
+        with ch3:
+            st.markdown("Annuity factor")
+            st.bar_chart(_hist_df(mc_res.annuity_factor))
+        with ch4:
+            st.markdown("PV monthly total")
+            st.bar_chart(_hist_df(mc_res.pv_monthly_total))
+
+        st.caption(
+            "The MC_Summary sheet in the downloaded workbook contains the same statistics table "
+            "and a premium distribution chart embedded as an Excel bar chart."
+        )
+    else:
+        st.info(
+            "Monte Carlo was not enabled for this run. Enable it in the Run & results section "
+            "and re-run to see distribution statistics here and in the Excel workbook."
+        )
+
+    st.divider()
     xb = st.session_state.get("pricing_xlsx_bytes")
     if isinstance(xb, bytes) and xb:
+        mc_label = " + MC_Summary" if mc_res is not None else ""
         st.download_button(
-            "Download Excel recalculation workbook",
+            f"Download Excel recalculation workbook{mc_label}",
             data=xb,
             file_name="spia_recalc_model.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            help="Workbook includes ModelCheck for Python-vs-Excel parity validation.",
+            help="Workbook includes ModelCheck for Python-vs-Excel parity validation"
+            + (", plus an MC_Summary sheet with the distribution statistics and chart." if mc_res is not None else "."),
             type="primary",
         )
     elif st.session_state.get("pricing_xlsx_built_error"):

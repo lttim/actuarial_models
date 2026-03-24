@@ -8,7 +8,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.chart import LineChart, Reference
+from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.styles import Font
 
 import spia_projection as sp
@@ -26,6 +26,69 @@ class ExcelPythonSnapshot:
     pv_monthly_total: float
     single_premium: float
     annuity_factor: float
+
+
+@dataclass
+class MCExcelSnapshot:
+    """Pre-computed Monte Carlo statistics for embedding in the Excel workbook.
+
+    Build with ``mc_excel_snapshot_from_result`` after running
+    ``price_spia_single_premium_monte_carlo``.
+    """
+
+    n_sims: int
+    annual_drift: float
+    annual_vol: float
+    s0: float
+    summary_df: pd.DataFrame  # columns: Metric, Mean, Std Dev, P5, P25, Median, P75, P95
+    prem_hist_mids: list  # bin midpoints (float)
+    prem_hist_counts: list  # counts (int)
+
+
+def mc_excel_snapshot_from_result(
+    mc: "sp.SPIAMonteCarloResult",
+    *,
+    annual_drift: float,
+    annual_vol: float,
+    s0: float,
+    n_hist_bins: int = 40,
+) -> MCExcelSnapshot:
+    """Build an MCExcelSnapshot from a SPIAMonteCarloResult for embedding in Excel."""
+    metrics = [
+        ("Single Premium", mc.single_premium),
+        ("PV Benefit", mc.pv_benefit),
+        ("PV Monthly Expenses", mc.pv_monthly_expenses),
+        ("PV Monthly Total", mc.pv_monthly_total),
+        ("Annuity Factor", mc.annuity_factor),
+    ]
+    rows = []
+    for name, arr in metrics:
+        rows.append(
+            {
+                "Metric": name,
+                "Mean": float(np.mean(arr)),
+                "Std Dev": float(np.std(arr)),
+                "P5": float(np.percentile(arr, 5)),
+                "P25": float(np.percentile(arr, 25)),
+                "Median": float(np.median(arr)),
+                "P75": float(np.percentile(arr, 75)),
+                "P95": float(np.percentile(arr, 95)),
+            }
+        )
+    summary_df = pd.DataFrame(rows)
+
+    counts, edges = np.histogram(mc.single_premium, bins=n_hist_bins)
+    mids = 0.5 * (edges[:-1] + edges[1:])
+
+    return MCExcelSnapshot(
+        n_sims=mc.n_sims,
+        annual_drift=float(annual_drift),
+        annual_vol=float(annual_vol),
+        s0=float(s0),
+        summary_df=summary_df,
+        prem_hist_mids=mids.tolist(),
+        prem_hist_counts=counts.tolist(),
+    )
 
 
 @dataclass(frozen=True)
@@ -374,6 +437,75 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
     ws["V2"] = "=X9"
 
 
+def _write_mc_summary_sheet(wb: Workbook, mc: MCExcelSnapshot) -> None:
+    """Embed Monte Carlo summary statistics and a premium distribution chart in MC_Summary sheet."""
+    ws = wb.create_sheet("MC_Summary")
+
+    ws["A1"] = (
+        f"Monte Carlo Summary — {mc.n_sims:,} simulations | "
+        f"GBM drift {mc.annual_drift * 100:.1f}% | vol {mc.annual_vol * 100:.1f}% | S\u2080 {mc.s0:.2f}"
+    )
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A2"] = (
+        "Index return paths simulated via GBM. Mortality, yield curve, and expense inflation remain "
+        "deterministic. Statistics span the full distribution of pricing outcomes across all paths."
+    )
+    ws.merge_cells("A2:H2")
+
+    # --- Summary statistics table (rows 4–9) ---
+    df = mc.summary_df
+    for c_idx, col_name in enumerate(df.columns, start=1):
+        ws.cell(row=4, column=c_idx, value=col_name).font = Font(bold=True)
+
+    for r_idx, row in enumerate(df.itertuples(index=False), start=5):
+        vals = list(row)
+        metric_name = str(vals[0])
+        ws.cell(row=r_idx, column=1, value=metric_name)
+        is_factor = "Factor" in metric_name
+        num_fmt = "0.000000" if is_factor else "#,##0.00"
+        for c_idx, val in enumerate(vals[1:], start=2):
+            cell = ws.cell(row=r_idx, column=c_idx, value=float(val))
+            cell.number_format = num_fmt
+
+    # --- Premium distribution histogram data (rows 11 onward, columns A–B) ---
+    n_bins = len(mc.prem_hist_mids)
+    h_title_row = 11
+    h_header_row = 12
+    h_data_start = 13
+    h_data_end = h_data_start + n_bins - 1
+
+    ws.cell(row=h_title_row, column=1, value="Premium Distribution").font = Font(bold=True)
+    ws.cell(row=h_header_row, column=1, value="Bin Midpoint ($)").font = Font(bold=True)
+    ws.cell(row=h_header_row, column=2, value="Count").font = Font(bold=True)
+
+    for i, (mid, cnt) in enumerate(zip(mc.prem_hist_mids, mc.prem_hist_counts)):
+        ws.cell(row=h_data_start + i, column=1, value=round(float(mid), 0)).number_format = "#,##0"
+        ws.cell(row=h_data_start + i, column=2, value=int(cnt))
+
+    # --- Embedded bar chart ---
+    chart = BarChart()
+    chart.type = "col"
+    chart.title = "Single Premium Distribution"
+    chart.y_axis.title = "Count"
+    chart.x_axis.title = "Premium ($)"
+    chart.grouping = "clustered"
+    chart.overlap = 100
+    chart.legend = None
+    chart.height = 12
+    chart.width = 20
+
+    counts_ref = Reference(ws, min_col=2, min_row=h_data_start, max_row=h_data_end)
+    cats_ref = Reference(ws, min_col=1, min_row=h_data_start, max_row=h_data_end)
+    chart.add_data(counts_ref, titles_from_data=False)
+    chart.set_categories(cats_ref)
+    ws.add_chart(chart, "D11")
+
+    # Column widths
+    ws.column_dimensions["A"].width = 24
+    for col_letter in ["B", "C", "D", "E", "F", "G", "H"]:
+        ws.column_dimensions[col_letter].width = 14
+
+
 def _write_dashboard(wb: Workbook, n_months: int) -> None:
     ws = wb.create_sheet("Dashboard")
     ws["A1"] = "SPIA Policy Projection Dashboard"
@@ -585,6 +717,7 @@ def build_workbook_from_spec(
     out_path: Path | None = None,
     *,
     python_snapshot: ExcelPythonSnapshot | None = None,
+    mc_snapshot: MCExcelSnapshot | None = None,
 ) -> Path | bytes:
     """
     Write a workbook to `out_path`. If `out_path` is None, return the file as bytes (for downloads).
@@ -636,6 +769,9 @@ def build_workbook_from_spec(
 
     if python_snapshot is not None:
         _write_model_check_sheet(wb, python_snapshot)
+
+    if mc_snapshot is not None:
+        _write_mc_summary_sheet(wb, mc_snapshot)
 
     _write_dashboard(wb, n_months=n_months)
     _write_python_tab(wb)
