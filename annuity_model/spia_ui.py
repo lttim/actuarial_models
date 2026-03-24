@@ -109,39 +109,44 @@ def _render_overview() -> None:
     st.header("Model overview")
     st.markdown(
         """
-This workspace drives **`spia_projection.py`**: a single-life SPIA with **monthly**
-benefits (nominal amounts can grow by **S&P proxy return indexation** from a CSV of
-monthly index levels), **end-of-period** payments, and cashflows while the annuitant is alive.
-**Maintenance expenses** can grow at a separate **fixed annual inflation** rate (monthly compounding).
+This workspace runs **`spia_projection.py`** for a single-life SPIA with monthly, end-of-period
+payments while alive. It supports both deterministic pricing and stochastic index-path analysis,
+plus parity workflows with an Excel recalc model.
 
 ### Main pieces
 
-1. **`SPIAContract`** — Issue age, sex (metadata for now), annual benefit (starting point for
-   the first month’s accrual; further months follow the index scenario), monthly frequency only.
+1. **`SPIAContract`** — Issue age, sex (metadata), annual benefit, monthly payment frequency.
 
-2. **`YieldCurve`** — Continuously compounded zero rates `z(t)`; discount factors
+2. **`YieldCurve`** — Flat rate, zero-curve CSV, or par-yield CSV bootstrapped to zeros;
+   discount factors follow
    `DF(t) = exp(-(z(t) + spread) × t)` with log-linear interpolation on DFs inside the
    curve and flat-rate extrapolation beyond endpoints.
 
-3. **Mortality** — Either a static **`MortalityTableQx`** (annual `q_x` by integer age) or
+3. **Mortality** — Synthetic demo table, static **`MortalityTableQx`** CSV, or
    **`MortalityTableRP2014MP2016`** (RP-2014 base qx in 2014 plus MP-2016 calendar-year
    improvements). RP+MP requires a **valuation year** so month-by-month calendar years are defined.
 
-4. **`ExpenseAssumptions`** — Policy expense at issue, premium expense as a fraction of
-   premium (solved iteratively via the closed form), and level monthly expenses while alive.
+4. **Economic assumptions** — Benefit indexation from an S&P 500 proxy path (or flat index),
+   and separate annual inflation for maintenance expenses (applied monthly).
 
-5. **`price_spia_single_premium`** — Monthly grid to `horizon_age`, survival, discount factors,
+5. **`ExpenseAssumptions`** — Load expenses from CSV or enter manually (policy, premium %, monthly).
+
+6. **`price_spia_single_premium`** — Monthly grid to `horizon_age`, survival, discount factors,
    **annuity factor** (level-$1 survival-weighted sum), PV of **indexed** benefits and inflated
    expenses, **single premium**, expected cashflows, **index return series** for charts, and reserves.
 
-### Outputs you can inspect after a run
+7. **`price_spia_single_premium_monte_carlo`** — Optional GBM simulations for index returns
+   with distribution stats (mean/median/P5/P95 and histograms) for premium and key PV metrics.
+
+### Outputs available in the workspace
 
 - Summary metrics (premium, PV benefit, annuity factor, etc.).
-- Per-month table: age, survival, discount factor, expected benefit/expense/total, PV increment.
-- Charts aligned with `illustrate_spia_projection.py` (survival, PV contributions, cumulative PV,
-  nominal flows, reserves).
+- Per-month projection table with index levels/returns, expected benefit/expense/total, and PV buildup.
+- Charts (index returns/levels, survival, PV contributions, cumulative PV, expected flows, reserves).
+- Monte Carlo statistics and distribution charts (when enabled).
+- Excel replicator download with **ModelCheck** parity sheet, and optional **MC_Summary** sheet.
 
-Use the sidebar to switch to **Run & results** or **Unit tests**.
+Use the sidebar to navigate **Run & results**, **Excel replicator**, and **Unit tests**.
         """
     )
 
@@ -238,6 +243,307 @@ def _render_charts(res: sp.SPIAProjectionResult, contract: sp.SPIAContract) -> N
 
     st.markdown("**Economic reserve** (benefit + monthly expense, PV roll-forward)")
     st.line_chart(pd.DataFrame({"age": ages_r, "reserve": res.economic_reserve}).set_index("age"))
+
+
+def _render_profit_decomposition_chart(
+    res: sp.SPIAProjectionResult, contract: sp.SPIAContract, expenses: sp.ExpenseAssumptions
+) -> None:
+    st.subheader("Profit decomposition waterfall")
+
+    b_month = float(contract.benefit_annual) / 12.0
+    n_months = int(res.months.size)
+
+    level_benefit_certain_undisc = float(b_month * n_months)
+    level_benefit_mort_undisc = float(np.sum(b_month * res.survival_to_payment))
+    level_benefit_mort_disc = float(np.sum(b_month * res.survival_to_payment * res.discount_factors))
+
+    mortality_effect = level_benefit_mort_undisc - level_benefit_certain_undisc
+    discounting_effect = level_benefit_mort_disc - level_benefit_mort_undisc
+    indexation_option_cost = float(res.pv_benefit - level_benefit_mort_disc)
+    expense_component = float(expenses.policy_expense_dollars) + float(res.pv_monthly_expenses)
+    margin_component = float(
+        res.single_premium - (res.pv_benefit + res.pv_monthly_expenses + float(expenses.policy_expense_dollars))
+    )
+
+    rows = [
+        ("Undiscounted level benefits (certain life)", level_benefit_certain_undisc, True),
+        ("Mortality effect", mortality_effect, False),
+        ("Discounting effect", discounting_effect, False),
+        ("Indexation option cost", indexation_option_cost, False),
+        ("Expenses (issue + monthly PV)", expense_component, False),
+        ("Margin / premium load", margin_component, False),
+        ("Single premium", float(res.single_premium), True),
+    ]
+
+    wf_rows = []
+    running = 0.0
+    for label, val, is_total in rows:
+        if is_total:
+            wf_rows.append({"Step": label, "delta": 0.0, "base": 0.0, "top": val, "is_total": True})
+            running = val
+            continue
+        base = running if val >= 0.0 else running + val
+        wf_rows.append({"Step": label, "delta": val, "base": base, "top": running + val, "is_total": False})
+        running += val
+
+    wf = pd.DataFrame(wf_rows)
+    st.bar_chart(
+        wf.set_index("Step")[["base", "delta"]],
+        stack=True,
+        color=["rgba(0,0,0,0)", "#1f77b4"],
+    )
+
+    table = pd.DataFrame(
+        [
+            {"Component": label, "Amount ($)": val}
+            for label, val, _ in rows
+            if label != "Single premium"
+        ]
+    )
+    st.dataframe(table, use_container_width=True, hide_index=True)
+    st.caption(
+        "Interpretation: negative mortality/discounting effects reduce the undiscounted certain-life baseline; "
+        "indexation, expenses, and margin/premium load add back to the final single premium."
+    )
+
+
+def _shock_yield_curve(curve: sp.YieldCurve, rate_shift_bps: float) -> sp.YieldCurve:
+    shift = float(rate_shift_bps) / 10000.0
+    return sp.YieldCurve(
+        maturities_years=np.asarray(curve.maturities_years, dtype=float).copy(),
+        zero_rates=np.asarray(curve.zero_rates, dtype=float).copy() + shift,
+    )
+
+
+def _shock_mortality(
+    mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
+    longevity_improvement_pct: float,
+) -> sp.MortalityTableQx | sp.MortalityTableRP2014MP2016:
+    # Positive longevity improvement means lower qx.
+    factor = max(0.01, 1.0 - float(longevity_improvement_pct) / 100.0)
+    if isinstance(mortality, sp.MortalityTableQx):
+        return sp.MortalityTableQx(
+            ages=np.asarray(mortality.ages, dtype=int).copy(),
+            qx=np.clip(np.asarray(mortality.qx, dtype=float) * factor, 0.0, 0.999999),
+        )
+    shocked_base = sp.MortalityTableQx(
+        ages=np.asarray(mortality.base_qx_2014.ages, dtype=int).copy(),
+        qx=np.clip(np.asarray(mortality.base_qx_2014.qx, dtype=float) * factor, 0.0, 0.999999),
+    )
+    return sp.MortalityTableRP2014MP2016(
+        base_qx_2014=shocked_base,
+        mp2016_ages=np.asarray(mortality.mp2016_ages, dtype=int).copy(),
+        mp2016_years=np.asarray(mortality.mp2016_years, dtype=int).copy(),
+        mp2016_i_matrix=np.asarray(mortality.mp2016_i_matrix, dtype=float).copy(),
+        base_year=int(mortality.base_year),
+    )
+
+
+def _equity_regime_params(regime: str) -> tuple[float, float]:
+    mapping = {
+        "defensive": (0.03, 0.10),
+        "base": (0.06, 0.15),
+        "bullish": (0.09, 0.20),
+        "stressed": (-0.02, 0.35),
+    }
+    return mapping.get(regime, mapping["base"])
+
+
+def _deterministic_index_levels_from_regime(
+    *, s0: float, annual_drift: float, n_months: int
+) -> np.ndarray:
+    dt = 1.0 / 12.0
+    months = np.arange(1, n_months + 1, dtype=float)
+    return float(s0) * np.exp(float(annual_drift) * months * dt)
+
+
+def _render_impact_metric(label: str, before_val: float, after_val: float, money: bool = True) -> None:
+    delta = float(after_val - before_val)
+    if money:
+        st.metric(label, f"${after_val:,.2f}", delta=f"${delta:,.2f}")
+    else:
+        st.metric(label, f"{after_val:,.4f}", delta=f"{delta:+.4f}")
+
+
+def _render_what_if_studio() -> None:
+    st.header("What-if studio")
+    st.caption("Live scenario shocks relative to the latest baseline run in Run & results.")
+
+    base_res = st.session_state.get("pricing_res")
+    base_contract = st.session_state.get("pricing_contract")
+    ctx = st.session_state.get("pricing_excel_context") or {}
+    base_curve = ctx.get("yield_curve")
+    base_mort = ctx.get("mortality")
+    base_expenses = ctx.get("expenses")
+
+    if (
+        base_res is None
+        or base_contract is None
+        or not isinstance(base_curve, sp.YieldCurve)
+        or not isinstance(base_expenses, sp.ExpenseAssumptions)
+        or not isinstance(base_mort, (sp.MortalityTableQx, sp.MortalityTableRP2014MP2016))
+    ):
+        st.info("Run pricing first in Run & results to set a baseline for What-if analysis.")
+        return
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        rate_shift_bps = st.slider("Rates shift (bps)", min_value=-300, max_value=300, value=0, step=5)
+        spread_shift_bps = st.slider("Credit spread shift (bps)", min_value=-300, max_value=300, value=0, step=5)
+    with c2:
+        inflation_shift_pct = st.slider("Expense inflation shift (%)", min_value=-5.0, max_value=10.0, value=0.0, step=0.1)
+        longevity_improvement_pct = st.slider(
+            "Longevity improvement shock (%)",
+            min_value=-20.0,
+            max_value=20.0,
+            value=0.0,
+            step=0.5,
+            help="Positive values reduce mortality rates (longer lives).",
+        )
+    with c3:
+        expense_ratio_mult = st.slider("Expense ratio multiplier", min_value=0.50, max_value=2.00, value=1.00, step=0.05)
+        equity_regime = st.selectbox(
+            "Equity regime",
+            options=["defensive", "base", "bullish", "stressed"],
+            index=1,
+            format_func=lambda x: x.capitalize(),
+        )
+        mc_sims = st.slider("Tail-risk MC simulations", min_value=200, max_value=5000, value=800, step=200)
+
+    try:
+        horizon_age = int(ctx.get("horizon_age", 110))
+        base_spread = float(ctx.get("spread", 0.0))
+        valuation_year = ctx.get("valuation_year")
+        base_infl = float(base_res.expense_annual_inflation)
+        s0 = float(base_res.index_s0)
+        n_months = int(base_res.months.size)
+
+        shocked_curve = _shock_yield_curve(base_curve, float(rate_shift_bps))
+        shocked_mort = _shock_mortality(base_mort, float(longevity_improvement_pct))
+        shocked_expenses = sp.ExpenseAssumptions(
+            policy_expense_dollars=float(base_expenses.policy_expense_dollars) * float(expense_ratio_mult),
+            premium_expense_rate=min(0.99, float(base_expenses.premium_expense_rate) * float(expense_ratio_mult)),
+            monthly_expense_dollars=float(base_expenses.monthly_expense_dollars) * float(expense_ratio_mult),
+        )
+        shocked_infl = max(-0.99, base_infl + float(inflation_shift_pct) / 100.0)
+        shocked_spread = base_spread + float(spread_shift_bps) / 10000.0
+
+        drift, vol = _equity_regime_params(equity_regime)
+        idx_levels = _deterministic_index_levels_from_regime(s0=s0, annual_drift=drift, n_months=n_months)
+        base_mc_params = st.session_state.get("pricing_mc_params") or {}
+        base_drift = float(base_mc_params.get("annual_drift", 0.06))
+        base_vol = float(base_mc_params.get("annual_vol", 0.15))
+
+        shocked_res = sp.price_spia_single_premium(
+            contract=base_contract,
+            yield_curve=shocked_curve,
+            mortality=shocked_mort,
+            horizon_age=horizon_age,
+            spread=shocked_spread,
+            valuation_year=int(valuation_year) if valuation_year is not None else None,
+            expenses=shocked_expenses,
+            index_s0=s0,
+            index_levels_payment=idx_levels,
+            expense_annual_inflation=shocked_infl,
+        )
+        shocked_mc = sp.price_spia_single_premium_monte_carlo(
+            contract=base_contract,
+            yield_curve=shocked_curve,
+            mortality=shocked_mort,
+            horizon_age=horizon_age,
+            spread=shocked_spread,
+            valuation_year=int(valuation_year) if valuation_year is not None else None,
+            expenses=shocked_expenses,
+            expense_annual_inflation=shocked_infl,
+            n_sims=int(mc_sims),
+            annual_drift=float(drift),
+            annual_vol=float(vol),
+            seed=42,
+            s0=float(s0),
+        )
+        baseline_mc = sp.price_spia_single_premium_monte_carlo(
+            contract=base_contract,
+            yield_curve=base_curve,
+            mortality=base_mort,
+            horizon_age=horizon_age,
+            spread=base_spread,
+            valuation_year=int(valuation_year) if valuation_year is not None else None,
+            expenses=base_expenses,
+            expense_annual_inflation=base_infl,
+            n_sims=int(mc_sims),
+            annual_drift=float(base_drift),
+            annual_vol=float(base_vol),
+            seed=42,
+            s0=float(s0),
+        )
+    except Exception as ex:
+        st.error(f"What-if scenario failed: {ex!r}")
+        return
+
+    st.subheader("Before vs after vs impact")
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        _render_impact_metric("Single premium", float(base_res.single_premium), float(shocked_res.single_premium), money=True)
+    with m2:
+        base_margin = float(base_res.single_premium - (base_res.pv_benefit + base_res.pv_monthly_expenses))
+        shocked_margin = float(shocked_res.single_premium - (shocked_res.pv_benefit + shocked_res.pv_monthly_expenses))
+        _render_impact_metric("Margin", base_margin, shocked_margin, money=True)
+    with m3:
+        _render_impact_metric("Reserve at issue", float(base_res.economic_reserve[0]), float(shocked_res.economic_reserve[0]), money=True)
+    with m4:
+        _render_impact_metric(
+            "Tail risk (P95 premium)",
+            float(baseline_mc.premium_p95),
+            float(shocked_mc.premium_p95),
+            money=True,
+        )
+
+    compare_df = pd.DataFrame(
+        {
+            "Metric": ["Single premium", "Margin", "Reserve at issue", "Tail risk (P95 premium)"],
+            "Before": [
+                float(base_res.single_premium),
+                float(base_res.single_premium - (base_res.pv_benefit + base_res.pv_monthly_expenses)),
+                float(base_res.economic_reserve[0]),
+                float(baseline_mc.premium_p95),
+            ],
+            "After": [
+                float(shocked_res.single_premium),
+                float(shocked_res.single_premium - (shocked_res.pv_benefit + shocked_res.pv_monthly_expenses)),
+                float(shocked_res.economic_reserve[0]),
+                float(shocked_mc.premium_p95),
+            ],
+        }
+    )
+    compare_df["Impact"] = compare_df["After"] - compare_df["Before"]
+    st.dataframe(compare_df, use_container_width=True, hide_index=True)
+
+    st.markdown("**Reserve path impact**")
+    reserve_df = pd.DataFrame(
+        {
+            "age": base_contract.issue_age + base_res.reserve_times_years,
+            "Before reserve": base_res.economic_reserve,
+            "After reserve": shocked_res.economic_reserve,
+            "Impact": shocked_res.economic_reserve - base_res.economic_reserve,
+        }
+    ).set_index("age")
+    st.line_chart(reserve_df[["Before reserve", "After reserve"]])
+    st.bar_chart(reserve_df[["Impact"]])
+
+    st.markdown("**Tail-risk distribution impact (single premium)**")
+    c1, c2 = st.columns(2)
+    with c1:
+        counts_b, edges_b = np.histogram(baseline_mc.single_premium, bins=35)
+        mids_b = 0.5 * (edges_b[:-1] + edges_b[1:])
+        st.bar_chart(pd.DataFrame({"bin": mids_b, "count_before": counts_b}).set_index("bin"))
+    with c2:
+        counts_a, edges_a = np.histogram(shocked_mc.single_premium, bins=35)
+        mids_a = 0.5 * (edges_a[:-1] + edges_a[1:])
+        st.bar_chart(pd.DataFrame({"bin": mids_a, "count_after": counts_a}).set_index("bin"))
+
+    st.caption(
+        "Impact shown as After - Before. Tail risk uses the 95th percentile of simulated premiums under the selected equity regime."
+    )
 
 
 def _render_run_and_results() -> None:
@@ -576,8 +882,7 @@ def _render_run_and_results() -> None:
             )
         with c_dl2:
             st.caption("Excel download moved to the Excel replicator section.")
-
-        _render_charts(res, contract_state)
+        st.info("Charts have moved to the dedicated Charts section in the sidebar.")
 
 
 def _render_excel_replicator() -> None:
@@ -756,16 +1061,37 @@ def _render_excel_replicator() -> None:
         st.warning("Excel workbook not available yet for this run.")
 
 
+def _render_charts_section() -> None:
+    st.header("Charts")
+
+    res = st.session_state.get("pricing_res")
+    contract_state = st.session_state.get("pricing_contract")
+    if res is None or contract_state is None:
+        st.info("Run pricing first in Run & results to populate charts.")
+        return
+
+    _render_charts(res, contract_state)
+
+    ctx = st.session_state.get("pricing_excel_context") or {}
+    expenses = ctx.get("expenses")
+    if isinstance(expenses, sp.ExpenseAssumptions):
+        _render_profit_decomposition_chart(res, contract_state, expenses)
+    else:
+        st.warning("Profit decomposition unavailable: pricing expense assumptions were not found in session state.")
+
+
 def main() -> None:
     st.set_page_config(page_title="SPIA workspace", layout="wide")
     with st.sidebar:
         st.title("SPIA workspace")
         page = st.radio(
             "Section",
-            options=["overview", "run", "excel_replicator", "tests"],
+            options=["overview", "run", "charts", "what_if", "excel_replicator", "tests"],
             format_func=lambda x: {
                 "overview": "Overview",
                 "run": "Run & results",
+                "charts": "Charts",
+                "what_if": "What-if studio",
                 "excel_replicator": "Excel replicator",
                 "tests": "Unit tests",
             }[x],
@@ -777,6 +1103,10 @@ def main() -> None:
         _render_overview()
     elif page == "run":
         _render_run_and_results()
+    elif page == "charts":
+        _render_charts_section()
+    elif page == "what_if":
+        _render_what_if_studio()
     elif page == "excel_replicator":
         _render_excel_replicator()
     else:
