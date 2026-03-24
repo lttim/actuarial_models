@@ -203,7 +203,8 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
     for m in meta:
         sections.setdefault(m["section"], []).append(m)
 
-    for section in sorted(sections.keys(), key=lambda s: (s == "General", s)):
+    _MC_SECTION = "Monte Carlo first principles"
+    for section in sorted(sections.keys(), key=lambda s: (s != _MC_SECTION, s == "General", s)):
         st.subheader(section)
         for m in sections[section]:
             name = m["name"]

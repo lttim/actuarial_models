@@ -12,6 +12,317 @@ import pytest
 import spia_projection as sp
 
 
+# --- Monte Carlo first principles ---
+
+
+def _minimal_mortality_mc():
+    """Minimal mortality helper used across Monte Carlo tests."""
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
+    return sp.MortalityTableQx(ages, qx)
+
+
+def _mc_contract_and_setup():
+    """Standard contract/yc/expenses for MC tests."""
+    contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=100_000.0)
+    yc = sp.YieldCurve.from_flat_rate(0.03)
+    ex = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    return contract, yc, _minimal_mortality_mc(), ex
+
+
+@pytest.mark.parametrize(
+    "kwargs,match",
+    [
+        ({"n_sims": 0, "n_months": 12, "s0": 100.0, "annual_vol": 0.15}, "n_sims"),
+        ({"n_sims": 5, "n_months": 0, "s0": 100.0, "annual_vol": 0.15}, "n_months"),
+        ({"n_sims": 5, "n_months": 12, "s0": 0.0, "annual_vol": 0.15}, "s0"),
+        ({"n_sims": 5, "n_months": 12, "s0": 100.0, "annual_vol": -0.01}, "annual_vol"),
+    ],
+)
+def test_simulate_index_levels_gbm_rejects_invalid_inputs(kwargs, match):
+    """GBM simulator must reject n_sims<1, n_months<1, s0<=0, or annual_vol<0 with a clear ValueError."""
+    with pytest.raises(ValueError, match=match):
+        sp.simulate_index_levels_gbm(annual_drift=0.06, **kwargs)
+
+
+def test_simulate_index_levels_gbm_output_shape():
+    """GBM output has shape (n_sims, n_months+1) with column 0 equal to s0 for every simulation."""
+    n_sims, n_months, s0 = 8, 24, 150.0
+    paths = sp.simulate_index_levels_gbm(n_sims=n_sims, n_months=n_months, s0=s0, seed=0)
+    assert paths.shape == (n_sims, n_months + 1)
+    np.testing.assert_array_equal(paths[:, 0], np.full(n_sims, s0))
+
+
+def test_simulate_index_levels_gbm_all_levels_strictly_positive():
+    """GBM paths must remain strictly positive for all months and simulations (log-normal property)."""
+    paths = sp.simulate_index_levels_gbm(
+        n_sims=200, n_months=120, s0=100.0, annual_drift=0.0, annual_vol=0.3, seed=99
+    )
+    assert np.all(paths > 0.0)
+
+
+def test_simulate_index_levels_gbm_one_step_logreturn_moments_match_theory():
+    """One-month log-return sample mean and variance must match GBM theoretical moments within Monte Carlo error.
+
+    For GBM with drift mu and volatility sigma:
+      E[log(S_1/S_0)] = (mu - 0.5*sigma^2) * dt
+      Var[log(S_1/S_0)] = sigma^2 * dt
+    where dt = 1/12 (monthly).
+    Tolerance: 5 Monte Carlo standard errors for each statistic.
+    """
+    n_sims = 100_000
+    mu, sigma, s0, dt = 0.08, 0.20, 100.0, 1.0 / 12.0
+    paths = sp.simulate_index_levels_gbm(
+        n_sims=n_sims, n_months=1, s0=s0, annual_drift=mu, annual_vol=sigma, seed=42
+    )
+    log_ret = np.log(paths[:, 1] / paths[:, 0])
+
+    theoretical_mean = (mu - 0.5 * sigma * sigma) * dt
+    theoretical_var = sigma * sigma * dt
+
+    sample_mean = float(np.mean(log_ret))
+    sample_var = float(np.var(log_ret, ddof=1))
+
+    # Monte Carlo SE for mean = theoretical_std / sqrt(n_sims)
+    se_mean = math.sqrt(theoretical_var / n_sims)
+    # Monte Carlo SE for variance ≈ sigma_lr^2 * sqrt(2/(n-1))
+    se_var = theoretical_var * math.sqrt(2.0 / (n_sims - 1))
+
+    assert abs(sample_mean - theoretical_mean) < 5.0 * se_mean, (
+        f"Log-return mean {sample_mean:.6f} too far from theory {theoretical_mean:.6f}"
+    )
+    assert abs(sample_var - theoretical_var) < 5.0 * se_var, (
+        f"Log-return variance {sample_var:.6f} too far from theory {theoretical_var:.6f}"
+    )
+
+
+def test_simulate_index_levels_gbm_logreturn_variance_scales_with_time():
+    """Log-return variance must scale linearly with the number of monthly steps (Brownian motion property).
+
+    Var[log(S_k/S_0)] = k * sigma^2 * dt, so Var at month k should be k times Var at month 1.
+    """
+    n_sims = 80_000
+    sigma = 0.20
+    paths = sp.simulate_index_levels_gbm(
+        n_sims=n_sims, n_months=12, s0=100.0, annual_drift=0.0, annual_vol=sigma, seed=7
+    )
+    # Log-return from month 0 to month k
+    log_ret_1 = np.log(paths[:, 1] / paths[:, 0])
+    log_ret_6 = np.log(paths[:, 6] / paths[:, 0])
+    var_1 = float(np.var(log_ret_1, ddof=1))
+    var_6 = float(np.var(log_ret_6, ddof=1))
+    ratio = var_6 / var_1
+    # Expect ratio ≈ 6; allow 5% relative tolerance for Monte Carlo noise
+    assert abs(ratio - 6.0) / 6.0 < 0.05, f"Variance ratio month-6/month-1 is {ratio:.4f}, expected ~6.0"
+
+
+def test_simulate_index_levels_gbm_is_seed_reproducible():
+    """Monte Carlo path generation should be exactly reproducible for a fixed seed."""
+    p1 = sp.simulate_index_levels_gbm(n_sims=4, n_months=12, seed=123, annual_drift=0.05, annual_vol=0.2, s0=100.0)
+    p2 = sp.simulate_index_levels_gbm(n_sims=4, n_months=12, seed=123, annual_drift=0.05, annual_vol=0.2, s0=100.0)
+    np.testing.assert_allclose(p1, p2, rtol=0.0, atol=0.0)
+
+
+def test_simulate_index_levels_gbm_different_seeds_produce_different_paths():
+    """Two different seeds must produce statistically distinct path arrays (not bit-identical)."""
+    p1 = sp.simulate_index_levels_gbm(n_sims=10, n_months=12, seed=1, annual_drift=0.05, annual_vol=0.2, s0=100.0)
+    p2 = sp.simulate_index_levels_gbm(n_sims=10, n_months=12, seed=2, annual_drift=0.05, annual_vol=0.2, s0=100.0)
+    assert not np.allclose(p1, p2), "Paths from different seeds should not be identical"
+
+
+def test_simulate_index_levels_gbm_zero_vol_has_common_deterministic_path():
+    """With zero volatility, all simulations follow the same deterministic drift path."""
+    paths = sp.simulate_index_levels_gbm(n_sims=3, n_months=6, seed=7, annual_drift=0.12, annual_vol=0.0, s0=100.0)
+    np.testing.assert_allclose(paths[0], paths[1], rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(paths[1], paths[2], rtol=1e-12, atol=1e-12)
+    assert paths[0, 1] == pytest.approx(100.0 * math.exp(0.12 / 12.0), rel=1e-12)
+
+
+def test_price_spia_monte_carlo_quantiles_are_ordered():
+    """MC output must satisfy p05 <= median <= p95 and all summary metrics must be finite."""
+    contract, yc, mort, ex = _mc_contract_and_setup()
+    mc = sp.price_spia_single_premium_monte_carlo(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        expenses=ex,
+        n_sims=500,
+        annual_drift=0.06,
+        annual_vol=0.18,
+        seed=5,
+        s0=100.0,
+        expense_annual_inflation=0.0,
+    )
+    assert mc.premium_p05 <= mc.premium_median <= mc.premium_p95, (
+        f"Quantile order violated: p05={mc.premium_p05:.2f} median={mc.premium_median:.2f} p95={mc.premium_p95:.2f}"
+    )
+    for attr in ("premium_mean", "premium_median", "premium_p05", "premium_p95", "pv_benefit_mean", "pv_total_mean"):
+        val = getattr(mc, attr)
+        assert math.isfinite(val), f"{attr}={val} is not finite"
+
+
+def test_price_spia_monte_carlo_seed_reproducible_full_result():
+    """Identical seed must yield bitwise-identical premium arrays and all summary statistics."""
+    contract, yc, mort, ex = _mc_contract_and_setup()
+    kwargs = dict(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        expenses=ex,
+        n_sims=200,
+        annual_drift=0.06,
+        annual_vol=0.15,
+        seed=99,
+        s0=100.0,
+        expense_annual_inflation=0.0,
+    )
+    mc1 = sp.price_spia_single_premium_monte_carlo(**kwargs)
+    mc2 = sp.price_spia_single_premium_monte_carlo(**kwargs)
+    np.testing.assert_array_equal(mc1.single_premium, mc2.single_premium)
+    assert mc1.premium_mean == mc2.premium_mean
+    assert mc1.premium_p05 == mc2.premium_p05
+    assert mc1.premium_p95 == mc2.premium_p95
+
+
+def test_price_spia_monte_carlo_different_seed_changes_results():
+    """Different random seeds must produce materially different premium distributions."""
+    contract, yc, mort, ex = _mc_contract_and_setup()
+    common = dict(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        expenses=ex,
+        n_sims=300,
+        annual_drift=0.06,
+        annual_vol=0.20,
+        s0=100.0,
+        expense_annual_inflation=0.0,
+    )
+    mc1 = sp.price_spia_single_premium_monte_carlo(**common, seed=11)
+    mc2 = sp.price_spia_single_premium_monte_carlo(**common, seed=99)
+    assert not np.array_equal(mc1.single_premium, mc2.single_premium), (
+        "Premium arrays from different seeds should not be identical"
+    )
+
+
+def test_price_spia_monte_carlo_matches_manual_path_loop():
+    """MC wrapper output must match a manually written path-by-path pricing loop exactly."""
+    contract, yc, mort, ex = _mc_contract_and_setup()
+    n_sims, n_months = 50, int(round((80 - contract.issue_age) * 12))
+    drift, vol, s0, seed = 0.05, 0.12, 100.0, 77
+
+    # Build paths identically to the wrapper
+    idx_paths = sp.simulate_index_levels_gbm(
+        n_sims=n_sims, n_months=n_months, s0=s0, annual_drift=drift, annual_vol=vol, seed=seed
+    )
+
+    # Reprice manually path by path
+    manual_premiums = np.zeros(n_sims, dtype=float)
+    for i in range(n_sims):
+        res_i = sp.price_spia_single_premium(
+            contract=contract,
+            yield_curve=yc,
+            mortality=mort,
+            horizon_age=80,
+            expenses=ex,
+            index_s0=float(idx_paths[i, 0]),
+            index_levels_payment=idx_paths[i, 1:],
+            expense_annual_inflation=0.0,
+        )
+        manual_premiums[i] = float(res_i.single_premium)
+
+    mc = sp.price_spia_single_premium_monte_carlo(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        expenses=ex,
+        n_sims=n_sims,
+        annual_drift=drift,
+        annual_vol=vol,
+        seed=seed,
+        s0=s0,
+        expense_annual_inflation=0.0,
+    )
+    np.testing.assert_allclose(mc.single_premium, manual_premiums, rtol=1e-12, atol=0.0)
+    assert mc.premium_mean == pytest.approx(float(np.mean(manual_premiums)), rel=1e-12)
+
+
+def test_price_spia_monte_carlo_higher_vol_increases_distribution_width():
+    """A higher index volatility must produce a wider premium distribution (p95 - p05 spread increases).
+
+    This validates that the model correctly translates index uncertainty into pricing uncertainty.
+    """
+    contract, yc, mort, ex = _mc_contract_and_setup()
+    common = dict(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        expenses=ex,
+        n_sims=1000,
+        annual_drift=0.05,
+        seed=42,
+        s0=100.0,
+        expense_annual_inflation=0.0,
+    )
+    mc_low_vol = sp.price_spia_single_premium_monte_carlo(**common, annual_vol=0.05)
+    mc_high_vol = sp.price_spia_single_premium_monte_carlo(**common, annual_vol=0.35)
+
+    spread_low = mc_low_vol.premium_p95 - mc_low_vol.premium_p05
+    spread_high = mc_high_vol.premium_p95 - mc_high_vol.premium_p05
+    assert spread_high > spread_low, (
+        f"Higher vol should widen p95-p05 spread: low_vol_spread={spread_low:.2f}, high_vol_spread={spread_high:.2f}"
+    )
+
+
+def test_price_spia_monte_carlo_zero_vol_matches_deterministic_mean():
+    """At zero vol, MC premium distribution collapses to the deterministic premium value."""
+    contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=100_000.0)
+    yc = sp.YieldCurve.from_flat_rate(0.03)
+    mort = _minimal_mortality_mc()
+    ex = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+
+    n_months = int(round((80 - contract.issue_age) * 12))
+    deterministic_levels = sp.simulate_index_levels_gbm(
+        n_sims=1,
+        n_months=n_months,
+        s0=100.0,
+        annual_drift=0.0,
+        annual_vol=0.0,
+        seed=1,
+    )[0]
+    det = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        expenses=ex,
+        index_s0=float(deterministic_levels[0]),
+        index_levels_payment=deterministic_levels[1:],
+        expense_annual_inflation=0.0,
+    )
+    mc = sp.price_spia_single_premium_monte_carlo(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        expenses=ex,
+        n_sims=200,
+        annual_drift=0.0,
+        annual_vol=0.0,
+        seed=1,
+        s0=100.0,
+        expense_annual_inflation=0.0,
+    )
+    assert mc.premium_mean == pytest.approx(det.single_premium, rel=1e-10)
+    assert mc.premium_p05 == pytest.approx(det.single_premium, rel=1e-10)
+    assert mc.premium_p95 == pytest.approx(det.single_premium, rel=1e-10)
+
+
 # --- YieldCurve ---
 
 
@@ -447,60 +758,3 @@ def test_return_indexation_doubles_with_doubling_index(tmp_path):
         assert b[k] == pytest.approx(2.0 * b[k - 1])
 
 
-def test_simulate_index_levels_gbm_is_seed_reproducible():
-    """Monte Carlo path generation should be exactly reproducible for a fixed seed."""
-    p1 = sp.simulate_index_levels_gbm(n_sims=4, n_months=12, seed=123, annual_drift=0.05, annual_vol=0.2, s0=100.0)
-    p2 = sp.simulate_index_levels_gbm(n_sims=4, n_months=12, seed=123, annual_drift=0.05, annual_vol=0.2, s0=100.0)
-    np.testing.assert_allclose(p1, p2, rtol=0.0, atol=0.0)
-
-
-def test_simulate_index_levels_gbm_zero_vol_has_common_deterministic_path():
-    """With zero volatility, all simulations follow the same deterministic drift path."""
-    paths = sp.simulate_index_levels_gbm(n_sims=3, n_months=6, seed=7, annual_drift=0.12, annual_vol=0.0, s0=100.0)
-    np.testing.assert_allclose(paths[0], paths[1], rtol=1e-12, atol=1e-12)
-    np.testing.assert_allclose(paths[1], paths[2], rtol=1e-12, atol=1e-12)
-    assert paths[0, 1] == pytest.approx(100.0 * math.exp(0.12 / 12.0), rel=1e-12)
-
-
-def test_price_spia_monte_carlo_zero_vol_matches_deterministic_mean():
-    """At zero vol, MC premium distribution collapses to the deterministic premium value."""
-    contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=100_000.0)
-    yc = sp.YieldCurve.from_flat_rate(0.03)
-    mort = _minimal_mortality()
-    ex = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
-
-    n_months = int(round((80 - contract.issue_age) * 12))
-    deterministic_levels = sp.simulate_index_levels_gbm(
-        n_sims=1,
-        n_months=n_months,
-        s0=100.0,
-        annual_drift=0.0,
-        annual_vol=0.0,
-        seed=1,
-    )[0]
-    det = sp.price_spia_single_premium(
-        contract=contract,
-        yield_curve=yc,
-        mortality=mort,
-        horizon_age=80,
-        expenses=ex,
-        index_s0=float(deterministic_levels[0]),
-        index_levels_payment=deterministic_levels[1:],
-        expense_annual_inflation=0.0,
-    )
-    mc = sp.price_spia_single_premium_monte_carlo(
-        contract=contract,
-        yield_curve=yc,
-        mortality=mort,
-        horizon_age=80,
-        expenses=ex,
-        n_sims=200,
-        annual_drift=0.0,
-        annual_vol=0.0,
-        seed=1,
-        s0=100.0,
-        expense_annual_inflation=0.0,
-    )
-    assert mc.premium_mean == pytest.approx(det.single_premium, rel=1e-10)
-    assert mc.premium_p05 == pytest.approx(det.single_premium, rel=1e-10)
-    assert mc.premium_p95 == pytest.approx(det.single_premium, rel=1e-10)
