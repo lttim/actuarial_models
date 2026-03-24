@@ -66,11 +66,11 @@ ExpenseMode = Literal["csv", "manual"]
 
 SECTION_LABELS: dict[str, str] = {
     "overview": "Overview",
-    "run": "Run & results",
+    "run": "Pricing Run",
     "charts": "Charts",
-    "what_if": "What-if studio",
-    "excel_replicator": "Excel replicator",
-    "tests": "Unit tests",
+    "what_if": "What-if Analysis",
+    "excel_replicator": "Excel Replicator",
+    "tests": "Unit Tests",
 }
 SECTION_ORDER: list[str] = list(SECTION_LABELS.keys())
 
@@ -424,8 +424,8 @@ def _mc_cache_get_or_compute(
 
 
 def _render_what_if_studio() -> None:
-    st.header("What-if studio")
-    st.caption("Live scenario shocks relative to the latest baseline run in Run & results.")
+    st.header("What-if Analysis")
+    st.caption("Live scenario shocks relative to the latest baseline run in Pricing Run.")
 
     base_res = st.session_state.get("pricing_res")
     base_contract = st.session_state.get("pricing_contract")
@@ -441,7 +441,7 @@ def _render_what_if_studio() -> None:
         or not isinstance(base_expenses, sp.ExpenseAssumptions)
         or not isinstance(base_mort, (sp.MortalityTableQx, sp.MortalityTableRP2014MP2016))
     ):
-        st.info("Run pricing first in Run & results to set a baseline for What-if analysis.")
+        st.info("Run pricing first in Pricing Run to set a baseline for What-if analysis.")
         return
 
     c1, c2, c3 = st.columns(3)
@@ -644,7 +644,7 @@ def _render_what_if_studio() -> None:
 
 
 def _render_run_and_results() -> None:
-    st.header("Run & results")
+    st.header("Pricing Run")
 
     with st.expander("Contract", expanded=True):
         c1, c2, c3 = st.columns(3)
@@ -984,18 +984,18 @@ def _render_run_and_results() -> None:
                 mime="text/csv",
             )
         with c_dl2:
-            st.caption("Excel download moved to the Excel replicator section.")
+            st.caption("Excel download moved to the Excel Replicator section.")
         st.info("Charts have moved to the dedicated Charts section in the sidebar.")
 
 
 def _render_excel_replicator() -> None:
-    st.header("Excel replicator")
+    st.header("Excel Replicator")
     st.caption("Download the formula workbook and review parity metrics aligned with the workbook ModelCheck sheet.")
 
     res = st.session_state.get("pricing_res")
     contract_state = st.session_state.get("pricing_contract")
     if res is None or contract_state is None:
-        st.info("Run pricing first in the Run & results section to populate the Excel replicator.")
+        st.info("Run pricing first in the Pricing Run section to populate the Excel Replicator.")
         return
 
     m1, m2, m3, m4 = st.columns(4)
@@ -1128,7 +1128,7 @@ def _render_excel_replicator() -> None:
         )
     else:
         st.info(
-            "Monte Carlo was not enabled for this run. Enable it in the Run & results section "
+            "Monte Carlo was not enabled for this run. Enable it in the Pricing Run section "
             "and re-run to see distribution statistics here and in the Excel workbook."
         )
 
@@ -1144,7 +1144,7 @@ def _render_excel_replicator() -> None:
         else:
             st.warning(
                 "Workbook does **not** include MC_Summary — MC was disabled or not run when this workbook was built. "
-                "Enable Monte Carlo in Run & results and click **Run pricing** again to regenerate.",
+                "Enable Monte Carlo in Pricing Run and click **Run pricing** again to regenerate.",
                 icon="⚠️",
             )
         mc_label = " + MC_Summary" if xlsx_has_mc else ""
@@ -1169,7 +1169,7 @@ def _render_charts_section() -> None:
     res = st.session_state.get("pricing_res")
     contract_state = st.session_state.get("pricing_contract")
     if res is None or contract_state is None:
-        st.info("Run pricing first in Run & results to populate charts.")
+        st.info("Run pricing first in Pricing Run to populate charts.")
         return
 
     _render_charts(res, contract_state)
@@ -1183,9 +1183,9 @@ def _render_charts_section() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="SPIA workspace", layout="wide")
+    st.set_page_config(page_title="Pricing Demo", layout="wide")
     with st.sidebar:
-        st.title("SPIA workspace")
+        st.title("Pricing Demo")
         page = st.radio(
             "Section",
             options=SECTION_ORDER,
