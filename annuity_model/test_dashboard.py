@@ -84,10 +84,24 @@ def run_pytest_junit() -> tuple[int, str]:
     return proc.returncode, tail
 
 
+_STATUS_SEVERITY = {"error": 4, "failed": 3, "skipped": 2, "passed": 1, "not_run": 0}
+
+
+def _base_test_name(name: str) -> str:
+    """Strip parametrize suffix '[...]' so parametrized cases map to their base function name."""
+    bracket = name.find("[")
+    return name[:bracket] if bracket != -1 else name
+
+
 def parse_junit_results() -> dict[str, dict[str, Any]]:
     """
     Map test function name -> {status, message, time_s}.
-    status in passed | failed | skipped | unknown
+    status in passed | failed | skipped | error | unknown.
+
+    Parametrized tests (e.g. test_foo[case0]) are aggregated under their base
+    function name (test_foo) so the dashboard can match them to AST-discovered
+    test names.  The most severe status across all cases wins; failure messages
+    from all failing/erroring cases are concatenated.
     """
     if not JUNIT_PATH.is_file():
         return {}
@@ -96,9 +110,11 @@ def parse_junit_results() -> dict[str, dict[str, Any]]:
     except ET.ParseError:
         return {}
     root = tree.getroot()
-    out: dict[str, dict[str, Any]] = {}
+
+    raw: dict[str, list[dict[str, Any]]] = {}
     for tc in root.iter("testcase"):
-        name = tc.get("name") or ""
+        full_name = tc.get("name") or ""
+        base = _base_test_name(full_name)
         time_s = tc.get("time")
         fail = tc.find("failure")
         skip = tc.find("skipped")
@@ -107,21 +123,37 @@ def parse_junit_results() -> dict[str, dict[str, Any]]:
             msg = fail.get("message") or ""
             text = (fail.text or "").strip()
             detail = (msg + "\n" + text).strip() or "Failed"
-            out[name] = {"status": "failed", "message": detail, "time_s": time_s}
-        elif skip is not None:
-            out[name] = {
-                "status": "skipped",
-                "message": (skip.get("message") or skip.text or "Skipped").strip(),
-                "time_s": time_s,
-            }
+            entry = {"status": "failed", "message": detail, "time_s": time_s}
         elif err is not None:
-            out[name] = {
+            entry = {
                 "status": "error",
                 "message": (err.get("message") or err.text or "Error").strip(),
                 "time_s": time_s,
             }
+        elif skip is not None:
+            entry = {
+                "status": "skipped",
+                "message": (skip.get("message") or skip.text or "Skipped").strip(),
+                "time_s": time_s,
+            }
         else:
-            out[name] = {"status": "passed", "message": "", "time_s": time_s}
+            entry = {"status": "passed", "message": "", "time_s": time_s}
+        raw.setdefault(base, []).append(entry)
+
+    out: dict[str, dict[str, Any]] = {}
+    for base, entries in raw.items():
+        worst = max(entries, key=lambda e: _STATUS_SEVERITY.get(e["status"], 0))
+        messages = [e["message"] for e in entries if e["message"]]
+        total_time = None
+        try:
+            total_time = str(round(sum(float(e["time_s"]) for e in entries if e["time_s"] is not None), 4))
+        except (TypeError, ValueError):
+            pass
+        out[base] = {
+            "status": worst["status"],
+            "message": "\n\n".join(messages),
+            "time_s": total_time,
+        }
     return out
 
 
