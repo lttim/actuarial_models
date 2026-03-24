@@ -344,6 +344,18 @@ def _render_run_and_results() -> None:
             help="Applied monthly as (1 + annual)^(1/12) to maintenance expenses only.",
         )
 
+    with st.expander("Monte Carlo (stochastic index assumption)", expanded=False):
+        mc_enable = st.checkbox(
+            "Enable Monte Carlo on index returns",
+            value=False,
+            help="Simulates index paths and reprices for each path. Mortality, curve, and expense inflation remain deterministic.",
+        )
+        mc_n_sims = st.number_input("Number of simulations", min_value=100, max_value=20000, value=1000, step=100)
+        mc_seed = st.number_input("Random seed", min_value=0, max_value=2_147_483_647, value=42, step=1)
+        mc_drift_pct = st.number_input("Annual drift (%)", value=6.0, min_value=-50.0, max_value=50.0, step=0.1)
+        mc_vol_pct = st.number_input("Annual volatility (%)", value=15.0, min_value=0.0, max_value=200.0, step=0.1)
+        mc_s0 = st.number_input("Initial index level (S0)", value=100.0, min_value=0.01, step=1.0)
+
     run = st.button("Run pricing", type="primary")
 
     if run:
@@ -407,6 +419,7 @@ def _render_run_and_results() -> None:
                 "yield_mode": y_mode,
                 "mortality_mode": m_mode,
                 "expense_mode": expense_mode,
+                "mc_enabled": bool(mc_enable),
             }
             st.session_state["pricing_excel_context"] = {
                 "contract": contract,
@@ -451,12 +464,33 @@ def _render_run_and_results() -> None:
             except Exception as ex:
                 st.session_state["pricing_xlsx_bytes"] = None
                 st.session_state["pricing_xlsx_built_error"] = repr(ex)
+            if mc_enable:
+                mc = sp.price_spia_single_premium_monte_carlo(
+                    contract=contract,
+                    yield_curve=yc,
+                    mortality=mort,
+                    horizon_age=int(horizon_age),
+                    spread=float(spread),
+                    valuation_year=vy,
+                    expenses=expenses_arg,
+                    expenses_csv_path=str(_resolve_path(expenses_csv)),
+                    expense_annual_inflation=expense_annual_inflation,
+                    n_sims=int(mc_n_sims),
+                    annual_drift=float(mc_drift_pct) / 100.0,
+                    annual_vol=float(mc_vol_pct) / 100.0,
+                    seed=int(mc_seed),
+                    s0=float(mc_s0),
+                )
+                st.session_state["pricing_mc"] = mc
+            else:
+                st.session_state.pop("pricing_mc", None)
         except Exception as e:
             st.session_state["pricing_err"] = repr(e)
             st.session_state["pricing_res"] = None
             st.session_state.pop("pricing_excel_context", None)
             st.session_state.pop("pricing_xlsx_bytes", None)
             st.session_state.pop("pricing_xlsx_built_error", None)
+            st.session_state.pop("pricing_mc", None)
 
     err = st.session_state.get("pricing_err")
     res = st.session_state.get("pricing_res")
@@ -478,6 +512,23 @@ def _render_run_and_results() -> None:
             f"Yield: {meta.get('yield_mode')}; mortality: {meta.get('mortality_mode')}; "
             f"expenses: {meta.get('expense_mode')}."
         )
+        mc_res = st.session_state.get("pricing_mc")
+        if mc_res is not None:
+            st.subheader("Monte Carlo summary (index-path uncertainty)")
+            a1, a2, a3, a4 = st.columns(4)
+            a1.metric("Mean premium", f"${mc_res.premium_mean:,.2f}")
+            a2.metric("Median premium", f"${mc_res.premium_median:,.2f}")
+            a3.metric("P5 premium", f"${mc_res.premium_p05:,.2f}")
+            a4.metric("P95 premium", f"${mc_res.premium_p95:,.2f}")
+            st.caption(f"Simulations: {mc_res.n_sims:,}")
+            hist_counts, hist_edges = np.histogram(mc_res.single_premium, bins=40)
+            hist_df = pd.DataFrame(
+                {
+                    "premium_bin_mid": 0.5 * (hist_edges[:-1] + hist_edges[1:]),
+                    "count": hist_counts,
+                }
+            ).set_index("premium_bin_mid")
+            st.line_chart(hist_df)
 
         df = _result_dataframe(res, contract_state)
         st.subheader("Month-by-month projection")

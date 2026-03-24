@@ -445,3 +445,62 @@ def test_return_indexation_doubles_with_doubling_index(tmp_path):
     assert b[0] == pytest.approx(10_000.0 * 200.0 / 100.0)  # base * S1/S0
     for k in range(1, 12):
         assert b[k] == pytest.approx(2.0 * b[k - 1])
+
+
+def test_simulate_index_levels_gbm_is_seed_reproducible():
+    """Monte Carlo path generation should be exactly reproducible for a fixed seed."""
+    p1 = sp.simulate_index_levels_gbm(n_sims=4, n_months=12, seed=123, annual_drift=0.05, annual_vol=0.2, s0=100.0)
+    p2 = sp.simulate_index_levels_gbm(n_sims=4, n_months=12, seed=123, annual_drift=0.05, annual_vol=0.2, s0=100.0)
+    np.testing.assert_allclose(p1, p2, rtol=0.0, atol=0.0)
+
+
+def test_simulate_index_levels_gbm_zero_vol_has_common_deterministic_path():
+    """With zero volatility, all simulations follow the same deterministic drift path."""
+    paths = sp.simulate_index_levels_gbm(n_sims=3, n_months=6, seed=7, annual_drift=0.12, annual_vol=0.0, s0=100.0)
+    np.testing.assert_allclose(paths[0], paths[1], rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(paths[1], paths[2], rtol=1e-12, atol=1e-12)
+    assert paths[0, 1] == pytest.approx(100.0 * math.exp(0.12 / 12.0), rel=1e-12)
+
+
+def test_price_spia_monte_carlo_zero_vol_matches_deterministic_mean():
+    """At zero vol, MC premium distribution collapses to the deterministic premium value."""
+    contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=100_000.0)
+    yc = sp.YieldCurve.from_flat_rate(0.03)
+    mort = _minimal_mortality()
+    ex = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+
+    n_months = int(round((80 - contract.issue_age) * 12))
+    deterministic_levels = sp.simulate_index_levels_gbm(
+        n_sims=1,
+        n_months=n_months,
+        s0=100.0,
+        annual_drift=0.0,
+        annual_vol=0.0,
+        seed=1,
+    )[0]
+    det = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        expenses=ex,
+        index_s0=float(deterministic_levels[0]),
+        index_levels_payment=deterministic_levels[1:],
+        expense_annual_inflation=0.0,
+    )
+    mc = sp.price_spia_single_premium_monte_carlo(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        expenses=ex,
+        n_sims=200,
+        annual_drift=0.0,
+        annual_vol=0.0,
+        seed=1,
+        s0=100.0,
+        expense_annual_inflation=0.0,
+    )
+    assert mc.premium_mean == pytest.approx(det.single_premium, rel=1e-10)
+    assert mc.premium_p05 == pytest.approx(det.single_premium, rel=1e-10)
+    assert mc.premium_p95 == pytest.approx(det.single_premium, rel=1e-10)

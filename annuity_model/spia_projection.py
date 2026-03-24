@@ -868,6 +868,59 @@ class SPIAProjectionResult:
     index_s0: float
 
 
+@dataclass(frozen=True)
+class SPIAMonteCarloResult:
+    n_sims: int
+    single_premium: np.ndarray
+    pv_benefit: np.ndarray
+    pv_monthly_expenses: np.ndarray
+    pv_monthly_total: np.ndarray
+    annuity_factor: np.ndarray
+    premium_mean: float
+    premium_median: float
+    premium_p05: float
+    premium_p95: float
+    pv_benefit_mean: float
+    pv_total_mean: float
+
+
+def simulate_index_levels_gbm(
+    *,
+    n_sims: int,
+    n_months: int,
+    s0: float = 100.0,
+    annual_drift: float = 0.06,
+    annual_vol: float = 0.15,
+    seed: int | None = None,
+) -> np.ndarray:
+    """
+    Simulate monthly index levels under a geometric Brownian motion.
+
+    Returns array shape (n_sims, n_months + 1) including month-0 level.
+    """
+    if n_sims < 1:
+        raise ValueError("n_sims must be >= 1.")
+    if n_months < 1:
+        raise ValueError("n_months must be >= 1.")
+    if s0 <= 0.0:
+        raise ValueError("s0 must be > 0.")
+    if annual_vol < 0.0:
+        raise ValueError("annual_vol must be >= 0.")
+
+    dt = 1.0 / 12.0
+    rng = np.random.default_rng(seed)
+    z = rng.normal(0.0, 1.0, size=(n_sims, n_months))
+    drift = (annual_drift - 0.5 * annual_vol * annual_vol) * dt
+    shock_scale = annual_vol * math.sqrt(dt)
+    log_returns = drift + shock_scale * z
+    cum_log = np.cumsum(log_returns, axis=1)
+
+    levels = np.empty((n_sims, n_months + 1), dtype=float)
+    levels[:, 0] = float(s0)
+    levels[:, 1:] = float(s0) * np.exp(cum_log)
+    return levels
+
+
 def price_spia_single_premium(
     *,
     contract: SPIAContract,
@@ -879,6 +932,8 @@ def price_spia_single_premium(
     expenses: ExpenseAssumptions | None = None,
     expenses_csv_path: str = DEFAULT_EXPENSES_CSV,
     index_scenario_csv_path: str | None = None,
+    index_s0: float | None = None,
+    index_levels_payment: np.ndarray | None = None,
     expense_annual_inflation: float = 0.0,
 ) -> SPIAProjectionResult:
     """
@@ -934,7 +989,18 @@ def price_spia_single_premium(
 
     monthly_expense_amount = float(expenses.monthly_expense_dollars)
 
-    if index_scenario_csv_path is None:
+    if index_levels_payment is not None:
+        if index_scenario_csv_path is not None:
+            raise ValueError("Provide either index_scenario_csv_path or index_levels_payment, not both.")
+        if index_s0 is None:
+            raise ValueError("index_s0 must be provided when index_levels_payment is provided.")
+        levels_payment = np.asarray(index_levels_payment, dtype=float)
+        if levels_payment.shape != (n_months,):
+            raise ValueError(f"index_levels_payment must have shape ({n_months},).")
+        if np.any(levels_payment <= 0.0) or not np.isfinite(index_s0):
+            raise ValueError("index levels and index_s0 must be finite and strictly positive.")
+        s0 = float(index_s0)
+    elif index_scenario_csv_path is None:
         s0, levels_payment = flat_index_scenario(n_months)
     else:
         s0, levels_payment = load_index_scenario_monthly_csv(index_scenario_csv_path, n_months=n_months)
@@ -1005,6 +1071,80 @@ def price_spia_single_premium(
         expense_nominal_scheduled=exp_sched,
         expense_annual_inflation=float(expense_annual_inflation),
         index_s0=float(s0),
+    )
+
+
+def price_spia_single_premium_monte_carlo(
+    *,
+    contract: SPIAContract,
+    yield_curve: YieldCurve,
+    mortality: MortalityTableQx | MortalityTableRP2014MP2016,
+    horizon_age: int = 110,
+    spread: float = 0.0,
+    valuation_year: int | None = None,
+    expenses: ExpenseAssumptions | None = None,
+    expenses_csv_path: str = DEFAULT_EXPENSES_CSV,
+    expense_annual_inflation: float = 0.0,
+    n_sims: int = 1000,
+    annual_drift: float = 0.06,
+    annual_vol: float = 0.15,
+    seed: int | None = None,
+    s0: float = 100.0,
+) -> SPIAMonteCarloResult:
+    """Run Monte Carlo by simulating index paths and repricing the contract path-by-path."""
+    dt = 1.0 / 12.0
+    n_months = int(round((horizon_age - contract.issue_age) / dt))
+    n_months = max(n_months, 1)
+
+    idx_paths = simulate_index_levels_gbm(
+        n_sims=n_sims,
+        n_months=n_months,
+        s0=s0,
+        annual_drift=annual_drift,
+        annual_vol=annual_vol,
+        seed=seed,
+    )
+
+    prem = np.zeros(n_sims, dtype=float)
+    pvb = np.zeros(n_sims, dtype=float)
+    pve = np.zeros(n_sims, dtype=float)
+    pvt = np.zeros(n_sims, dtype=float)
+    af = np.zeros(n_sims, dtype=float)
+
+    for i in range(n_sims):
+        res_i = price_spia_single_premium(
+            contract=contract,
+            yield_curve=yield_curve,
+            mortality=mortality,
+            horizon_age=horizon_age,
+            spread=spread,
+            valuation_year=valuation_year,
+            expenses=expenses,
+            expenses_csv_path=expenses_csv_path,
+            index_scenario_csv_path=None,
+            index_s0=float(idx_paths[i, 0]),
+            index_levels_payment=idx_paths[i, 1:],
+            expense_annual_inflation=expense_annual_inflation,
+        )
+        prem[i] = float(res_i.single_premium)
+        pvb[i] = float(res_i.pv_benefit)
+        pve[i] = float(res_i.pv_monthly_expenses)
+        pvt[i] = float(res_i.pv_benefit + res_i.pv_monthly_expenses)
+        af[i] = float(res_i.annuity_factor)
+
+    return SPIAMonteCarloResult(
+        n_sims=int(n_sims),
+        single_premium=prem,
+        pv_benefit=pvb,
+        pv_monthly_expenses=pve,
+        pv_monthly_total=pvt,
+        annuity_factor=af,
+        premium_mean=float(np.mean(prem)),
+        premium_median=float(np.median(prem)),
+        premium_p05=float(np.percentile(prem, 5.0)),
+        premium_p95=float(np.percentile(prem, 95.0)),
+        pv_benefit_mean=float(np.mean(pvb)),
+        pv_total_mean=float(np.mean(pvt)),
     )
 
 
