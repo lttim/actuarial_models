@@ -518,31 +518,31 @@ def _render_excel_replicator() -> None:
             {
                 "Metric": "PV benefits",
                 "Python snapshot": float(res.pv_benefit),
-                "Excel formula target": "Projection!X4",
+                "Expected Excel value (after recalc)": float(res.pv_benefit),
                 "Difference (Excel - Python)": 0.0,
             },
             {
                 "Metric": "PV monthly expenses",
                 "Python snapshot": float(res.pv_monthly_expenses),
-                "Excel formula target": "Projection!X5",
+                "Expected Excel value (after recalc)": float(res.pv_monthly_expenses),
                 "Difference (Excel - Python)": 0.0,
             },
             {
                 "Metric": "PV monthly total (ben+exp)",
                 "Python snapshot": float(res.pv_benefit + res.pv_monthly_expenses),
-                "Excel formula target": "Projection!X7",
+                "Expected Excel value (after recalc)": float(res.pv_benefit + res.pv_monthly_expenses),
                 "Difference (Excel - Python)": 0.0,
             },
             {
                 "Metric": "Single premium",
                 "Python snapshot": float(res.single_premium),
-                "Excel formula target": "Projection!X8",
+                "Expected Excel value (after recalc)": float(res.single_premium),
                 "Difference (Excel - Python)": 0.0,
             },
             {
                 "Metric": "Annuity factor",
                 "Python snapshot": float(res.annuity_factor),
-                "Excel formula target": "Projection!X6",
+                "Expected Excel value (after recalc)": float(res.annuity_factor),
                 "Difference (Excel - Python)": 0.0,
             },
         ]
@@ -555,9 +555,11 @@ def _render_excel_replicator() -> None:
         hide_index=True,
         column_config={
             "Python snapshot": st.column_config.NumberColumn(format="%.6f"),
+            "Expected Excel value (after recalc)": st.column_config.NumberColumn(format="%.6f"),
             "Difference (Excel - Python)": st.column_config.NumberColumn(format="%.6f"),
         },
     )
+    st.caption("Workbook references: PV benefits `Projection!X4`, PV monthly expenses `Projection!X5`, PV monthly total `Projection!X7`, single premium `Projection!X8`, annuity factor `Projection!X6`.")
     st.caption(
         "After opening the workbook and recalculating, the ModelCheck tab differences should be near zero "
         "if Inputs match this run (especially spread B9 and valuation year)."
