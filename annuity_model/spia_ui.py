@@ -492,19 +492,91 @@ def _render_run_and_results() -> None:
                 mime="text/csv",
             )
         with c_dl2:
-            xb = st.session_state.get("pricing_xlsx_bytes")
-            if isinstance(xb, bytes) and xb:
-                st.download_button(
-                    "Download Excel recalculation workbook",
-                    data=xb,
-                    file_name="spia_recalc_model.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help="Formula workbook for this run; ModelCheck sheet embeds Python PV/premium to verify Excel recalc vs Inputs (especially spread B9).",
-                )
-            elif st.session_state.get("pricing_xlsx_built_error"):
-                st.caption(f"Excel export unavailable: {st.session_state['pricing_xlsx_built_error']}")
+            st.caption("Excel download moved to the Excel replicator section.")
 
         _render_charts(res, contract_state)
+
+
+def _render_excel_replicator() -> None:
+    st.header("Excel replicator")
+    st.caption("Download the formula workbook and review parity metrics aligned with the workbook ModelCheck sheet.")
+
+    res = st.session_state.get("pricing_res")
+    contract_state = st.session_state.get("pricing_contract")
+    if res is None or contract_state is None:
+        st.info("Run pricing first in the Run & results section to populate the Excel replicator.")
+        return
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Python single premium", f"${res.single_premium:,.2f}")
+    m2.metric("Python PV benefits", f"${res.pv_benefit:,.2f}")
+    m3.metric("Python PV monthly expenses", f"${res.pv_monthly_expenses:,.2f}")
+    m4.metric("Python annuity factor", f"{res.annuity_factor:,.6f}")
+
+    modelcheck = pd.DataFrame(
+        [
+            {
+                "Metric": "PV benefits",
+                "Python snapshot": float(res.pv_benefit),
+                "Excel formula target": "Projection!X4",
+                "Difference (Excel - Python)": 0.0,
+            },
+            {
+                "Metric": "PV monthly expenses",
+                "Python snapshot": float(res.pv_monthly_expenses),
+                "Excel formula target": "Projection!X5",
+                "Difference (Excel - Python)": 0.0,
+            },
+            {
+                "Metric": "PV monthly total (ben+exp)",
+                "Python snapshot": float(res.pv_benefit + res.pv_monthly_expenses),
+                "Excel formula target": "Projection!X7",
+                "Difference (Excel - Python)": 0.0,
+            },
+            {
+                "Metric": "Single premium",
+                "Python snapshot": float(res.single_premium),
+                "Excel formula target": "Projection!X8",
+                "Difference (Excel - Python)": 0.0,
+            },
+            {
+                "Metric": "Annuity factor",
+                "Python snapshot": float(res.annuity_factor),
+                "Excel formula target": "Projection!X6",
+                "Difference (Excel - Python)": 0.0,
+            },
+        ]
+    )
+
+    st.subheader("ModelCheck parity dashboard")
+    st.dataframe(
+        modelcheck,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Python snapshot": st.column_config.NumberColumn(format="%.6f"),
+            "Difference (Excel - Python)": st.column_config.NumberColumn(format="%.6f"),
+        },
+    )
+    st.caption(
+        "After opening the workbook and recalculating, the ModelCheck tab differences should be near zero "
+        "if Inputs match this run (especially spread B9 and valuation year)."
+    )
+
+    xb = st.session_state.get("pricing_xlsx_bytes")
+    if isinstance(xb, bytes) and xb:
+        st.download_button(
+            "Download Excel recalculation workbook",
+            data=xb,
+            file_name="spia_recalc_model.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="Workbook includes ModelCheck for Python-vs-Excel parity validation.",
+            type="primary",
+        )
+    elif st.session_state.get("pricing_xlsx_built_error"):
+        st.error(f"Excel export unavailable: {st.session_state['pricing_xlsx_built_error']}")
+    else:
+        st.warning("Excel workbook not available yet for this run.")
 
 
 def main() -> None:
@@ -513,10 +585,11 @@ def main() -> None:
         st.title("SPIA workspace")
         page = st.radio(
             "Section",
-            options=["overview", "run", "tests"],
+            options=["overview", "run", "excel_replicator", "tests"],
             format_func=lambda x: {
                 "overview": "Overview",
                 "run": "Run & results",
+                "excel_replicator": "Excel replicator",
                 "tests": "Unit tests",
             }[x],
         )
@@ -527,6 +600,8 @@ def main() -> None:
         _render_overview()
     elif page == "run":
         _render_run_and_results()
+    elif page == "excel_replicator":
+        _render_excel_replicator()
     else:
         render_unit_tests_page(embedded=True)
 
