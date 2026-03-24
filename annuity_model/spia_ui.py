@@ -48,9 +48,45 @@ def _minimal_mortality() -> sp.MortalityTableQx:
     return sp.MortalityTableQx(ages, qx)
 
 
+def _round_for_visuals(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    numeric_cols = out.select_dtypes(include=[np.number]).columns
+    out.loc[:, numeric_cols] = out.loc[:, numeric_cols].round(0)
+    return out
+
+
+def _number_cols_no_decimals(df: pd.DataFrame) -> dict[str, st.column_config.NumberColumn]:
+    numeric_cols = list(df.select_dtypes(include=[np.number]).columns)
+    return {c: st.column_config.NumberColumn(format="%,.0f") for c in numeric_cols}
+
+
 MortalityMode = Literal["synthetic", "qx_csv", "rp2014_mp2016"]
 YieldMode = Literal["flat", "zero_csv", "par_bootstrap"]
 ExpenseMode = Literal["csv", "manual"]
+
+SECTION_LABELS: dict[str, str] = {
+    "overview": "Overview",
+    "run": "Run & results",
+    "charts": "Charts",
+    "what_if": "What-if studio",
+    "excel_replicator": "Excel replicator",
+    "tests": "Unit tests",
+}
+SECTION_ORDER: list[str] = list(SECTION_LABELS.keys())
+
+# Keep this list updated whenever capabilities change; overview is generated from it.
+MODEL_FEATURES: list[str] = [
+    "Deterministic SPIA pricing from `price_spia_single_premium` with monthly alive-contingent cashflows.",
+    "Yield curve sources: flat rate, zero-curve CSV, or par-yield CSV bootstrapped to zeros.",
+    "Mortality sources: synthetic table, static qx CSV, or RP-2014 + MP-2016 improvement model.",
+    "Economic scenario controls for benefit indexation and separate monthly-compounded expense inflation.",
+    "Optional Monte Carlo index-path pricing with premium/PV distribution statistics.",
+    "Dedicated Charts section with index, survival, PV, reserve, and profit decomposition waterfall visuals.",
+    "What-if studio with live shocks (rates, spread, inflation, longevity, equity regime, expense ratio).",
+    "Before/after/impact dashboard for premium, margin, reserve path, and tail-risk distribution.",
+    "Excel replicator export with ModelCheck parity and optional MC_Summary workbook content.",
+    "Embedded unit-test dashboard for quick verification inside Streamlit.",
+]
 
 
 def _build_yield_curve(
@@ -108,47 +144,21 @@ def _build_mortality(
 def _render_overview() -> None:
     st.header("Model overview")
     st.markdown(
-        """
-This workspace runs **`spia_projection.py`** for a single-life SPIA with monthly, end-of-period
-payments while alive. It supports both deterministic pricing and stochastic index-path analysis,
-plus parity workflows with an Excel recalc model.
-
-### Main pieces
-
-1. **`SPIAContract`** — Issue age, sex (metadata), annual benefit, monthly payment frequency.
-
-2. **`YieldCurve`** — Flat rate, zero-curve CSV, or par-yield CSV bootstrapped to zeros;
-   discount factors follow
-   `DF(t) = exp(-(z(t) + spread) × t)` with log-linear interpolation on DFs inside the
-   curve and flat-rate extrapolation beyond endpoints.
-
-3. **Mortality** — Synthetic demo table, static **`MortalityTableQx`** CSV, or
-   **`MortalityTableRP2014MP2016`** (RP-2014 base qx in 2014 plus MP-2016 calendar-year
-   improvements). RP+MP requires a **valuation year** so month-by-month calendar years are defined.
-
-4. **Economic assumptions** — Benefit indexation from an S&P 500 proxy path (or flat index),
-   and separate annual inflation for maintenance expenses (applied monthly).
-
-5. **`ExpenseAssumptions`** — Load expenses from CSV or enter manually (policy, premium %, monthly).
-
-6. **`price_spia_single_premium`** — Monthly grid to `horizon_age`, survival, discount factors,
-   **annuity factor** (level-$1 survival-weighted sum), PV of **indexed** benefits and inflated
-   expenses, **single premium**, expected cashflows, **index return series** for charts, and reserves.
-
-7. **`price_spia_single_premium_monte_carlo`** — Optional GBM simulations for index returns
-   with distribution stats (mean/median/P5/P95 and histograms) for premium and key PV metrics.
-
-### Outputs available in the workspace
-
-- Summary metrics (premium, PV benefit, annuity factor, etc.).
-- Per-month projection table with index levels/returns, expected benefit/expense/total, and PV buildup.
-- Charts (index returns/levels, survival, PV contributions, cumulative PV, expected flows, reserves).
-- Monte Carlo statistics and distribution charts (when enabled).
-- Excel replicator download with **ModelCheck** parity sheet, and optional **MC_Summary** sheet.
-
-Use the sidebar to navigate **Run & results**, **Excel replicator**, and **Unit tests**.
-        """
+        "This workspace runs **`spia_projection.py`** for single-life SPIA pricing, scenario analysis, "
+        "and Excel parity checks."
     )
+    st.caption(
+        "Overview content is generated from `MODEL_FEATURES` and shared section metadata in this file "
+        "to reduce documentation drift after model updates."
+    )
+
+    st.subheader("Current feature set")
+    for i, feat in enumerate(MODEL_FEATURES, start=1):
+        st.markdown(f"{i}. {feat}")
+
+    st.subheader("Workspace sections")
+    section_labels = [SECTION_LABELS[k] for k in SECTION_ORDER if k != "overview"]
+    st.markdown("Use the sidebar to navigate: " + " | ".join(f"**{name}**" for name in section_labels) + ".")
 
 
 def _result_dataframe(res: sp.SPIAProjectionResult, contract: sp.SPIAContract) -> pd.DataFrame:
@@ -196,16 +206,16 @@ def _render_charts(res: sp.SPIAProjectionResult, contract: sp.SPIAContract) -> N
         key="index_return_chart_choice",
     )
     if key == "simple":
-        ret_series = res.index_simple_return
-        ylabel = "Simple return"
+        ret_series = np.rint(res.index_simple_return * 100.0)
+        ylabel = "Simple return (%)"
     elif key == "log":
-        ret_series = res.index_log_return
-        ylabel = "Log return"
+        ret_series = np.rint(res.index_log_return * 100.0)
+        ylabel = "Log return (%)"
     elif key == "cumulative":
-        ret_series = res.index_cumulative_return
-        ylabel = "Cumulative return (S_k/S_0 - 1)"
+        ret_series = np.rint(res.index_cumulative_return * 100.0)
+        ylabel = "Cumulative return (%)"
     else:
-        ret_series = res.index_level_at_payment
+        ret_series = np.rint(res.index_level_at_payment)
         ylabel = "Index level"
 
     st.line_chart(pd.DataFrame({"age": ages_pay, "value": ret_series}).set_index("age"))
@@ -215,19 +225,19 @@ def _render_charts(res: sp.SPIAProjectionResult, contract: sp.SPIAContract) -> N
     with c1:
         st.markdown("**Survival to payment**")
         st.line_chart(
-            pd.DataFrame({"age": res.ages_at_payment, "survival": res.survival_to_payment}).set_index("age")
+            pd.DataFrame({"age": res.ages_at_payment, "survival_pct": np.rint(res.survival_to_payment * 100.0)}).set_index("age")
         )
     with c2:
         st.markdown("**Expected PV per payment**")
         st.line_chart(
-            pd.DataFrame({"age": res.ages_at_payment, "pv": expected_payment_pv}).set_index("age")
+            pd.DataFrame({"age": res.ages_at_payment, "pv": np.rint(expected_payment_pv)}).set_index("age")
         )
 
     c3, c4 = st.columns(2)
     with c3:
         st.markdown("**Cumulative PV of benefits**")
         st.line_chart(
-            pd.DataFrame({"age": res.ages_at_payment, "cumulative_pv": cumulative_pv}).set_index("age")
+            pd.DataFrame({"age": res.ages_at_payment, "cumulative_pv": np.rint(cumulative_pv)}).set_index("age")
         )
     with c4:
         st.markdown("**Expected nominal benefit vs expense**")
@@ -235,14 +245,14 @@ def _render_charts(res: sp.SPIAProjectionResult, contract: sp.SPIAContract) -> N
             pd.DataFrame(
                 {
                     "age": res.ages_at_payment,
-                    "benefit": res.expected_benefit_cashflows,
-                    "expense": res.expected_expense_cashflows,
+                    "benefit": np.rint(res.expected_benefit_cashflows),
+                    "expense": np.rint(res.expected_expense_cashflows),
                 }
             ).set_index("age")
         )
 
     st.markdown("**Economic reserve** (benefit + monthly expense, PV roll-forward)")
-    st.line_chart(pd.DataFrame({"age": ages_r, "reserve": res.economic_reserve}).set_index("age"))
+    st.line_chart(pd.DataFrame({"age": ages_r, "reserve": np.rint(res.economic_reserve)}).set_index("age"))
 
 
 def _render_profit_decomposition_chart(
@@ -288,7 +298,7 @@ def _render_profit_decomposition_chart(
 
     wf = pd.DataFrame(wf_rows)
     st.bar_chart(
-        wf.set_index("Step")[["base", "delta"]],
+        _round_for_visuals(wf.set_index("Step")[["base", "delta"]]),
         stack=True,
         color=["rgba(0,0,0,0)", "#1f77b4"],
     )
@@ -300,10 +310,19 @@ def _render_profit_decomposition_chart(
             if label != "Single premium"
         ]
     )
-    st.dataframe(table, use_container_width=True, hide_index=True)
+    table_display = _round_for_visuals(table)
+    st.dataframe(
+        table_display,
+        use_container_width=True,
+        hide_index=True,
+        column_config=_number_cols_no_decimals(table_display),
+    )
     st.caption(
-        "Interpretation: negative mortality/discounting effects reduce the undiscounted certain-life baseline; "
-        "indexation, expenses, and margin/premium load add back to the final single premium."
+        "Interpretation: start from a high baseline that assumes level benefits are paid with certainty and "
+        "without discounting. Mortality and discounting usually reduce that baseline because some future payments "
+        "are not expected to occur and all future cashflows are worth less today. Indexation adds value back when "
+        "projected indexed benefits exceed level benefits, while expenses and premium load/margin increase required "
+        "premium further. The final total equals the modeled single premium."
     )
 
 
@@ -360,9 +379,48 @@ def _deterministic_index_levels_from_regime(
 def _render_impact_metric(label: str, before_val: float, after_val: float, money: bool = True) -> None:
     delta = float(after_val - before_val)
     if money:
-        st.metric(label, f"${after_val:,.2f}", delta=f"${delta:,.2f}")
+        st.metric(label, f"${after_val:,.0f}", delta=f"${delta:,.0f}")
     else:
-        st.metric(label, f"{after_val:,.4f}", delta=f"{delta:+.4f}")
+        st.metric(label, f"{after_val:,.0f}", delta=f"{delta:+,.0f}")
+
+
+def _mc_cache_get_or_compute(
+    key: tuple[object, ...],
+    *,
+    contract: sp.SPIAContract,
+    yield_curve: sp.YieldCurve,
+    mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
+    horizon_age: int,
+    spread: float,
+    valuation_year: int | None,
+    expenses: sp.ExpenseAssumptions,
+    expense_annual_inflation: float,
+    n_sims: int,
+    annual_drift: float,
+    annual_vol: float,
+    seed: int,
+    s0: float,
+) -> sp.SPIAMonteCarloResult:
+    cache = st.session_state.setdefault("what_if_mc_cache", {})
+    if key in cache:
+        return cache[key]
+    out = sp.price_spia_single_premium_monte_carlo(
+        contract=contract,
+        yield_curve=yield_curve,
+        mortality=mortality,
+        horizon_age=horizon_age,
+        spread=spread,
+        valuation_year=valuation_year,
+        expenses=expenses,
+        expense_annual_inflation=expense_annual_inflation,
+        n_sims=n_sims,
+        annual_drift=annual_drift,
+        annual_vol=annual_vol,
+        seed=seed,
+        s0=s0,
+    )
+    cache[key] = out
+    return out
 
 
 def _render_what_if_studio() -> None:
@@ -446,33 +504,65 @@ def _render_what_if_studio() -> None:
             index_levels_payment=idx_levels,
             expense_annual_inflation=shocked_infl,
         )
-        shocked_mc = sp.price_spia_single_premium_monte_carlo(
-            contract=base_contract,
-            yield_curve=shocked_curve,
-            mortality=shocked_mort,
-            horizon_age=horizon_age,
-            spread=shocked_spread,
-            valuation_year=int(valuation_year) if valuation_year is not None else None,
-            expenses=shocked_expenses,
-            expense_annual_inflation=shocked_infl,
-            n_sims=int(mc_sims),
-            annual_drift=float(drift),
-            annual_vol=float(vol),
-            seed=42,
-            s0=float(s0),
+        vy = int(valuation_year) if valuation_year is not None else None
+        baseline_key = (
+            "baseline",
+            int(mc_sims),
+            int(horizon_age),
+            float(base_spread),
+            float(base_infl),
+            float(base_drift),
+            float(base_vol),
+            float(s0),
+            int(base_contract.issue_age),
+            float(base_contract.benefit_annual),
         )
-        baseline_mc = sp.price_spia_single_premium_monte_carlo(
+        baseline_mc = _mc_cache_get_or_compute(
+            baseline_key,
             contract=base_contract,
             yield_curve=base_curve,
             mortality=base_mort,
             horizon_age=horizon_age,
             spread=base_spread,
-            valuation_year=int(valuation_year) if valuation_year is not None else None,
+            valuation_year=vy,
             expenses=base_expenses,
             expense_annual_inflation=base_infl,
             n_sims=int(mc_sims),
             annual_drift=float(base_drift),
             annual_vol=float(base_vol),
+            seed=42,
+            s0=float(s0),
+        )
+        shocked_key = (
+            "shocked",
+            int(mc_sims),
+            int(horizon_age),
+            float(shocked_spread),
+            float(shocked_infl),
+            float(drift),
+            float(vol),
+            float(s0),
+            float(rate_shift_bps),
+            float(spread_shift_bps),
+            float(longevity_improvement_pct),
+            float(expense_ratio_mult),
+            str(equity_regime),
+            int(base_contract.issue_age),
+            float(base_contract.benefit_annual),
+        )
+        shocked_mc = _mc_cache_get_or_compute(
+            shocked_key,
+            contract=base_contract,
+            yield_curve=shocked_curve,
+            mortality=shocked_mort,
+            horizon_age=horizon_age,
+            spread=shocked_spread,
+            valuation_year=vy,
+            expenses=shocked_expenses,
+            expense_annual_inflation=shocked_infl,
+            n_sims=int(mc_sims),
+            annual_drift=float(drift),
+            annual_vol=float(vol),
             seed=42,
             s0=float(s0),
         )
@@ -516,7 +606,13 @@ def _render_what_if_studio() -> None:
         }
     )
     compare_df["Impact"] = compare_df["After"] - compare_df["Before"]
-    st.dataframe(compare_df, use_container_width=True, hide_index=True)
+    compare_display = _round_for_visuals(compare_df)
+    st.dataframe(
+        compare_display,
+        use_container_width=True,
+        hide_index=True,
+        column_config=_number_cols_no_decimals(compare_display),
+    )
 
     st.markdown("**Reserve path impact**")
     reserve_df = pd.DataFrame(
@@ -527,19 +623,20 @@ def _render_what_if_studio() -> None:
             "Impact": shocked_res.economic_reserve - base_res.economic_reserve,
         }
     ).set_index("age")
-    st.line_chart(reserve_df[["Before reserve", "After reserve"]])
-    st.bar_chart(reserve_df[["Impact"]])
+    reserve_display = _round_for_visuals(reserve_df)
+    st.line_chart(reserve_display[["Before reserve", "After reserve"]])
+    st.bar_chart(reserve_display[["Impact"]])
 
     st.markdown("**Tail-risk distribution impact (single premium)**")
     c1, c2 = st.columns(2)
     with c1:
         counts_b, edges_b = np.histogram(baseline_mc.single_premium, bins=35)
         mids_b = 0.5 * (edges_b[:-1] + edges_b[1:])
-        st.bar_chart(pd.DataFrame({"bin": mids_b, "count_before": counts_b}).set_index("bin"))
+        st.bar_chart(_round_for_visuals(pd.DataFrame({"bin": mids_b, "count_before": counts_b}).set_index("bin")))
     with c2:
         counts_a, edges_a = np.histogram(shocked_mc.single_premium, bins=35)
         mids_a = 0.5 * (edges_a[:-1] + edges_a[1:])
-        st.bar_chart(pd.DataFrame({"bin": mids_a, "count_after": counts_a}).set_index("bin"))
+        st.bar_chart(_round_for_visuals(pd.DataFrame({"bin": mids_a, "count_after": counts_a}).set_index("bin")))
 
     st.caption(
         "Impact shown as After - Before. Tail risk uses the 95th percentile of simulated premiums under the selected equity regime."
@@ -841,10 +938,10 @@ def _render_run_and_results() -> None:
         meta = st.session_state.get("pricing_meta") or {}
 
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Single premium", f"${res.single_premium:,.2f}")
-        m2.metric("PV benefit", f"${res.pv_benefit:,.2f}")
-        m3.metric("PV monthly expenses", f"${res.pv_monthly_expenses:,.2f}")
-        m4.metric("Annuity factor", f"{res.annuity_factor:,.6f}")
+        m1.metric("Single premium", f"${res.single_premium:,.0f}")
+        m2.metric("PV benefit", f"${res.pv_benefit:,.0f}")
+        m3.metric("PV monthly expenses", f"${res.pv_monthly_expenses:,.0f}")
+        m4.metric("Annuity factor", f"{res.annuity_factor:,.0f}")
 
         st.caption(
             f"Yield: {meta.get('yield_mode')}; mortality: {meta.get('mortality_mode')}; "
@@ -854,10 +951,10 @@ def _render_run_and_results() -> None:
         if mc_res is not None:
             st.subheader("Monte Carlo summary (index-path uncertainty)")
             a1, a2, a3, a4 = st.columns(4)
-            a1.metric("Mean premium", f"${mc_res.premium_mean:,.2f}")
-            a2.metric("Median premium", f"${mc_res.premium_median:,.2f}")
-            a3.metric("P5 premium", f"${mc_res.premium_p05:,.2f}")
-            a4.metric("P95 premium", f"${mc_res.premium_p95:,.2f}")
+            a1.metric("Mean premium", f"${mc_res.premium_mean:,.0f}")
+            a2.metric("Median premium", f"${mc_res.premium_median:,.0f}")
+            a3.metric("P5 premium", f"${mc_res.premium_p05:,.0f}")
+            a4.metric("P95 premium", f"${mc_res.premium_p95:,.0f}")
             st.caption(f"Simulations: {mc_res.n_sims:,}")
             hist_counts, hist_edges = np.histogram(mc_res.single_premium, bins=40)
             hist_df = pd.DataFrame(
@@ -866,12 +963,18 @@ def _render_run_and_results() -> None:
                     "count": hist_counts,
                 }
             ).set_index("premium_bin_mid")
-            st.line_chart(hist_df)
+            st.line_chart(_round_for_visuals(hist_df))
 
         df = _result_dataframe(res, contract_state)
         st.subheader("Month-by-month projection")
-        st.dataframe(df, use_container_width=True, height=360)
-        csv_bytes = df.to_csv(index=False).encode("utf-8")
+        df_display = _round_for_visuals(df)
+        st.dataframe(
+            df_display,
+            use_container_width=True,
+            height=360,
+            column_config=_number_cols_no_decimals(df_display),
+        )
+        csv_bytes = df_display.to_csv(index=False).encode("utf-8")
         c_dl1, c_dl2 = st.columns(2)
         with c_dl1:
             st.download_button(
@@ -896,10 +999,10 @@ def _render_excel_replicator() -> None:
         return
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Python single premium", f"${res.single_premium:,.2f}")
-    m2.metric("Python PV benefits", f"${res.pv_benefit:,.2f}")
-    m3.metric("Python PV monthly expenses", f"${res.pv_monthly_expenses:,.2f}")
-    m4.metric("Python annuity factor", f"{res.annuity_factor:,.6f}")
+    m1.metric("Python single premium", f"${res.single_premium:,.0f}")
+    m2.metric("Python PV benefits", f"${res.pv_benefit:,.0f}")
+    m3.metric("Python PV monthly expenses", f"${res.pv_monthly_expenses:,.0f}")
+    m4.metric("Python annuity factor", f"{res.annuity_factor:,.0f}")
 
     modelcheck = pd.DataFrame(
         [
@@ -937,15 +1040,12 @@ def _render_excel_replicator() -> None:
     )
 
     st.subheader("ModelCheck parity dashboard")
+    modelcheck_display = _round_for_visuals(modelcheck)
     st.dataframe(
-        modelcheck,
+        modelcheck_display,
         use_container_width=True,
         hide_index=True,
-        column_config={
-            "Python snapshot": st.column_config.NumberColumn(format="%.6f"),
-            "Expected Excel value (after recalc)": st.column_config.NumberColumn(format="%.6f"),
-            "Difference (Excel - Python)": st.column_config.NumberColumn(format="%.6f"),
-        },
+        column_config=_number_cols_no_decimals(modelcheck_display),
     )
     st.caption("Workbook references: PV benefits `Projection!X4`, PV monthly expenses `Projection!X5`, PV monthly total `Projection!X7`, single premium `Projection!X8`, annuity factor `Projection!X6`.")
     st.caption(
@@ -991,11 +1091,13 @@ def _render_excel_replicator() -> None:
                 }
             )
         stats_df = pd.DataFrame(stat_rows)
-        _num_cfg = {
-            c: st.column_config.NumberColumn(format="%.4f")
-            for c in ["Mean", "Std Dev", "P5", "P25", "Median", "P75", "P95"]
-        }
-        st.dataframe(stats_df, use_container_width=True, hide_index=True, column_config=_num_cfg)
+        stats_display = _round_for_visuals(stats_df)
+        st.dataframe(
+            stats_display,
+            use_container_width=True,
+            hide_index=True,
+            column_config=_number_cols_no_decimals(stats_display),
+        )
 
         st.markdown("**Premium & key metric distributions**")
         ch1, ch2 = st.columns(2)
@@ -1003,7 +1105,7 @@ def _render_excel_replicator() -> None:
         def _hist_df(arr: np.ndarray, n_bins: int = 35) -> pd.DataFrame:
             counts, edges = np.histogram(arr, bins=n_bins)
             mids = 0.5 * (edges[:-1] + edges[1:])
-            return pd.DataFrame({"bin": np.round(mids, 2), "count": counts}).set_index("bin")
+            return pd.DataFrame({"bin": np.rint(mids), "count": counts}).set_index("bin")
 
         with ch1:
             st.markdown("Single premium")
@@ -1086,15 +1188,8 @@ def main() -> None:
         st.title("SPIA workspace")
         page = st.radio(
             "Section",
-            options=["overview", "run", "charts", "what_if", "excel_replicator", "tests"],
-            format_func=lambda x: {
-                "overview": "Overview",
-                "run": "Run & results",
-                "charts": "Charts",
-                "what_if": "What-if studio",
-                "excel_replicator": "Excel replicator",
-                "tests": "Unit tests",
-            }[x],
+            options=SECTION_ORDER,
+            format_func=lambda x: SECTION_LABELS[x],
         )
         st.divider()
         st.caption(f"Project root: `{ROOT}`")

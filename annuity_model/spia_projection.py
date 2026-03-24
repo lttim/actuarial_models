@@ -1091,10 +1091,41 @@ def price_spia_single_premium_monte_carlo(
     seed: int | None = None,
     s0: float = 100.0,
 ) -> SPIAMonteCarloResult:
-    """Run Monte Carlo by simulating index paths and repricing the contract path-by-path."""
+    """Run Monte Carlo by simulating index paths and repricing vectorized across paths."""
     dt = 1.0 / 12.0
     n_months = int(round((horizon_age - contract.issue_age) / dt))
     n_months = max(n_months, 1)
+
+    # Reuse deterministic ingredients once (survival, discounting, expenses).
+    if valuation_year is None and isinstance(mortality, MortalityTableRP2014MP2016):
+        raise ValueError("valuation_year must be provided when using MortalityTableRP2014MP2016.")
+
+    survival = mortality.monthly_survival_to_payment(
+        issue_age=contract.issue_age,
+        n_months=n_months,
+        valuation_year=valuation_year,  # ignored by MortalityTableQx
+    )
+    months = np.arange(1, n_months + 1, dtype=int)
+    times_years = months * dt
+    df = yield_curve.discount_factors(times_years, spread=spread)
+    annuity_factor = float(np.sum(survival * df))
+
+    if expenses is None:
+        try:
+            expenses = ExpenseAssumptions.load_from_csv(expenses_csv_path)
+        except (FileNotFoundError, ValueError):
+            expenses = ExpenseAssumptions(
+                policy_expense_dollars=0.0,
+                premium_expense_rate=0.0,
+                monthly_expense_dollars=0.0,
+            )
+    rate = float(expenses.premium_expense_rate)
+    if rate >= 1.0:
+        raise ValueError("premium_expense_rate must be < 1.")
+
+    g = monthly_rate_from_annual_inflation(float(expense_annual_inflation)) if expense_annual_inflation else 0.0
+    expense_sched = float(expenses.monthly_expense_dollars) * (1.0 + g) ** np.arange(n_months, dtype=float)
+    pv_monthly_expenses_single = float(np.sum(expense_sched * survival * df))
 
     idx_paths = simulate_index_levels_gbm(
         n_sims=n_sims,
@@ -1105,32 +1136,22 @@ def price_spia_single_premium_monte_carlo(
         seed=seed,
     )
 
-    prem = np.zeros(n_sims, dtype=float)
-    pvb = np.zeros(n_sims, dtype=float)
-    pve = np.zeros(n_sims, dtype=float)
-    pvt = np.zeros(n_sims, dtype=float)
-    af = np.zeros(n_sims, dtype=float)
+    # Benefits under return-indexation: b_k = base_monthly * S_k / S0.
+    s0_eff = idx_paths[:, [0]]
+    if np.any(s0_eff <= 0.0):
+        raise ValueError("Simulated index levels at month 0 must be strictly positive.")
+    base_monthly = float(contract.benefit_annual) / float(contract.payment_freq_per_year)
+    benefit_sched = base_monthly * (idx_paths[:, 1:] / s0_eff)  # shape (n_sims, n_months)
 
-    for i in range(n_sims):
-        res_i = price_spia_single_premium(
-            contract=contract,
-            yield_curve=yield_curve,
-            mortality=mortality,
-            horizon_age=horizon_age,
-            spread=spread,
-            valuation_year=valuation_year,
-            expenses=expenses,
-            expenses_csv_path=expenses_csv_path,
-            index_scenario_csv_path=None,
-            index_s0=float(idx_paths[i, 0]),
-            index_levels_payment=idx_paths[i, 1:],
-            expense_annual_inflation=expense_annual_inflation,
-        )
-        prem[i] = float(res_i.single_premium)
-        pvb[i] = float(res_i.pv_benefit)
-        pve[i] = float(res_i.pv_monthly_expenses)
-        pvt[i] = float(res_i.pv_benefit + res_i.pv_monthly_expenses)
-        af[i] = float(res_i.annuity_factor)
+    # PV benefit by path; deterministic monthly expense PV is shared across paths.
+    weight = survival * df  # shape (n_months,)
+    pvb = benefit_sched @ weight
+    pve = np.full(n_sims, pv_monthly_expenses_single, dtype=float)
+    pvt = pvb + pve
+
+    numerator = float(expenses.policy_expense_dollars) + pvt
+    prem = numerator / (1.0 - rate)
+    af = np.full(n_sims, annuity_factor, dtype=float)
 
     return SPIAMonteCarloResult(
         n_sims=int(n_sims),
