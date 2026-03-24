@@ -253,6 +253,7 @@ def _render_run_and_results() -> None:
                 "par_bootstrap": "Par yields CSV → bootstrap zeros",
             }[x],
             horizontal=True,
+            index=2,
         )
         flat_rate = 0.04
         zero_csv = sp.DEFAULT_ZERO_CURVE_CSV
@@ -276,6 +277,7 @@ def _render_run_and_results() -> None:
                 "rp2014_mp2016": "RP-2014 Healthy Male + MP-2016 (xlsx or cached CSV)",
             }[x],
             horizontal=True,
+            index=2,
         )
         qx_csv = sp.DEFAULT_MORTALITY_QX_CSV
         rp_xlsx = sp.DEFAULT_RP2014_XLSX
@@ -347,10 +349,10 @@ def _render_run_and_results() -> None:
     with st.expander("Monte Carlo (stochastic index assumption)", expanded=False):
         mc_enable = st.checkbox(
             "Enable Monte Carlo on index returns",
-            value=False,
+            value=True,
             help="Simulates index paths and reprices for each path. Mortality, curve, and expense inflation remain deterministic.",
         )
-        mc_n_sims = st.number_input("Number of simulations", min_value=100, max_value=20000, value=1000, step=100)
+        mc_n_sims = st.number_input("Number of simulations", min_value=100, max_value=20000, value=100, step=100)
         mc_seed = st.number_input("Random seed", min_value=0, max_value=2_147_483_647, value=42, step=1)
         mc_drift_pct = st.number_input("Annual drift (%)", value=6.0, min_value=-50.0, max_value=50.0, step=0.1)
         mc_vol_pct = st.number_input("Annual volatility (%)", value=15.0, min_value=0.0, max_value=200.0, step=0.1)
