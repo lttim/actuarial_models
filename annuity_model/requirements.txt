@@ -3,6 +3,7 @@
 numpy
 pandas
 pyarrow
+altair>=5.0.0
 streamlit>=1.41.0
 matplotlib
 openpyxl

@@ -16,6 +16,7 @@ from typing import Literal
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
+import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -53,6 +54,38 @@ def _round_for_visuals(df: pd.DataFrame) -> pd.DataFrame:
     numeric_cols = out.select_dtypes(include=[np.number]).columns
     out.loc[:, numeric_cols] = out.loc[:, numeric_cols].round(0)
     return out
+
+
+def _alm_surplus_chart(ages: np.ndarray | pd.Series, surplus: np.ndarray | pd.Series) -> None:
+    """Surplus vs attained age with a y = 0 reference line (above / below zero)."""
+    df = pd.DataFrame(
+        {
+            "Attained age": np.asarray(ages, dtype=float),
+            "Surplus": np.asarray(surplus, dtype=float),
+        }
+    )
+    line = (
+        alt.Chart(df)
+        .mark_line()
+        .encode(
+            x=alt.X("Attained age:Q", title="Attained age"),
+            y=alt.Y("Surplus:Q", title="Surplus ($)"),
+        )
+    )
+    rule = (
+        alt.Chart(pd.DataFrame({"y": [0.0]}))
+        .mark_rule(color="#888", strokeDash=[4, 4])
+        .encode(y="y:Q")
+    )
+    layered = (
+        (line + rule)
+        .properties(
+            title="Surplus (asset market value minus liability PV)",
+            height=320,
+        )
+        .resolve_scale(y="shared")
+    )
+    st.altair_chart(layered.interactive(), use_container_width=True)
 
 
 def _number_cols_no_decimals(df: pd.DataFrame) -> dict[str, st.column_config.NumberColumn]:
@@ -1465,16 +1498,23 @@ def _render_alm_section() -> None:
 
         st.subheader("Paths (attained age)")
         age_ax = contract_state.issue_age + last.times_years
+        st.markdown("##### Asset market value and liability present value")
         st.line_chart(
-            pd.DataFrame(
-                {"Funding ratio": last.funding_ratio, "Liability PV": last.liability_pv},
-                index=age_ax,
+            _round_for_visuals(
+                pd.DataFrame(
+                    {
+                        "Asset market value": last.asset_market_value,
+                        "Liability PV": last.liability_pv,
+                    },
+                    index=age_ax,
+                )
             )
         )
+        _alm_surplus_chart(age_ax, last.surplus)
+        st.markdown("##### Liquidity buffer (months of mean monthly outflows)")
         st.line_chart(
-            pd.DataFrame({"Surplus": last.surplus, "Asset MV path": last.asset_market_value}, index=age_ax)
+            pd.DataFrame({"Liquidity buffer (months)": last.liquidity_buffer_months}, index=age_ax)
         )
-        st.line_chart(pd.DataFrame({"Liquidity buffer (months)": last.liquidity_buffer_months}, index=age_ax))
 
         asm_vis = st.session_state.get("alm_last_assumptions")
         if isinstance(asm_vis, sp.ALMAssumptions):
