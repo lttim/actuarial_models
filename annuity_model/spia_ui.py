@@ -182,6 +182,7 @@ def _alm_result_to_dict(alm: sp.ALMResult, asm: sp.ALMAssumptions | None, *, inc
         "surplus": _serialize_array(alm.surplus, include_full=include_full),
         "funding_ratio": _serialize_array(alm.funding_ratio, include_full=include_full),
         "liquidity_buffer_months": _serialize_array(alm.liquidity_buffer_months, include_full=include_full),
+        "borrowing_balance": _serialize_array(alm.borrowing_balance, include_full=include_full),
         "pv01_assets": float(alm.pv01_assets),
         "pv01_liabilities": float(alm.pv01_liabilities),
         "pv01_net": float(alm.pv01_net),
@@ -207,6 +208,8 @@ def _alm_assumptions_to_dict(asm: sp.ALMAssumptions) -> dict[str, Any]:
         "reinvest_rule": str(asm.reinvest_rule),
         "disinvest_rule": str(asm.disinvest_rule),
         "rebalance_policy": str(asm.rebalance_policy),
+        "borrowing_policy": str(asm.borrowing_policy),
+        "borrowing_rate_annual": float(asm.borrowing_rate_annual),
         "liquidity_near_liquid_years": float(asm.liquidity_near_liquid_years),
         "allocation": {
             "buckets": [{"name": b.name, "tenor_years": float(b.tenor_years)} for b in asm.allocation.buckets],
@@ -889,6 +892,8 @@ def _render_what_if_studio() -> None:
                     reinvest_rule="pro_rata",
                     disinvest_rule="shortest_first",
                     rebalance_policy="liquidity_only",
+                    borrowing_policy="borrow_after_assets_insufficient",
+                    borrowing_rate_annual=0.05,
                     liquidity_near_liquid_years=0.25,
                 )
             asm_whatif_used = asm_wf
@@ -1013,13 +1018,15 @@ def _render_what_if_studio() -> None:
         counts_b, edges_b = np.histogram(baseline_mc.single_premium, bins=35)
         mids_b = 0.5 * (edges_b[:-1] + edges_b[1:])
         mids_b_disp = np.rint(mids_b).astype(int)
-        df_b = pd.DataFrame({"bin": mids_b_disp, "count_before": counts_b.astype(int)}).set_index("bin")
+        bin_labels_b = [f"{int(v):,}" for v in mids_b_disp]
+        df_b = pd.DataFrame({"bin": bin_labels_b, "count_before": counts_b.astype(int)}).set_index("bin")
         st.bar_chart(_round_for_visuals(df_b))
     with c2:
         counts_a, edges_a = np.histogram(shocked_mc.single_premium, bins=35)
         mids_a = 0.5 * (edges_a[:-1] + edges_a[1:])
         mids_a_disp = np.rint(mids_a).astype(int)
-        df_a = pd.DataFrame({"bin": mids_a_disp, "count_after": counts_a.astype(int)}).set_index("bin")
+        bin_labels_a = [f"{int(v):,}" for v in mids_a_disp]
+        df_a = pd.DataFrame({"bin": bin_labels_a, "count_after": counts_a.astype(int)}).set_index("bin")
         st.bar_chart(_round_for_visuals(df_a))
 
     if alm_whatif_base is not None and alm_whatif_after is not None:
@@ -1761,6 +1768,27 @@ def _render_alm_section() -> None:
                 step=0.05,
                 help="Liquidity buffer counts cash plus bond market value in buckets with residual maturity here or below.",
             )
+            borrow_policy = st.selectbox(
+                "Borrowing policy",
+                options=["borrow_before_selling", "borrow_after_assets_insufficient"],
+                index=1,
+                format_func=lambda x: {
+                    "borrow_before_selling": "Always borrow before selling assets",
+                    "borrow_after_assets_insufficient": "Borrow only when asset portfolio is insufficient",
+                }[x],
+            )
+            # Logical default: 1Y curve+spread plus 100 bps floor at 3%.
+            df1 = float(yc.discount_factors(np.array([1.0], dtype=float), spread=spr)[0])
+            base_1y = -np.log(max(df1, 1e-15))
+            borrow_rate_default_pct = float(max(0.03, base_1y + 0.01) * 100.0)
+            borrow_rate_pct = st.number_input(
+                "Borrowing rate (annual, %)",
+                min_value=0.0,
+                max_value=50.0,
+                value=round(borrow_rate_default_pct, 2),
+                step=0.1,
+                help="Applied continuously and accrued monthly on outstanding borrowing balance.",
+            )
         with c2:
             rebalance_policy = st.selectbox(
                 "Rebalance policy",
@@ -1812,6 +1840,8 @@ def _render_alm_section() -> None:
             reinvest_rule=reinvest,  # type: ignore[arg-type]
             disinvest_rule=disinvest,  # type: ignore[arg-type]
             rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
+            borrowing_policy=borrow_policy,  # type: ignore[arg-type]
+            borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
             liquidity_near_liquid_years=float(near_liq_y),
         )
         st.session_state["alm_current_assumptions"] = asm_current
@@ -1822,6 +1852,62 @@ def _render_alm_section() -> None:
         st.session_state.pop("alm_current_initial_asset_market_value", None)
 
     run_alm = st.button("Run ALM projection", type="primary")
+    opt_col1, opt_col2 = st.columns([2, 1])
+    with opt_col1:
+        opt_surplus_constraint = st.selectbox(
+            "Optimization surplus constraint",
+            options=["Path never negative", "Ending surplus non-negative"],
+            index=0,
+            help="Select whether optimization enforces surplus >= 0 at every month, or only at the ending month.",
+        )
+    with opt_col2:
+        opt_samples = st.number_input(
+            "Optimization samples",
+            min_value=100,
+            max_value=5000,
+            value=1200,
+            step=100,
+            help="Random candidate allocations evaluated for feasibility/objective.",
+        )
+    run_alm_opt = st.button("Optimize allocation and run ALM")
+
+    def _build_pricing_for_selected_scenario() -> sp.SPIAProjectionResult:
+        if scenario_source != "MC simulation (single path)":
+            return res
+        mort = ctx.get("mortality")
+        expenses = ctx.get("expenses")
+        valuation_year = ctx.get("valuation_year")
+        horizon_age = ctx.get("horizon_age")
+        if not isinstance(mort, (sp.MortalityTableQx, sp.MortalityTableRP2014MP2016)):
+            raise ValueError("Pricing Run mortality missing from session state.")
+        if not isinstance(expenses, sp.ExpenseAssumptions):
+            raise ValueError("Pricing Run expenses missing from session state.")
+
+        n_months = int(res.months.size)
+        idx_paths = sp.simulate_index_levels_gbm(
+            n_sims=mc_n_sims,
+            n_months=n_months,
+            s0=float(mc_params.get("s0", 100.0) or 100.0),
+            annual_drift=float(mc_params.get("annual_drift", 0.06) or 0.06),
+            annual_vol=float(mc_params.get("annual_vol", 0.15) or 0.15),
+            seed=mc_seed,
+        )
+        idx_one = idx_paths[int(mc_scenario_idx)]
+        idx_levels_payment = np.asarray(idx_one[1:], dtype=float)
+        idx_s0 = float(idx_one[0])
+        return sp.price_spia_single_premium(
+            contract=contract_state,
+            yield_curve=yc,
+            mortality=mort,
+            horizon_age=int(horizon_age),
+            spread=spr,
+            valuation_year=int(valuation_year) if valuation_year is not None else None,
+            expenses=expenses,
+            expense_annual_inflation=float(res.expense_annual_inflation),
+            index_s0=idx_s0,
+            index_levels_payment=idx_levels_payment,
+        )
+
     if run_alm:
         if aum0 <= 0.0:
             st.error("Initial assets must be positive.")
@@ -1840,44 +1926,11 @@ def _render_alm_section() -> None:
                     reinvest_rule=reinvest,  # type: ignore[arg-type]
                     disinvest_rule=disinvest,  # type: ignore[arg-type]
                     rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
+                    borrowing_policy=borrow_policy,  # type: ignore[arg-type]
+                    borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
                     liquidity_near_liquid_years=float(near_liq_y),
                 )
-                pricing_for_alm = res
-                if scenario_source == "MC simulation (single path)":
-                    mort = ctx.get("mortality")
-                    expenses = ctx.get("expenses")
-                    valuation_year = ctx.get("valuation_year")
-                    horizon_age = ctx.get("horizon_age")
-                    if not isinstance(mort, (sp.MortalityTableQx, sp.MortalityTableRP2014MP2016)):
-                        raise ValueError("Pricing Run mortality missing from session state.")
-                    if not isinstance(expenses, sp.ExpenseAssumptions):
-                        raise ValueError("Pricing Run expenses missing from session state.")
-
-                    n_months = int(res.months.size)
-                    idx_paths = sp.simulate_index_levels_gbm(
-                        n_sims=mc_n_sims,
-                        n_months=n_months,
-                        s0=float(mc_params.get("s0", 100.0) or 100.0),
-                        annual_drift=float(mc_params.get("annual_drift", 0.06) or 0.06),
-                        annual_vol=float(mc_params.get("annual_vol", 0.15) or 0.15),
-                        seed=mc_seed,
-                    )
-                    idx_one = idx_paths[int(mc_scenario_idx)]
-                    idx_levels_payment = np.asarray(idx_one[1:], dtype=float)
-                    idx_s0 = float(idx_one[0])
-
-                    pricing_for_alm = sp.price_spia_single_premium(
-                        contract=contract_state,
-                        yield_curve=yc,
-                        mortality=mort,
-                        horizon_age=int(horizon_age),
-                        spread=spr,
-                        valuation_year=int(valuation_year) if valuation_year is not None else None,
-                        expenses=expenses,
-                        expense_annual_inflation=float(res.expense_annual_inflation),
-                        index_s0=idx_s0,
-                        index_levels_payment=idx_levels_payment,
-                    )
+                pricing_for_alm = _build_pricing_for_selected_scenario()
                 out = sp.run_alm_projection(
                     pricing=pricing_for_alm,
                     yield_curve=yc,
@@ -1890,6 +1943,94 @@ def _render_alm_section() -> None:
                 st.success("ALM projection complete.")
             except Exception as ex:
                 st.error(f"ALM run failed: {ex!r}")
+
+    if run_alm_opt:
+        if aum0 <= 0.0:
+            st.error("Initial assets must be positive.")
+        else:
+            try:
+                pricing_for_alm = _build_pricing_for_selected_scenario()
+                rng = np.random.default_rng(42)
+                n_assets = len(base_spec.buckets)
+                current_w = ws.copy()
+                if float(np.sum(current_w)) > 0:
+                    current_w = current_w / float(np.sum(current_w))
+                candidates = [current_w, np.asarray(base_spec.weights, dtype=float)]
+                # Add a conservative anchor.
+                w_cons = np.zeros(n_assets, dtype=float)
+                w_cons[0] = 0.20
+                rem = 0.80 / max(1, n_assets - 1)
+                w_cons[1:] = rem
+                candidates.append(w_cons)
+                # Random simplex samples.
+                alpha = np.ones(n_assets, dtype=float)
+                for _ in range(int(opt_samples)):
+                    candidates.append(rng.dirichlet(alpha))
+
+                best_obj = -float("inf")
+                best_w: np.ndarray | None = None
+                best_out: sp.ALMResult | None = None
+
+                for w_try in candidates:
+                    alloc_try = sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=np.asarray(w_try, dtype=float))
+                    asm_try = sp.ALMAssumptions(
+                        allocation=alloc_try,
+                        rebalance_band=float(band_pct) / 100.0,
+                        rebalance_frequency_months=int(freq_m),
+                        reinvest_rule=reinvest,  # type: ignore[arg-type]
+                        disinvest_rule=disinvest,  # type: ignore[arg-type]
+                        rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
+                        borrowing_policy=borrow_policy,  # type: ignore[arg-type]
+                        borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
+                        liquidity_near_liquid_years=float(near_liq_y),
+                    )
+                    out_try = sp.run_alm_projection(
+                        pricing=pricing_for_alm,
+                        yield_curve=yc,
+                        spread=spr,
+                        assumptions=asm_try,
+                        initial_asset_market_value=float(aum0),
+                    )
+
+                    if opt_surplus_constraint == "Path never negative":
+                        feasible = bool(np.all(np.asarray(out_try.surplus, dtype=float) >= -1e-6))
+                    else:
+                        feasible = bool(float(out_try.surplus[-1]) >= -1e-6)
+                    if not feasible:
+                        continue
+
+                    # Objective: maximize ending surplus.
+                    obj = float(out_try.surplus[-1])
+                    if obj > best_obj:
+                        best_obj = obj
+                        best_w = np.asarray(w_try, dtype=float)
+                        best_out = out_try
+
+                if best_w is None or best_out is None:
+                    st.warning("No feasible allocation found under the selected surplus constraint.")
+                else:
+                    for i, wi in enumerate(best_w):
+                        st.session_state[f"alm_alloc_{i}"] = float(wi * 100.0)
+                    asm_best = sp.ALMAssumptions(
+                        allocation=sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=best_w),
+                        rebalance_band=float(band_pct) / 100.0,
+                        rebalance_frequency_months=int(freq_m),
+                        reinvest_rule=reinvest,  # type: ignore[arg-type]
+                        disinvest_rule=disinvest,  # type: ignore[arg-type]
+                        rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
+                        borrowing_policy=borrow_policy,  # type: ignore[arg-type]
+                        borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
+                        liquidity_near_liquid_years=float(near_liq_y),
+                    )
+                    st.session_state["alm_last"] = best_out
+                    st.session_state["alm_last_assumptions"] = asm_best
+                    st.success("Optimized allocation found and ALM projection completed.")
+                    st.caption(
+                        "Optimized ending surplus: "
+                        + f"${float(best_out.surplus[-1]):,.0f}"
+                    )
+            except Exception as ex:
+                st.error(f"ALM optimization failed: {ex!r}")
 
     last = st.session_state.get("alm_last")
     if isinstance(last, sp.ALMResult):
@@ -1930,23 +2071,57 @@ def _render_alm_section() -> None:
         st.line_chart(
             pd.DataFrame({"Liquidity buffer (months)": last.liquidity_buffer_months}, index=age_ax)
         )
+        st.markdown("##### Borrowing balance")
+        st.line_chart(
+            _round_for_visuals(
+                pd.DataFrame({"Borrowing balance": last.borrowing_balance}, index=age_ax)
+            )
+        )
 
         asm_vis = st.session_state.get("alm_last_assumptions")
-        if isinstance(asm_vis, sp.ALMAssumptions):
-            bnames = [b.name for b in asm_vis.allocation.buckets]
-        else:
-            bnames = [b.name for b in base_spec.buckets]
-        bucket_df = pd.DataFrame(last.bucket_asset_mv.T, columns=bnames, index=age_ax)
-        st.markdown("**Bucket market values**")
-        st.line_chart(_round_for_visuals(bucket_df))
-
-        # Yield decomposition: portfolio weighted yield plus per-asset-class contributions.
-        # Contributions are weight * bucket annualized zero yield (incl. spread), shown in percentage points.
         if isinstance(asm_vis, sp.ALMAssumptions):
             bucket_specs = list(asm_vis.allocation.buckets)
         else:
             bucket_specs = list(base_spec.buckets)
-        tenors = np.array([float(b.tenor_years) for b in bucket_specs], dtype=float)
+        # Keep all ALM legends/series in logical tenor order: cash, then shortest to longest tenor.
+        order_idx = sorted(range(len(bucket_specs)), key=lambda i: float(bucket_specs[i].tenor_years))
+        ordered_specs = [bucket_specs[i] for i in order_idx]
+        ordered_names = [b.name for b in ordered_specs]
+
+        bucket_df_raw = pd.DataFrame(last.bucket_asset_mv.T, columns=[b.name for b in bucket_specs], index=age_ax)
+        bucket_df = bucket_df_raw.reindex(columns=ordered_names)
+        st.markdown("**Bucket market values**")
+        st.line_chart(_round_for_visuals(bucket_df))
+
+        st.markdown("##### Portfolio composition by asset type (%)")
+        aum_series = pd.Series(last.asset_market_value, index=age_ax, dtype=float).replace(0.0, np.nan)
+        weight_pct_df = bucket_df.div(aum_series, axis=0).fillna(0.0) * 100.0
+        comp_df = (
+            weight_pct_df.reset_index()
+            .rename(columns={"index": "Attained age"})
+            .melt(id_vars=["Attained age"], var_name="Asset type", value_name="Portfolio share (%)")
+        )
+        comp_chart = (
+            alt.Chart(comp_df)
+            .mark_area()
+            .encode(
+                x=alt.X("Attained age:Q", title="Attained age"),
+                y=alt.Y(
+                    "Portfolio share (%):Q",
+                    stack=True,
+                    title="Portfolio share (%)",
+                    scale=alt.Scale(domain=[0, 100]),
+                ),
+                color=alt.Color("Asset type:N", title="Asset type", sort=ordered_names),
+                order=alt.Order("Asset type:N", sort="ascending"),
+            )
+            .properties(height=320)
+        )
+        st.altair_chart(comp_chart.interactive(), use_container_width=True)
+
+        # Yield decomposition: portfolio weighted yield plus per-asset-class contributions.
+        # Contributions are weight * bucket annualized zero yield (incl. spread), shown in percentage points.
+        tenors = np.array([float(b.tenor_years) for b in ordered_specs], dtype=float)
         bucket_yield = np.zeros_like(tenors, dtype=float)
         for i, T in enumerate(tenors):
             if T <= 1e-12:
@@ -1955,7 +2130,6 @@ def _render_alm_section() -> None:
                 dff = float(yc.discount_factors(np.array([T], dtype=float), spread=spr)[0])
                 bucket_yield[i] = -np.log(max(dff, 1e-15)) / T
 
-        aum_series = pd.Series(last.asset_market_value, index=age_ax, dtype=float).replace(0.0, np.nan)
         weight_df = bucket_df.div(aum_series, axis=0).fillna(0.0)
         contrib_pp_df = weight_df.mul(bucket_yield, axis=1) * 100.0
         contrib_pp_df.columns = [f"{c} contribution (pp)" for c in contrib_pp_df.columns]
@@ -1972,7 +2146,12 @@ def _render_alm_section() -> None:
                 "Mac duration liabilities": [last.duration_liabilities_mac],
             }
         )
-        st.dataframe(kpi_tbl.round(4), use_container_width=True, hide_index=True)
+        kpi_tbl_show = kpi_tbl.copy()
+        kpi_tbl_show["PV01 assets"] = kpi_tbl_show["PV01 assets"].map(lambda x: f"{x:,.0f}")
+        kpi_tbl_show["PV01 liabilities"] = kpi_tbl_show["PV01 liabilities"].map(lambda x: f"{x:,.0f}")
+        kpi_tbl_show["Mac duration assets"] = kpi_tbl_show["Mac duration assets"].round(4)
+        kpi_tbl_show["Mac duration liabilities"] = kpi_tbl_show["Mac duration liabilities"].round(4)
+        st.dataframe(kpi_tbl_show, use_container_width=True, hide_index=True)
 
 
 def _render_charts_section() -> None:

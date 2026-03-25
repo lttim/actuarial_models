@@ -38,6 +38,7 @@ from typing import Literal, Optional, Sequence, Tuple
 ALMReinvestRule = Literal["hold_cash", "pro_rata"]
 ALMDisinvestRule = Literal["shortest_first", "pro_rata"]
 ALMRebalancePolicy = Literal["full_target", "liquidity_only"]
+ALMBorrowingPolicy = Literal["borrow_before_selling", "borrow_after_assets_insufficient"]
 
 import math
 
@@ -1256,6 +1257,12 @@ class ALMAssumptions:
     # "full_target": periodic drift-band rebalance back to target weights.
     # "liquidity_only": do not sell bonds to rebalance drift; only disinvest for cash shortfall.
     rebalance_policy: ALMRebalancePolicy = "full_target"
+    # Borrowing policy:
+    # - borrow_before_selling: always borrow first when cash is short.
+    # - borrow_after_assets_insufficient: sell assets first, borrow only residual need.
+    borrowing_policy: ALMBorrowingPolicy = "borrow_after_assets_insufficient"
+    # Continuous annual borrowing rate used for monthly compounding of outstanding debt.
+    borrowing_rate_annual: float = 0.05
     # Liquidity buffer: cash + bond MV with residual maturity <= this (years) counts as "near-liquid".
     liquidity_near_liquid_years: float = 0.25
 
@@ -1267,6 +1274,13 @@ class ALMAssumptions:
             raise ValueError("rebalance_frequency_months must be >= 1.")
         if self.rebalance_policy not in ("full_target", "liquidity_only"):
             raise ValueError("rebalance_policy must be 'full_target' or 'liquidity_only'.")
+        if self.borrowing_policy not in ("borrow_before_selling", "borrow_after_assets_insufficient"):
+            raise ValueError(
+                "borrowing_policy must be 'borrow_before_selling' or 'borrow_after_assets_insufficient'."
+            )
+        r_b = float(self.borrowing_rate_annual)
+        if not math.isfinite(r_b) or r_b < 0.0:
+            raise ValueError("borrowing_rate_annual must be finite and >= 0.")
         liq = float(self.liquidity_near_liquid_years)
         if not math.isfinite(liq) or liq < 0.0:
             raise ValueError("liquidity_near_liquid_years must be finite and non-negative.")
@@ -1283,6 +1297,7 @@ class ALMResult:
     funding_ratio: np.ndarray
     surplus: np.ndarray
     liquidity_buffer_months: np.ndarray
+    borrowing_balance: np.ndarray
     bucket_asset_mv: np.ndarray  # shape (n_buckets, n_months)
     # Issue-time risk stats: PV01 is PV change from a +1bp parallel move to asset vs liability discounting
     pv01_assets: float
@@ -1589,6 +1604,8 @@ def run_alm_projection(
     band = float(assumptions.rebalance_band)
     freq = max(1, int(assumptions.rebalance_frequency_months))
     near_liq = float(assumptions.liquidity_near_liquid_years)
+    borrowing_policy = assumptions.borrowing_policy
+    borrow_rate = float(assumptions.borrowing_rate_annual)
     nominal_tenors = np.array([float(buckets[k + 1].tenor_years) for k in range(n_b)], dtype=float)
 
     asset_mv = np.zeros(n, dtype=float)
@@ -1596,9 +1613,15 @@ def run_alm_projection(
     fr = np.zeros(n, dtype=float)
     surp = np.zeros(n, dtype=float)
     liq_buf = np.zeros(n, dtype=float)
+    borrowing_bal = np.zeros(n, dtype=float)
     bucket_hist = np.zeros((len(buckets), n), dtype=float)
+    debt = 0.0
 
     for m in range(n):
+        # 0) accrue borrowing balance monthly (continuous annual rate).
+        if debt > 1e-12 and borrow_rate > 0.0:
+            debt *= math.exp(borrow_rate * dt)
+
         # 1) accrue & mature
         t_rem = np.maximum(t_rem - dt, 0.0)
         df = _df_rem(yc_a, spread, t_rem)
@@ -1606,11 +1629,15 @@ def run_alm_projection(
         for k in np.flatnonzero(matured):
             cash += float(faces[k])
             faces[k] = 0.0
+        if debt > 1e-12 and cash > 1e-12:
+            rep = min(cash, debt)
+            cash -= rep
+            debt -= rep
         t_rem = np.where(faces <= 1e-15, 0.0, t_rem)
         df = _df_rem(yc_a, spread, t_rem)
         mv = faces * df
 
-        if assumptions.reinvest_rule == "pro_rata" and bool(np.any(matured)):
+        if assumptions.reinvest_rule == "pro_rata" and bool(np.any(matured)) and debt <= 1e-12:
             cash, faces = _alm_micro_reinvest_pro_rata(
                 cash=cash,
                 faces=faces,
@@ -1628,19 +1655,32 @@ def run_alm_projection(
 
         need = max(0.0, -cash)
         if need > 1e-9:
-            cash, faces = _alm_disinvest(
-                cash=cash,
-                faces=faces,
-                t_rem=t_rem,
-                yield_curve=yc_a,
-                spread=spread,
-                need=need,
-                rule=assumptions.disinvest_rule,
-            )
-            df = _df_rem(yc_a, spread, t_rem)
-            mv = faces * df
+            if borrowing_policy == "borrow_before_selling":
+                debt += need
+                cash += need
+            else:
+                cash, faces = _alm_disinvest(
+                    cash=cash,
+                    faces=faces,
+                    t_rem=t_rem,
+                    yield_curve=yc_a,
+                    spread=spread,
+                    need=need,
+                    rule=assumptions.disinvest_rule,
+                )
+                df = _df_rem(yc_a, spread, t_rem)
+                mv = faces * df
+                need_after_sales = max(0.0, -cash)
+                if need_after_sales > 1e-9:
+                    debt += need_after_sales
+                    cash += need_after_sales
 
-        if assumptions.rebalance_policy == "full_target":
+        if debt > 1e-12 and cash > 1e-12:
+            rep = min(cash, debt)
+            cash -= rep
+            debt -= rep
+
+        if assumptions.rebalance_policy == "full_target" and debt <= 1e-12:
             cash, faces = _alm_maybe_rebalance(
                 cash=cash,
                 faces=faces,
@@ -1658,15 +1698,17 @@ def run_alm_projection(
         aum_end = float(cash + np.sum(mv))
 
         L = liability_pv_after_paid_months(pricing, yc_l, spread, m, cashflows=cf)
+        L_total = float(L + debt)
         asset_mv[m] = aum_end
         liab_pv[m] = L
-        if L > 1e-9:
-            fr[m] = aum_end / L
+        if L_total > 1e-9:
+            fr[m] = aum_end / L_total
         elif aum_end > 0.0:
             fr[m] = float("inf")
         else:
             fr[m] = 0.0
-        surp[m] = aum_end - L
+        surp[m] = aum_end - L_total
+        borrowing_bal[m] = debt
 
         liquid = float(cash)
         for k in range(n_b):
@@ -1705,6 +1747,7 @@ def run_alm_projection(
         surplus=surp,
         liquidity_buffer_months=liq_buf,
         bucket_asset_mv=bucket_hist,
+        borrowing_balance=borrowing_bal,
         pv01_assets=pv01_assets,
         pv01_liabilities=pv01_liab,
         pv01_net=pv01_net,

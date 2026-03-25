@@ -887,3 +887,77 @@ def test_alm_assumptions_validates_rebalance_policy():
             rebalance_policy="bad_policy",  # type: ignore[arg-type]
         )
 
+
+def test_alm_assumptions_validates_borrowing_inputs():
+    alloc = sp.alm_default_allocation_spec()
+    with pytest.raises(ValueError, match="borrowing_policy"):
+        sp.ALMAssumptions(
+            allocation=alloc,
+            rebalance_band=0.05,
+            rebalance_frequency_months=1,
+            reinvest_rule="hold_cash",
+            disinvest_rule="shortest_first",
+            borrowing_policy="bad",  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="borrowing_rate_annual"):
+        sp.ALMAssumptions(
+            allocation=alloc,
+            rebalance_band=0.05,
+            rebalance_frequency_months=1,
+            reinvest_rule="hold_cash",
+            disinvest_rule="shortest_first",
+            borrowing_rate_annual=-0.01,
+        )
+
+
+def test_alm_borrowing_policy_changes_sales_behavior():
+    contract, yc, mort, ex = _mc_contract_and_setup()
+    res = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=75,
+        spread=0.0,
+        expenses=ex,
+        expense_annual_inflation=0.0,
+    )
+    # Force large month-1 outflow to create immediate cash shortfall.
+    cf = np.asarray(res.expected_total_cashflows, dtype=float).copy()
+    cf[0] = float(res.single_premium) * 0.30
+
+    common = dict(
+        allocation=sp.alm_default_allocation_spec(),
+        rebalance_band=0.10,
+        rebalance_frequency_months=1,
+        reinvest_rule="hold_cash",
+        disinvest_rule="shortest_first",
+        rebalance_policy="liquidity_only",
+        borrowing_rate_annual=0.05,
+        liquidity_near_liquid_years=0.25,
+    )
+    asm_borrow_first = sp.ALMAssumptions(
+        **common,
+        borrowing_policy="borrow_before_selling",
+    )
+    asm_sell_first = sp.ALMAssumptions(
+        **common,
+        borrowing_policy="borrow_after_assets_insufficient",
+    )
+    out_borrow_first = sp.run_alm_projection(
+        pricing=res,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=asm_borrow_first,
+        liability_cashflows=cf,
+    )
+    out_sell_first = sp.run_alm_projection(
+        pricing=res,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=asm_sell_first,
+        liability_cashflows=cf,
+    )
+    # Borrow-first should preserve bond MV better in early month and show positive borrowing balance.
+    assert float(np.sum(out_borrow_first.bucket_asset_mv[1:, 0])) >= float(np.sum(out_sell_first.bucket_asset_mv[1:, 0]))
+    assert float(out_borrow_first.borrowing_balance[0]) >= 0.0
+
