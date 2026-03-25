@@ -1288,28 +1288,51 @@ def _render_what_if_studio() -> None:
                     krd_wf_df = pd.DataFrame(krd_rows).sort_values(["Series", "Tenor years", "Scenario"])
                     tenor_order = [f"{float(t):g}Y" for t in np.sort(np.unique(key_tenors))]
                     series_order = ["Assets KRD", "Liabilities KRD", "Surplus KRD"]
-                    krd_wf_chart = (
-                        alt.Chart(krd_wf_df)
-                        .mark_line(point=True, strokeWidth=2.5)
-                        .encode(
-                            x=alt.X("Tenor:N", sort=tenor_order, title="Key tenor"),
-                            y=alt.Y("KRD:Q", title="Key rate duration (years)"),
-                            color=alt.Color(
-                                "Scenario:N",
-                                sort=["Before", "After"],
-                                scale=alt.Scale(domain=["Before", "After"], range=["#4c78a8", "#f58518"]),
-                                legend=alt.Legend(orient="top", direction="horizontal"),
-                            ),
-                            tooltip=[
-                                alt.Tooltip("Series:N"),
-                                alt.Tooltip("Tenor:N"),
-                                alt.Tooltip("Scenario:N"),
-                                alt.Tooltip("KRD:Q", format=".4f"),
-                            ],
+                    # Faceted specs often render with a narrow default plot width in Streamlit (squished left,
+                    # empty space right). Use stacked panels with container width so plots fill the column.
+                    enc_x = alt.X(
+                        "Tenor:N",
+                        sort=tenor_order,
+                        title="Key tenor",
+                        axis=alt.Axis(labelAngle=0, labelPadding=4),
+                    )
+
+                    def _wf_krd_panel(subtitle: str, df_sub: pd.DataFrame, *, show_legend: bool) -> alt.Chart:
+                        color_enc = alt.Color(
+                            "Scenario:N",
+                            sort=["Before", "After"],
+                            scale=alt.Scale(domain=["Before", "After"], range=["#4c78a8", "#f58518"]),
+                            legend=alt.Legend(orient="top", direction="horizontal") if show_legend else None,
                         )
-                        .properties(height=120)
-                        .facet(row=alt.Row("Series:N", sort=series_order, title=None))
+                        return (
+                            alt.Chart(df_sub)
+                            .mark_line(point=True, strokeWidth=2.5)
+                            .encode(
+                                x=enc_x,
+                                y=alt.Y("KRD:Q", title="KRD (years)"),
+                                color=color_enc,
+                                tooltip=[
+                                    alt.Tooltip("Series:N"),
+                                    alt.Tooltip("Tenor:N"),
+                                    alt.Tooltip("Scenario:N"),
+                                    alt.Tooltip("KRD:Q", format=".4f"),
+                                ],
+                            )
+                            .properties(width="container", height=115, title=subtitle)
+                        )
+
+                    panels = [
+                        _wf_krd_panel(
+                            s,
+                            krd_wf_df[krd_wf_df["Series"] == s],
+                            show_legend=(i == 0),
+                        )
+                        for i, s in enumerate(series_order)
+                    ]
+                    krd_wf_chart = (
+                        alt.vconcat(*panels, spacing=8)
                         .resolve_scale(y="independent")
+                        .configure_view(strokeWidth=0)
                     )
                     st.altair_chart(krd_wf_chart, use_container_width=True)
                     st.caption(
