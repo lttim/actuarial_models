@@ -32,13 +32,109 @@ if str(ROOT) not in sys.path:
 
 import spia_projection as sp
 from build_spia_excel_workbook import (
+    ALMExcelSnapshot,
     ExcelPythonSnapshot,
     MCExcelSnapshot,
+    alm_excel_snapshot_from_result,
     build_workbook_from_spec,
     excel_spec_from_launcher,
     mc_excel_snapshot_from_result,
 )
 from test_dashboard import render_unit_tests_page
+
+
+def _maybe_alm_excel_snapshot_for_workbook() -> ALMExcelSnapshot | None:
+    alm = st.session_state.get("alm_last")
+    asm = st.session_state.get("alm_last_assumptions")
+    if not isinstance(alm, sp.ALMResult) or not isinstance(asm, sp.ALMAssumptions):
+        return None
+    if st.session_state.get("alm_last_pricing_run_id") != st.session_state.get("pricing_run_id"):
+        return None
+    aum_tag = st.session_state.get("alm_last_initial_asset_market_value")
+    return alm_excel_snapshot_from_result(
+        alm,
+        asm,
+        initial_asset_market_value=float(aum_tag) if aum_tag is not None else None,
+    )
+
+
+def _refresh_pricing_excel_workbook_in_session() -> None:
+    """Rebuild `pricing_xlsx_bytes` from the current pricing result and optional MC/ALM session state."""
+    res = st.session_state.get("pricing_res")
+    contract = st.session_state.get("pricing_contract")
+    ctx = st.session_state.get("pricing_excel_context") or {}
+    if res is None or contract is None:
+        return
+    yc = ctx.get("yield_curve")
+    mort = ctx.get("mortality")
+    if not isinstance(yc, sp.YieldCurve) or not isinstance(
+        mort, (sp.MortalityTableQx, sp.MortalityTableRP2014MP2016)
+    ):
+        return
+    expenses = ctx.get("expenses")
+    if not isinstance(expenses, sp.ExpenseAssumptions):
+        return
+    meta = st.session_state.get("pricing_meta") or {}
+    vy_raw = ctx.get("valuation_year")
+    vy = int(vy_raw) if vy_raw is not None else 2025
+    mc_snap: MCExcelSnapshot | None = None
+    mc = st.session_state.get("pricing_mc")
+    mc_params = st.session_state.get("pricing_mc_params") or {}
+    if mc is not None:
+        mc_snap = mc_excel_snapshot_from_result(
+            mc,
+            annual_drift=float(mc_params.get("annual_drift", 0.06)),
+            annual_vol=float(mc_params.get("annual_vol", 0.15)),
+            s0=float(mc_params.get("s0", 100.0)),
+        )
+    alm_snap = _maybe_alm_excel_snapshot_for_workbook()
+    try:
+        spec = excel_spec_from_launcher(
+            contract=contract,
+            yield_curve=yc,
+            mortality=mort,
+            horizon_age=int(ctx.get("horizon_age", 110)),
+            spread=float(ctx.get("spread", 0.0)),
+            valuation_year=vy,
+            expenses=expenses,
+            yield_mode_label=str(meta.get("yield_mode", "")),
+            mortality_mode_label=str(meta.get("mortality_mode", "")),
+            expense_mode_label=str(meta.get("expense_mode", "")),
+            index_s0=float(res.index_s0),
+            index_levels_at_payment=res.index_level_at_payment,
+            expense_annual_inflation=float(res.expense_annual_inflation),
+        )
+        st.session_state["pricing_xlsx_bytes"] = build_workbook_from_spec(
+            spec,
+            out_path=None,
+            python_snapshot=ExcelPythonSnapshot(
+                pv_benefit=float(res.pv_benefit),
+                pv_monthly_expenses=float(res.pv_monthly_expenses),
+                pv_monthly_total=float(res.pv_benefit + res.pv_monthly_expenses),
+                single_premium=float(res.single_premium),
+                annuity_factor=float(res.annuity_factor),
+            ),
+            mc_snapshot=mc_snap,
+            alm_snapshot=alm_snap,
+        )
+        st.session_state["pricing_xlsx_has_mc"] = mc_snap is not None
+        st.session_state["pricing_xlsx_has_alm"] = alm_snap is not None
+        st.session_state.pop("pricing_xlsx_built_error", None)
+    except Exception as ex:
+        st.session_state["pricing_xlsx_bytes"] = None
+        st.session_state.pop("pricing_xlsx_has_mc", None)
+        st.session_state.pop("pricing_xlsx_has_alm", None)
+        st.session_state["pricing_xlsx_built_error"] = repr(ex)
+
+
+def _ensure_excel_workbook_includes_current_alm() -> None:
+    """If ALM completed after the last Excel build, regenerate the workbook so download includes ALM_Projection."""
+    if not isinstance(st.session_state.get("pricing_xlsx_bytes"), bytes):
+        return
+    want_alm = _maybe_alm_excel_snapshot_for_workbook() is not None
+    has_alm = bool(st.session_state.get("pricing_xlsx_has_alm", False))
+    if want_alm != has_alm:
+        _refresh_pricing_excel_workbook_in_session()
 
 
 def _resolve_path(p: str) -> Path:
@@ -1618,40 +1714,7 @@ def _render_run_and_results() -> None:
                 st.session_state.pop("pricing_mc_params", None)
 
             # --- Excel workbook (built after MC so MC_Summary sheet can be included) ---
-            try:
-                spec = excel_spec_from_launcher(
-                    contract=contract,
-                    yield_curve=yc,
-                    mortality=mort,
-                    horizon_age=int(horizon_age),
-                    spread=float(spread),
-                    valuation_year=vy_inputs,
-                    expenses=expenses_used,
-                    yield_mode_label=str(y_mode),
-                    mortality_mode_label=str(m_mode),
-                    expense_mode_label=str(expense_mode),
-                    index_s0=float(res.index_s0),
-                    index_levels_at_payment=res.index_level_at_payment,
-                    expense_annual_inflation=float(res.expense_annual_inflation),
-                )
-                st.session_state["pricing_xlsx_bytes"] = build_workbook_from_spec(
-                    spec,
-                    out_path=None,
-                    python_snapshot=ExcelPythonSnapshot(
-                        pv_benefit=float(res.pv_benefit),
-                        pv_monthly_expenses=float(res.pv_monthly_expenses),
-                        pv_monthly_total=float(res.pv_benefit + res.pv_monthly_expenses),
-                        single_premium=float(res.single_premium),
-                        annuity_factor=float(res.annuity_factor),
-                    ),
-                    mc_snapshot=mc_snap_for_excel,
-                )
-                st.session_state["pricing_xlsx_has_mc"] = mc_snap_for_excel is not None
-                st.session_state.pop("pricing_xlsx_built_error", None)
-            except Exception as ex:
-                st.session_state["pricing_xlsx_bytes"] = None
-                st.session_state.pop("pricing_xlsx_has_mc", None)
-                st.session_state["pricing_xlsx_built_error"] = repr(ex)
+            _refresh_pricing_excel_workbook_in_session()
         except Exception as e:
             _clear_dependent_state_on_pricing_change()
             st.session_state["pricing_err"] = repr(e)
@@ -1663,6 +1726,7 @@ def _render_run_and_results() -> None:
             st.session_state.pop("pricing_mc", None)
             st.session_state.pop("pricing_mc_params", None)
             st.session_state.pop("pricing_xlsx_has_mc", None)
+            st.session_state.pop("pricing_xlsx_has_alm", None)
 
     err = st.session_state.get("pricing_err")
     res = st.session_state.get("pricing_res")
@@ -1734,6 +1798,8 @@ def _render_excel_replicator() -> None:
         st.info("Run pricing first in the Pricing Run section to populate the Excel Replicator.")
         return
 
+    _ensure_excel_workbook_includes_current_alm()
+
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Python single premium", f"${res.single_premium:,.0f}")
     m2.metric("Python PV benefits", f"${res.pv_benefit:,.0f}")
@@ -1783,11 +1849,54 @@ def _render_excel_replicator() -> None:
         hide_index=True,
         column_config=_number_cols_no_decimals(modelcheck_display),
     )
-    st.caption("Workbook references: PV benefits `Projection!X4`, PV monthly expenses `Projection!X5`, PV monthly total `Projection!X7`, single premium `Projection!X8`, annuity factor `Projection!X6`.")
+    st.caption(
+        "Workbook references: PV benefits `Projection!X4`, PV monthly expenses `Projection!X5`, "
+        "PV monthly total `Projection!X7`, single premium `Projection!X8`, annuity factor `Projection!X6`. "
+        "When ALM is embedded, **ModelCheck** also compares month-1 / path / issue-time ALM scalars to `ALM_Projection`."
+    )
     st.caption(
         "After opening the workbook and recalculating, the ModelCheck tab differences should be near zero "
         "if Inputs match this run (especially spread B9 and valuation year)."
     )
+
+    st.divider()
+    st.subheader("ALM in workbook (latest run)")
+    alm_last = st.session_state.get("alm_last")
+    alm_asm = st.session_state.get("alm_last_assumptions")
+    alm_rid = st.session_state.get("alm_last_pricing_run_id")
+    pr_rid = st.session_state.get("pricing_run_id")
+    if (
+        isinstance(alm_last, sp.ALMResult)
+        and isinstance(alm_asm, sp.ALMAssumptions)
+        and alm_rid == pr_rid
+    ):
+        surp = np.asarray(alm_last.surplus, dtype=float)
+        fr = np.asarray(alm_last.funding_ratio, dtype=float)
+        st.caption(
+            "Embedded in **ALM_Projection** (time series) with **Surplus** and **Funding ratio** as Excel formulas; "
+            "**Dashboard** adds summary metrics and line charts. Re-run ALM to refresh the download."
+        )
+        e1, e2, e3, e4 = st.columns(4)
+        aum_lab = st.session_state.get("alm_last_initial_asset_market_value")
+        e1.metric("Initial AUM ($)", f"${float(aum_lab):,.0f}" if aum_lab is not None else "—")
+        e2.metric("Funding ratio (mo 1)", f"{float(fr[0]):.3f}" if fr.size else "—")
+        e3.metric("Min surplus ($)", f"${float(np.min(surp)):,.0f}" if surp.size else "—")
+        e4.metric("Ending surplus ($)", f"${float(surp[-1]):,.0f}" if surp.size else "—")
+        e5, e6, e7 = st.columns(3)
+        e5.metric("Ending funding ratio", f"{float(fr[-1]):.3f}" if fr.size else "—")
+        e6.metric("Duration gap (y)", f"{float(alm_last.duration_gap):.2f}")
+        e7.metric("PV01 net ($/bp)", f"{float(alm_last.pv01_net):,.0f}")
+        wt = np.asarray(alm_asm.allocation.weights, dtype=float)
+        buckets = [b.name for b in alm_asm.allocation.buckets]
+        st.caption(
+            "Target allocation in this file: "
+            + ", ".join(f"{buckets[i]} {wt[i]:.1%}" for i in range(len(buckets)))
+        )
+    else:
+        st.info(
+            "Run **ALM** (manual or optimized) on the current pricing baseline to add **ALM_Projection** "
+            "and ALM charts on **Dashboard** to the workbook. Pricing clears prior ALM until you run it again."
+        )
 
     # --- Monte Carlo distribution dashboard ---
     mc_res = st.session_state.get("pricing_mc")
@@ -1871,6 +1980,7 @@ def _render_excel_replicator() -> None:
     st.divider()
     xb = st.session_state.get("pricing_xlsx_bytes")
     xlsx_has_mc: bool = st.session_state.get("pricing_xlsx_has_mc", False)
+    xlsx_has_alm: bool = st.session_state.get("pricing_xlsx_has_alm", False)
     if isinstance(xb, bytes) and xb:
         if xlsx_has_mc:
             st.success(
@@ -1883,14 +1993,30 @@ def _render_excel_replicator() -> None:
                 "Enable Monte Carlo in Pricing Run and click **Run pricing** again to regenerate.",
                 icon="⚠️",
             )
-        mc_label = " + MC_Summary" if xlsx_has_mc else ""
+        if xlsx_has_alm:
+            st.success(
+                "Workbook includes **ALM_Projection** (assets, liability PV, bucket MVs) and **Dashboard** ALM charts.",
+                icon="✅",
+            )
+        else:
+            st.info("This workbook file does not yet include **ALM_Projection** — run ALM, then return here to refresh the download.")
+        suffix_parts: list[str] = []
+        if xlsx_has_mc:
+            suffix_parts.append("MC_Summary")
+        if xlsx_has_alm:
+            suffix_parts.append("ALM")
+        mc_label = (" + " + " + ".join(suffix_parts)) if suffix_parts else ""
+        help_bits = ["ModelCheck parity vs Python pricing"]
+        if xlsx_has_mc:
+            help_bits.append("MC statistics chart")
+        if xlsx_has_alm:
+            help_bits.append("ALM path sheet and dashboard charts")
         st.download_button(
             f"Download Excel recalculation workbook{mc_label}",
             data=xb,
             file_name="spia_recalc_model.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            help="Workbook includes ModelCheck for Python-vs-Excel parity validation"
-            + (", plus MC_Summary sheet with statistics and premium distribution chart." if xlsx_has_mc else "."),
+            help="Workbook includes " + ", ".join(help_bits) + ".",
             type="primary",
         )
     elif st.session_state.get("pricing_xlsx_built_error"):
@@ -2229,6 +2355,7 @@ def _render_alm_section() -> None:
                 st.session_state["alm_last_initial_asset_market_value"] = float(aum0)
                 st.session_state["alm_last_pricing_run_id"] = st.session_state.get("pricing_run_id")
                 _invalidate_diagnostics_export()
+                _refresh_pricing_excel_workbook_in_session()
                 st.success("ALM projection complete.")
             except Exception as ex:
                 st.error(f"ALM run failed: {ex!r}")
@@ -2516,6 +2643,7 @@ def _render_alm_section() -> None:
                         st.session_state["alm_last_initial_asset_market_value"] = float(aum0)
                         st.session_state["alm_last_pricing_run_id"] = st.session_state.get("pricing_run_id")
                         _invalidate_diagnostics_export()
+                        _refresh_pricing_excel_workbook_in_session()
                         st.session_state["alm_opt_notice"] = {
                             "level": "warning",
                             "message": (
@@ -2545,6 +2673,7 @@ def _render_alm_section() -> None:
                     st.session_state["alm_last_initial_asset_market_value"] = float(aum0)
                     st.session_state["alm_last_pricing_run_id"] = st.session_state.get("pricing_run_id")
                     _invalidate_diagnostics_export()
+                    _refresh_pricing_excel_workbook_in_session()
                     if opt_krd_match:
                         krd_msg = (
                             "Optimized allocation found (KRD screen: match asset key-rate sensitivities to liability "

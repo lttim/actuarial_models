@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import io
+import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
 
 import spia_projection as sp
 
@@ -43,6 +45,68 @@ class MCExcelSnapshot:
     summary_df: pd.DataFrame  # columns: Metric, Mean, Std Dev, P5, P25, Median, P75, P95
     prem_hist_mids: list  # bin midpoints (float)
     prem_hist_counts: list  # counts (int)
+
+
+@dataclass(frozen=True)
+class ALMExcelSnapshot:
+    """Monthly ALM path from the latest Python ALM run; workbook embeds series as values with derived formulas."""
+
+    initial_asset_market_value: float
+    bucket_names: tuple[str, ...]
+    weights: tuple[float, ...]
+    duration_gap: float
+    duration_assets_mac: float
+    duration_liabilities_mac: float
+    pv01_net: float
+    month_index: np.ndarray  # 0..n-1 paid months
+    asset_market_value: np.ndarray
+    liability_pv: np.ndarray
+    bucket_asset_mv: np.ndarray  # shape (n_buckets, n_months)
+
+
+class ALMDashboardLayout(NamedTuple):
+    """Row references on ``ALM_Projection`` for Dashboard links and charts."""
+
+    header_row: int
+    first_data_row: int
+    last_data_row: int
+
+
+ALM_SHEET_NAME = "ALM_Projection"
+
+
+def alm_excel_snapshot_from_result(
+    alm: "sp.ALMResult",
+    asm: "sp.ALMAssumptions | None",
+    *,
+    initial_asset_market_value: float | None = None,
+) -> ALMExcelSnapshot:
+    """Build an embeddable ALM snapshot; prefers ``asm.allocation`` for bucket labels and weights."""
+    if asm is None:
+        raise ValueError("ALMAssumptions required to label ALM workbook columns.")
+    spec = asm.allocation
+    names = tuple(str(b.name) for b in spec.buckets)
+    w = tuple(float(x) for x in np.asarray(spec.weights, dtype=float).tolist())
+    bmv = np.asarray(alm.bucket_asset_mv, dtype=float)
+    if bmv.shape != (len(names), alm.asset_market_value.shape[0]):
+        raise ValueError("bucket_asset_mv shape mismatch.")
+    if initial_asset_market_value is not None:
+        aum0 = float(initial_asset_market_value)
+    else:
+        aum0 = float(np.sum(bmv[:, 0])) if bmv.size else float("nan")
+    return ALMExcelSnapshot(
+        initial_asset_market_value=aum0,
+        bucket_names=names,
+        weights=w,
+        duration_gap=float(alm.duration_gap),
+        duration_assets_mac=float(alm.duration_assets_mac),
+        duration_liabilities_mac=float(alm.duration_liabilities_mac),
+        pv01_net=float(alm.pv01_net),
+        month_index=np.asarray(alm.month_index, dtype=int),
+        asset_market_value=np.asarray(alm.asset_market_value, dtype=float),
+        liability_pv=np.asarray(alm.liability_pv, dtype=float),
+        bucket_asset_mv=bmv,
+    )
 
 
 def mc_excel_snapshot_from_result(
@@ -437,6 +501,68 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
     ws["V2"] = "=X9"
 
 
+def _write_alm_projection_sheet(wb: Workbook, snap: ALMExcelSnapshot) -> ALMDashboardLayout:
+    ws = wb.create_sheet(ALM_SHEET_NAME)
+    ws["A1"] = "ALM monthly path (values from latest Python run at export)"
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A2"] = (
+        "Asset MV and liability PV are embedded from the Streamlit ALM engine. Surplus = assets minus liabilities "
+        "and funding ratio = assets / liabilities are Excel formulas. Attained age links to Projection. "
+        "Re-run ALM in the app and re-download to refresh this sheet."
+    )
+    ws.merge_cells("A2:J2")
+
+    ws["A3"], ws["B3"] = "Initial AUM ($)", float(snap.initial_asset_market_value)
+    ws["A4"], ws["B4"] = "Duration gap (y) (issue-time Macaulay)", float(snap.duration_gap)
+    ws["A5"], ws["B5"] = "Asset Macaulay duration (y)", float(snap.duration_assets_mac)
+    ws["A6"], ws["B6"] = "Liability Macaulay duration (y)", float(snap.duration_liabilities_mac)
+    ws["A7"], ws["B7"] = "PV01 net ($/bp) (issue-time)", float(snap.pv01_net)
+    ws["A9"] = "Target allocation (issue)"
+    alloc_txt = "; ".join(f"{snap.bucket_names[i]} {snap.weights[i]:.2%}" for i in range(len(snap.bucket_names)))
+    ws["B9"] = alloc_txt
+
+    header_row = 12
+    headers = ["Month", "Attained age", "Asset MV", "Liability PV", "Surplus", "Funding ratio"] + list(snap.bucket_names)
+    for c, h in enumerate(headers, start=1):
+        ws.cell(row=header_row, column=c, value=h).font = Font(bold=True)
+
+    n = int(snap.asset_market_value.shape[0])
+    n_b = len(snap.bucket_names)
+    first_data = header_row + 1
+    for i in range(n):
+        r = first_data + i
+        ws.cell(row=r, column=1, value=int(snap.month_index[i] + 1))
+        ws.cell(row=r, column=2, value=f'=IFERROR(INDEX(Projection!$C:$C,MATCH(A{r},Projection!$A:$A,0)),"")')
+        ws.cell(row=r, column=3, value=float(snap.asset_market_value[i]))
+        ws.cell(row=r, column=4, value=float(snap.liability_pv[i]))
+        ws.cell(row=r, column=5, value=f"=C{r}-D{r}")
+        ws.cell(row=r, column=6, value=f'=IF(D{r}>0,C{r}/D{r},"")')
+        for b in range(n_b):
+            ws.cell(row=r, column=7 + b, value=float(snap.bucket_asset_mv[b, i]))
+
+    last_data = first_data + n - 1
+    ws["B3"].number_format = "#,##0.00"
+    for addr in ("B4", "B5", "B6"):
+        ws[addr].number_format = "0.00"
+    ws["B7"].number_format = "#,##0.00"
+    for r in range(first_data, last_data + 1):
+        for col in range(3, 7 + n_b):
+            cell = ws.cell(row=r, column=col)
+            if col in (3, 4) or col >= 7:
+                cell.number_format = "#,##0.00"
+            elif col == 5:
+                cell.number_format = "#,##0.00"
+            elif col == 6:
+                cell.number_format = "0.000"
+
+    ws.column_dimensions["A"].width = 10
+    ws.column_dimensions["B"].width = 12
+    for c in range(3, 7 + n_b + 1):
+        ws.column_dimensions[get_column_letter(c)].width = 14
+
+    return ALMDashboardLayout(header_row=header_row, first_data_row=first_data, last_data_row=last_data)
+
+
 def _write_mc_summary_sheet(wb: Workbook, mc: MCExcelSnapshot) -> None:
     """Embed Monte Carlo summary statistics and a premium distribution chart in MC_Summary sheet."""
     ws = wb.create_sheet("MC_Summary")
@@ -506,7 +632,7 @@ def _write_mc_summary_sheet(wb: Workbook, mc: MCExcelSnapshot) -> None:
         ws.column_dimensions[col_letter].width = 14
 
 
-def _write_dashboard(wb: Workbook, n_months: int) -> None:
+def _write_dashboard(wb: Workbook, n_months: int, *, alm_layout: ALMDashboardLayout | None = None) -> None:
     ws = wb.create_sheet("Dashboard")
     ws["A1"] = "SPIA Policy Projection Dashboard"
     ws["A1"].font = Font(bold=True, size=14)
@@ -618,15 +744,70 @@ def _write_dashboard(wb: Workbook, n_months: int) -> None:
         ws[f"E{r}"].number_format = "#,##0.00"
         ws[f"F{r}"].number_format = "#,##0.00"
 
+    if alm_layout is not None:
+        wsa = wb[ALM_SHEET_NAME]
+        dr = alm_layout.first_data_row
+        lr = alm_layout.last_data_row
+        hr = alm_layout.header_row
+        base = 66
+        ws.cell(row=base, column=1, value="ALM summary (latest run — detail on ALM_Projection)").font = Font(bold=True)
+        rows_meta = [
+            ("Initial AUM ($)", f"={ALM_SHEET_NAME}!B3"),
+            ("Funding ratio (month 1)", f"={ALM_SHEET_NAME}!F{dr}"),
+            ("Min surplus ($)", f"=MIN({ALM_SHEET_NAME}!E{dr}:E{lr})"),
+            ("Ending surplus ($)", f"={ALM_SHEET_NAME}!E{lr}"),
+            ("Ending funding ratio", f"={ALM_SHEET_NAME}!F{lr}"),
+            ("Duration gap (y)", f"={ALM_SHEET_NAME}!B4"),
+            ("PV01 net ($/bp)", f"={ALM_SHEET_NAME}!B7"),
+        ]
+        for i, (lab, formula) in enumerate(rows_meta, start=1):
+            rr = base + i
+            ws.cell(row=rr, column=1, value=lab)
+            ws.cell(row=rr, column=2, value=formula)
+        ws[f"B{base + 1}"].number_format = "#,##0.00"
+        ws[f"B{base + 2}"].number_format = "0.000"
+        ws[f"B{base + 3}"].number_format = "#,##0.00"
+        ws[f"B{base + 4}"].number_format = "#,##0.00"
+        ws[f"B{base + 5}"].number_format = "0.000"
+        ws[f"B{base + 6}"].number_format = "0.00"
+        ws[f"B{base + 7}"].number_format = "#,##0.00"
 
-def _write_model_check_sheet(wb: Workbook, snap: ExcelPythonSnapshot) -> None:
-    """Embed Python pricing outputs next to Projection summary formulas for troubleshooting."""
+        chart_am = LineChart()
+        chart_am.title = "ALM — Asset MV and liability PV"
+        chart_am.y_axis.title = "$"
+        chart_am.x_axis.title = "Attained age"
+        chart_am.add_data(Reference(wsa, min_col=3, max_col=4, min_row=hr, max_row=lr), titles_from_data=True)
+        chart_am.set_categories(Reference(wsa, min_col=2, min_row=dr, max_row=lr))
+        chart_am.height = 6
+        chart_am.width = 10
+        ws.add_chart(chart_am, f"A{base + 9}")
+
+        chart_s = LineChart()
+        chart_s.title = "ALM — Surplus"
+        chart_s.y_axis.title = "Surplus ($)"
+        chart_s.x_axis.title = "Attained age"
+        chart_s.add_data(Reference(wsa, min_col=5, min_row=hr, max_row=lr), titles_from_data=True)
+        chart_s.set_categories(Reference(wsa, min_col=2, min_row=dr, max_row=lr))
+        chart_s.height = 6
+        chart_s.width = 10
+        ws.add_chart(chart_s, f"J{base + 9}")
+
+
+def _write_model_check_sheet(
+    wb: Workbook,
+    snap: ExcelPythonSnapshot,
+    *,
+    alm_layout: ALMDashboardLayout | None = None,
+    alm_snapshot: ALMExcelSnapshot | None = None,
+) -> None:
+    """Embed Python pricing outputs next to Projection summary formulas; optional ALM row checks vs ALM_Projection."""
     ws = wb.create_sheet("ModelCheck")
-    ws["A1"] = "Python snapshot vs Excel (Projection sheet)"
+    ws["A1"] = "Python snapshot vs Excel (Projection; optional ALM_Projection)"
     ws["A1"].font = Font(bold=True, size=12)
     ws["A2"] = (
-        "Column B was frozen when this workbook was generated. Column C references Projection formulas; "
-        "column D should be ~0 after a full recalc if Inputs match the launcher and calculation is automatic."
+        "Column B is the Python snapshot at export. Column C points at workbook formulas or embedded ALM cells; "
+        "column D should be ~0 after recalc if Inputs match the launcher. "
+        "ALM asset/liability columns are frozen Python values; surplus and funding ratio on ALM_Projection are formulas."
     )
     ws.merge_cells("A2:D2")
 
@@ -635,36 +816,106 @@ def _write_model_check_sheet(wb: Workbook, snap: ExcelPythonSnapshot) -> None:
         cell = ws.cell(row=4, column=c, value=h)
         cell.font = Font(bold=True)
 
-    rows: list[tuple[str, float, str]] = [
-        ("PV benefits", snap.pv_benefit, "=Projection!X4"),
-        ("PV monthly expenses", snap.pv_monthly_expenses, "=Projection!X5"),
-        ("PV monthly total (ben+exp)", snap.pv_monthly_total, "=Projection!X7"),
-        ("Single premium", snap.single_premium, "=Projection!X8"),
-        ("Annuity factor", snap.annuity_factor, "=Projection!X6"),
+    pricing_rows: list[tuple[str, float, str, str]] = [
+        ("PV benefits", snap.pv_benefit, "=Projection!X4", "money"),
+        ("PV monthly expenses", snap.pv_monthly_expenses, "=Projection!X5", "money"),
+        ("PV monthly total (ben+exp)", snap.pv_monthly_total, "=Projection!X7", "money"),
+        ("Single premium", snap.single_premium, "=Projection!X8", "money"),
+        ("Annuity factor", snap.annuity_factor, "=Projection!X6", "factor"),
     ]
-    for i, (label, val, xls_ref) in enumerate(rows, start=5):
-        ws.cell(row=i, column=1, value=label)
-        ws.cell(row=i, column=2, value=float(val))
-        ws.cell(row=i, column=3, value=xls_ref)
-        ws.cell(row=i, column=4, value=f"=C{i}-B{i}")
-        if label == "Annuity factor":
-            ws.cell(row=i, column=2).number_format = "0.000000"
-            ws.cell(row=i, column=4).number_format = "0.000000"
+    row_idx = 5
+    for label, val, xls_ref, kind in pricing_rows:
+        ws.cell(row=row_idx, column=1, value=label)
+        ws.cell(row=row_idx, column=2, value=float(val))
+        ws.cell(row=row_idx, column=3, value=xls_ref)
+        ws.cell(row=row_idx, column=4, value=f"=C{row_idx}-B{row_idx}")
+        if kind == "factor":
+            ws.cell(row=row_idx, column=2).number_format = "0.000000"
+            ws.cell(row=row_idx, column=4).number_format = "0.000000"
         else:
-            ws.cell(row=i, column=2).number_format = "#,##0.00"
-            ws.cell(row=i, column=4).number_format = "#,##0.00"
+            ws.cell(row=row_idx, column=2).number_format = "#,##0.00"
+            ws.cell(row=row_idx, column=4).number_format = "#,##0.00"
+        row_idx += 1
 
-    ws["A12"] = "Troubleshooting"
-    ws["A12"].font = Font(bold=True)
-    ws["A13"] = (
-        "A ~3–4% higher Excel PV vs column B usually means Inputs!B9 (spread) is negative or does not match "
-        "the Streamlit run (e.g. spreadsheet edited after download). Confirm valuation year B7 and all Inputs."
+    if (alm_layout is None) ^ (alm_snapshot is None):
+        raise ValueError("alm_layout and alm_snapshot must both be set or both omitted.")
+
+    if alm_layout is not None and alm_snapshot is not None:
+        dr = alm_layout.first_data_row
+        lr = alm_layout.last_data_row
+        sh = ALM_SHEET_NAME
+        n_path = int(alm_snapshot.asset_market_value.shape[0])
+        if lr - dr + 1 != n_path:
+            raise ValueError("ALM ModelCheck layout rows do not match snapshot length.")
+        a_mv = np.asarray(alm_snapshot.asset_market_value, dtype=float)
+        l_pv = np.asarray(alm_snapshot.liability_pv, dtype=float)
+        path_surp = a_mv - l_pv
+        a0, l0 = float(a_mv[0]), float(l_pv[0])
+        s0 = float(path_surp[0])
+        s_end = float(path_surp[-1])
+        s_min = float(np.min(path_surp))
+        f0 = float(a0 / l0) if l0 > 1e-12 else float("nan")
+
+        ws.merge_cells(f"A{row_idx}:D{row_idx}")
+        ws.cell(row=row_idx, column=1, value="ALM checks (ALM_Projection sheet)").font = Font(bold=True)
+        row_idx += 1
+
+        min_rng = f"=MIN({sh}!E{dr}:E{lr})"
+        alm_rows: list[tuple[str, float, str, str]] = [
+            ("ALM initial AUM (meta)", float(alm_snapshot.initial_asset_market_value), f"={sh}!B3", "money"),
+            ("ALM asset MV (month 1)", a0, f"={sh}!C{dr}", "money"),
+            ("ALM liability PV (month 1)", l0, f"={sh}!D{dr}", "money"),
+            ("ALM surplus (month 1)", s0, f"={sh}!E{dr}", "money"),
+        ]
+        if math.isfinite(f0):
+            alm_rows.append(("ALM funding ratio (month 1)", f0, f"={sh}!F{dr}", "fr"))
+        alm_rows.extend(
+            [
+                ("ALM surplus (final month)", s_end, f"={sh}!E{lr}", "money"),
+                ("ALM min surplus (path)", s_min, min_rng, "money"),
+                ("ALM duration gap (y)", float(alm_snapshot.duration_gap), f"={sh}!B4", "dur"),
+                ("ALM PV01 net ($/bp)", float(alm_snapshot.pv01_net), f"={sh}!B7", "money"),
+            ]
+        )
+        for label, val, xls_ref, kind in alm_rows:
+            ws.cell(row=row_idx, column=1, value=label)
+            b_cell = ws.cell(row=row_idx, column=2)
+            if isinstance(val, float) and math.isfinite(val):
+                b_cell.value = float(val)
+            else:
+                b_cell.value = ""
+            ws.cell(row=row_idx, column=3, value=xls_ref)
+            ws.cell(row=row_idx, column=4, value=f"=C{row_idx}-B{row_idx}")
+            if kind == "factor":
+                b_cell.number_format = "0.000000"
+                ws.cell(row=row_idx, column=4).number_format = "0.000000"
+            elif kind == "fr":
+                b_cell.number_format = "0.000"
+                ws.cell(row=row_idx, column=4).number_format = "0.000"
+            elif kind == "dur":
+                b_cell.number_format = "0.00"
+                ws.cell(row=row_idx, column=4).number_format = "0.00"
+            else:
+                b_cell.number_format = "#,##0.00"
+                ws.cell(row=row_idx, column=4).number_format = "#,##0.00"
+            row_idx += 1
+
+    tr = row_idx + 1
+    ws.cell(row=tr, column=1, value="Troubleshooting").font = Font(bold=True)
+    ws.cell(
+        row=tr + 1,
+        column=1,
+        value=(
+            "A ~3–4% higher Excel PV vs column B usually means Inputs!B9 (spread) is negative or does not match "
+            "the Streamlit run (e.g. spreadsheet edited after download). Confirm valuation year B7 and all Inputs. "
+            "Large ALM differences mean ALM_Projection cells were edited or the workbook predates a new ALM run."
+        ),
     )
-    ws.merge_cells("A13:D15")
+    ws.merge_cells(f"A{tr + 1}:D{tr + 3}")
 
-    ws.column_dimensions["A"].width = 30
+    ws.column_dimensions["A"].width = 34
     ws.column_dimensions["B"].width = 22
-    ws.column_dimensions["C"].width = 22
+    ws.column_dimensions["C"].width = 28
     ws.column_dimensions["D"].width = 26
 
 
@@ -718,11 +969,13 @@ def build_workbook_from_spec(
     *,
     python_snapshot: ExcelPythonSnapshot | None = None,
     mc_snapshot: MCExcelSnapshot | None = None,
+    alm_snapshot: ALMExcelSnapshot | None = None,
 ) -> Path | bytes:
     """
     Write a workbook to `out_path`. If `out_path` is None, return the file as bytes (for downloads).
 
     Optional ``python_snapshot`` embeds the launcher run on the ModelCheck sheet for formula validation.
+    Optional ``alm_snapshot`` adds ``ALM_Projection`` plus Dashboard ALM summaries from the latest ALM run.
     """
     yc = spec.yield_curve_df.copy()
     if "maturity_years" not in yc.columns or "zero_rate" not in yc.columns:
@@ -767,13 +1020,22 @@ def build_workbook_from_spec(
     ws_proj = wb.create_sheet("Projection")
     _write_projection(ws_proj, n_months=n_months, y_last_row=y_last_row, idx_last_row=idx_last_row)
 
+    alm_layout: ALMDashboardLayout | None = None
+    if alm_snapshot is not None:
+        alm_layout = _write_alm_projection_sheet(wb, alm_snapshot)
+
     if python_snapshot is not None:
-        _write_model_check_sheet(wb, python_snapshot)
+        _write_model_check_sheet(
+            wb,
+            python_snapshot,
+            alm_layout=alm_layout,
+            alm_snapshot=alm_snapshot,
+        )
 
     if mc_snapshot is not None:
         _write_mc_summary_sheet(wb, mc_snapshot)
 
-    _write_dashboard(wb, n_months=n_months)
+    _write_dashboard(wb, n_months=n_months, alm_layout=alm_layout)
     _write_python_tab(wb)
 
     if out_path is None:
