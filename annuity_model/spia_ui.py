@@ -1210,6 +1210,138 @@ def _render_what_if_studio() -> None:
             pv_disp[c] = pv_disp[c].astype(int)
         st.line_chart(pv_disp)
 
+        st.markdown("**ALM key rate duration (before vs after)**")
+        try:
+            asm_krd_wf = asm_whatif_used if isinstance(asm_whatif_used, sp.ALMAssumptions) else None
+            if asm_krd_wf is not None:
+                key_tenors = np.array(
+                    [float(b.tenor_years) for b in asm_krd_wf.allocation.buckets if float(b.tenor_years) > 1e-12],
+                    dtype=float,
+                )
+                if key_tenors.size > 0:
+                    a0_wf = st.session_state.get("alm_last_initial_asset_market_value")
+                    if not isinstance(a0_wf, (int, float, np.floating)):
+                        a0_wf = st.session_state.get("alm_current_initial_asset_market_value")
+                    a0 = float(a0_wf) if isinstance(a0_wf, (int, float, np.floating)) else float(base_res.single_premium)
+
+                    def _compute_krd_set(
+                        *,
+                        curve_liab: sp.YieldCurve,
+                        curve_asset: sp.YieldCurve,
+                        spread_use: float,
+                        cashflows_use: np.ndarray,
+                        scenario_label: str,
+                    ) -> list[dict[str, float | str]]:
+                        w_use = np.asarray(asm_krd_wf.allocation.weights, dtype=float)
+                        bond_tenors = np.array(
+                            [float(b.tenor_years) for b in asm_krd_wf.allocation.buckets[1:]],
+                            dtype=float,
+                        )
+                        df0_asset = curve_asset.discount_factors(bond_tenors, spread=spread_use)
+                        target_mv_bonds = w_use[1:] * a0
+                        bond_faces = np.where(df0_asset > 1e-15, target_mv_bonds / df0_asset, 0.0)
+                        l0 = float(np.sum(cashflows_use * curve_liab.discount_factors(base_res.times_years, spread=spread_use)))
+                        net0 = max(1e-9, a0 - l0)
+                        out_rows: list[dict[str, float | str]] = []
+                        for kt in key_tenors:
+                            cl_b = _key_rate_bump_curve(
+                                curve_liab,
+                                key_tenor_years=float(kt),
+                                key_tenors_years=key_tenors,
+                                bump_bps=1.0,
+                            )
+                            ca_b = _key_rate_bump_curve(
+                                curve_asset,
+                                key_tenor_years=float(kt),
+                                key_tenors_years=key_tenors,
+                                bump_bps=1.0,
+                            )
+                            a_b = float(w_use[0] * a0 + np.sum(bond_faces * ca_b.discount_factors(bond_tenors, spread=spread_use)))
+                            l_b = float(np.sum(cashflows_use * cl_b.discount_factors(base_res.times_years, spread=spread_use)))
+                            out_rows.extend(
+                                [
+                                    {
+                                        "Tenor": f"{kt:g}Y",
+                                        "Tenor years": float(kt),
+                                        "Scenario": scenario_label,
+                                        "Series": "Assets KRD",
+                                        "KRD": -((a_b - a0) / (max(1e-9, a0) * 1e-4)),
+                                    },
+                                    {
+                                        "Tenor": f"{kt:g}Y",
+                                        "Tenor years": float(kt),
+                                        "Scenario": scenario_label,
+                                        "Series": "Liabilities KRD",
+                                        "KRD": -((l_b - l0) / (max(1e-9, l0) * 1e-4)),
+                                    },
+                                    {
+                                        "Tenor": f"{kt:g}Y",
+                                        "Tenor years": float(kt),
+                                        "Scenario": scenario_label,
+                                        "Series": "Surplus KRD",
+                                        "KRD": -(((a_b - l_b) - (a0 - l0)) / (net0 * 1e-4)),
+                                    },
+                                ]
+                            )
+                        return out_rows
+
+                    krd_rows = []
+                    krd_rows.extend(
+                        _compute_krd_set(
+                            curve_liab=base_curve,
+                            curve_asset=base_curve,
+                            spread_use=float(base_spread),
+                            cashflows_use=np.asarray(base_res.expected_total_cashflows, dtype=float),
+                            scenario_label="Before",
+                        )
+                    )
+                    krd_rows.extend(
+                        _compute_krd_set(
+                            curve_liab=shocked_curve,
+                            curve_asset=yc_alm_asset,
+                            spread_use=float(shocked_spread),
+                            cashflows_use=np.asarray(cf_alm, dtype=float),
+                            scenario_label="After",
+                        )
+                    )
+                    krd_wf_df = pd.DataFrame(krd_rows).sort_values(["Series", "Tenor years", "Scenario"])
+                    tenor_order = [f"{float(t):g}Y" for t in np.sort(np.unique(key_tenors))]
+                    series_order = ["Assets KRD", "Liabilities KRD", "Surplus KRD"]
+                    krd_wf_chart = (
+                        alt.Chart(krd_wf_df)
+                        .mark_line(point=True, strokeWidth=2.5)
+                        .encode(
+                            x=alt.X("Tenor:N", sort=tenor_order, title="Key tenor"),
+                            y=alt.Y("KRD:Q", title="Key rate duration (years)"),
+                            color=alt.Color(
+                                "Scenario:N",
+                                sort=["Before", "After"],
+                                scale=alt.Scale(domain=["Before", "After"], range=["#4c78a8", "#f58518"]),
+                                legend=alt.Legend(orient="top", direction="horizontal"),
+                            ),
+                            tooltip=[
+                                alt.Tooltip("Series:N"),
+                                alt.Tooltip("Tenor:N"),
+                                alt.Tooltip("Scenario:N"),
+                                alt.Tooltip("KRD:Q", format=".4f"),
+                            ],
+                        )
+                        .properties(height=120)
+                        .facet(row=alt.Row("Series:N", sort=series_order, title=None))
+                        .resolve_scale(y="independent")
+                    )
+                    st.altair_chart(krd_wf_chart, use_container_width=True)
+                    st.caption(
+                        "Each panel compares Before vs After KRD at key tenors for one series, with independent y-scales to keep "
+                        "the view readable when Surplus KRD magnitudes are much larger."
+                    )
+                else:
+                    st.info("No positive tenors available for What-if ALM KRD chart.")
+            else:
+                st.info("What-if ALM KRD chart unavailable: ALM assumptions were not available.")
+        except Exception as ex:
+            st.info(f"What-if ALM KRD chart unavailable for current inputs: {ex!r}")
+
     st.caption(
         "Impact shown as After - Before. Tail risk uses the 95th percentile of simulated premiums under the selected equity regime."
     )
@@ -2353,7 +2485,34 @@ def _render_alm_section() -> None:
         bucket_df_raw = pd.DataFrame(last.bucket_asset_mv.T, columns=[b.name for b in bucket_specs], index=age_ax)
         bucket_df = bucket_df_raw.reindex(columns=ordered_names)
         st.markdown("**Bucket market values**")
-        st.line_chart(_round_for_visuals(bucket_df))
+        bucket_mv_long = (
+            bucket_df.reset_index()
+            .rename(columns={"index": "Attained age"})
+            .melt(id_vars=["Attained age"], var_name="Asset type", value_name="Bucket market value")
+        )
+        bucket_mv_long["Asset type"] = pd.Categorical(bucket_mv_long["Asset type"], categories=ordered_names, ordered=True)
+        bucket_mv_chart = (
+            alt.Chart(bucket_mv_long)
+            .mark_line()
+            .encode(
+                x=alt.X("Attained age:Q", title="Attained age"),
+                y=alt.Y("Bucket market value:Q", title="Market value ($)"),
+                color=alt.Color(
+                    "Asset type:N",
+                    title="Asset type",
+                    sort=ordered_names,
+                    legend=alt.Legend(orient="top", direction="horizontal", columns=len(ordered_names)),
+                ),
+                order=alt.Order("Asset type:N", sort="ascending"),
+                tooltip=[
+                    alt.Tooltip("Attained age:Q", format=".2f"),
+                    alt.Tooltip("Asset type:N"),
+                    alt.Tooltip("Bucket market value:Q", format=",.0f"),
+                ],
+            )
+            .properties(height=320)
+        )
+        st.altair_chart(bucket_mv_chart.interactive(), use_container_width=True)
 
         st.markdown("##### Portfolio composition by asset type (%)")
         aum_series = pd.Series(last.asset_market_value, index=age_ax, dtype=float).replace(0.0, np.nan)
@@ -2401,44 +2560,22 @@ def _render_alm_section() -> None:
         weight_df = bucket_df.div(aum_series, axis=0).fillna(0.0)
         contrib_pp_df = weight_df.mul(bucket_yield, axis=1) * 100.0
         total_yield_pct = contrib_pp_df.sum(axis=1).rename("Total portfolio yield (%)")
-        contrib_long_df = (
-            contrib_pp_df.reset_index()
-            .rename(columns={"index": "Attained age"})
-            .melt(id_vars=["Attained age"], var_name="Asset type", value_name="Yield contribution (pp)")
-        )
-        contrib_long_df["Asset type"] = pd.Categorical(
-            contrib_long_df["Asset type"], categories=ordered_names, ordered=True
-        )
         total_line_df = total_yield_pct.reset_index().rename(columns={"index": "Attained age"})
-        st.markdown("##### Portfolio yield (stacked by asset type)")
-        yld_stack = (
-            alt.Chart(contrib_long_df)
-            .mark_area()
-            .encode(
-                x=alt.X("Attained age:Q", title="Attained age"),
-                y=alt.Y("Yield contribution (pp):Q", stack=True, title="Yield contribution (pp)"),
-                color=alt.Color(
-                    "Asset type:N",
-                    title="Asset type",
-                    sort=ordered_names,
-                    legend=alt.Legend(orient="top", direction="horizontal", columns=len(ordered_names)),
-                ),
-                order=alt.Order("Asset type:N", sort="ascending"),
-            )
-        )
+        st.markdown("##### Total portfolio yield")
         yld_total = (
             alt.Chart(total_line_df)
-            .mark_line(color="black", strokeWidth=2)
+            .mark_line(color="#1f77b4", strokeWidth=3)
             .encode(
                 x=alt.X("Attained age:Q", title="Attained age"),
-                y=alt.Y("Total portfolio yield (%):Q", title="Yield contribution (pp)"),
+                y=alt.Y("Total portfolio yield (%):Q", title="Total yield (%)"),
                 tooltip=[
                     alt.Tooltip("Attained age:Q", format=".2f"),
                     alt.Tooltip("Total portfolio yield (%):Q", format=".4f"),
                 ],
             )
+            .properties(height=320)
         )
-        st.altair_chart((yld_stack + yld_total).interactive().properties(height=320), use_container_width=True)
+        st.altair_chart(yld_total.interactive(), use_container_width=True)
 
         kpi_tbl = pd.DataFrame(
             {
@@ -2532,7 +2669,7 @@ def _render_alm_section() -> None:
 
                 surplus_line = (
                     alt.Chart(krd_surplus_df)
-                    .mark_line(color="#111111", strokeWidth=2, point=True)
+                    .mark_line(color="#d62728", strokeWidth=3, point=True)
                     .encode(
                         x=alt.X("Tenor:N", sort=tenor_order, title="Key tenor"),
                         y=alt.Y("Key rate duration:Q", title="Surplus KRD (years)"),
