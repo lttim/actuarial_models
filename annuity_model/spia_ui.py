@@ -1792,12 +1792,14 @@ def _render_alm_section() -> None:
                     "fixed": "Fixed annual borrowing rate",
                 }[x],
             )
+            is_scenario_linked = borrow_rate_mode == "scenario_linked"
             borrow_rate_tenor = st.selectbox(
                 "Scenario-linked borrowing tenor",
                 options=[0.25, 0.5, 1.0, 2.0, 3.0, 5.0],
                 index=2,
                 format_func=lambda x: f"{x:g}Y",
                 help="Curve tenor used to derive borrowing base rate in scenario-linked mode.",
+                disabled=not is_scenario_linked,
             )
             # Logical default: 1Y curve+spread plus 100 bps floor at 3%.
             df_t = float(yc.discount_factors(np.array([float(borrow_rate_tenor)], dtype=float), spread=spr)[0])
@@ -1810,6 +1812,7 @@ def _render_alm_section() -> None:
                 value=100.0,
                 step=5.0,
                 help="Used when borrowing rate basis is scenario-linked.",
+                disabled=not is_scenario_linked,
             )
             borrow_rate_pct = st.number_input(
                 "Fixed borrowing rate (annual, %)",
@@ -1818,6 +1821,7 @@ def _render_alm_section() -> None:
                 value=round(borrow_rate_default_pct, 2),
                 step=0.1,
                 help="Used only when borrowing rate basis is fixed.",
+                disabled=is_scenario_linked,
             )
         with c2:
             rebalance_policy = st.selectbox(
