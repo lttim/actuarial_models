@@ -1050,17 +1050,19 @@ def _write_model_check_sheet(
         row_idx += 1
 
         min_rng = f"=MIN({sh}!F{dr}:F{lr})"
+        sur0 = f"={sh}!C{dr}-{sh}!D{dr}-{sh}!E{dr}"
+        sur_end = f"={sh}!C{lr}-{sh}!D{lr}-{sh}!E{lr}"
         alm_rows: list[tuple[str, float, str, str]] = [
             ("ALM initial AUM (meta)", float(alm_snapshot.initial_asset_market_value), f"={sh}!B3", "money"),
             ("ALM asset MV (month 1 on sheet)", a0, f"={sh}!C{dr}", "money"),
             ("ALM liability PV (month 1 on sheet)", l0, f"={sh}!D{dr}", "money"),
-            ("ALM surplus (month 1 on sheet)", s0, f"={sh}!F{dr}", "money"),
+            ("ALM surplus (month 1 on sheet)", s0, sur0, "money"),
         ]
         if math.isfinite(f0):
             alm_rows.append(("ALM funding ratio (month 1 on sheet)", f0, f"={sh}!G{dr}", "fr"))
         alm_rows.extend(
             [
-                ("ALM surplus (final row on sheet)", s_end, f"={sh}!F{lr}", "money"),
+                ("ALM surplus (final row on sheet)", s_end, sur_end, "money"),
                 ("ALM min surplus (path)", s_min, min_rng, "money"),
                 ("ALM duration gap (y)", float(alm_snapshot.duration_gap), f"={sh}!B4", "dur"),
                 ("ALM PV01 net ($/bp)", float(alm_snapshot.pv01_net), f"={sh}!B7", "money"),

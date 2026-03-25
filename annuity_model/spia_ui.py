@@ -37,6 +37,7 @@ from alm_excel_ladder import ALM_ENGINE_SHEET
 
 from build_spia_excel_workbook import (
     ALM_ENGINE_FIELD_GUIDE_SHEET,
+    ALM_ENGINE_STEP_MONTHS,
     ALM_EXCEL_PATH_MONTH_CAP,
     ALMExcelSnapshot,
     ALM_PROJECTION_FIRST_DATA_ROW,
@@ -44,7 +45,9 @@ from build_spia_excel_workbook import (
     ExcelPythonSnapshot,
     LIABILITY_SHEET_NAME,
     MCExcelSnapshot,
+    alm_excel_downsample_snapshot,
     alm_excel_snapshot_from_result,
+    alm_excel_truncate_snapshot,
     build_workbook_from_spec,
     excel_spec_from_launcher,
     mc_excel_snapshot_from_result,
@@ -1812,18 +1815,51 @@ def _read_workbook_cell_float(ws: Any, coord: str) -> float | None:
     return x
 
 
+def _alm_workbook_mirror_snapshot(
+    alm: sp.ALMResult,
+    asm: sp.ALMAssumptions | None,
+    *,
+    initial_asset_market_value: float | None,
+) -> ALMExcelSnapshot | None:
+    """Same truncation/downsample as ``build_workbook_from_spec`` (must match embedded ALM path)."""
+    if asm is None:
+        return None
+    try:
+        raw = alm_excel_snapshot_from_result(
+            alm,
+            asm,
+            initial_asset_market_value=initial_asset_market_value,
+        )
+        ds = alm_excel_downsample_snapshot(raw, int(ALM_ENGINE_STEP_MONTHS))
+        return alm_excel_truncate_snapshot(ds, int(ALM_EXCEL_PATH_MONTH_CAP))
+    except Exception:
+        return None
+
+
 def _alm_modelcheck_key_assets_surplus_df(
     *,
     alm: sp.ALMResult,
     xlsx_bytes: bytes | None,
     dr: int = ALM_PROJECTION_FIRST_DATA_ROW,
+    mirror_snap: ALMExcelSnapshot | None = None,
 ) -> pd.DataFrame:
     """
-    ModelCheck-style table: Python path vs embedded workbook literals (column C / D) for key asset and surplus rows.
-    Surplus Excel column uses C−D when E is not cached (openpyxl files often have no formula result cache).
+    ModelCheck-style table: Python path vs workbook (ALM_Projection).
+
+    Uses the same truncated ALM snapshot as the Excel export when ``mirror_snap`` is provided so the
+    Python column matches ModelCheck column B and the first ``ALM_EXCEL_PATH_MONTH_CAP`` rows on the sheet.
+
+    Surplus from Excel is read as **C−D−E** whenever those caches exist. Column **F** can hold a stale
+    cached value after edits or partial recalc even though F is defined as C−D−E, which inflated differences.
     """
-    a_mv = np.asarray(alm.asset_market_value, dtype=float)
-    surp = np.asarray(alm.surplus, dtype=float)
+    if mirror_snap is not None:
+        a_mv = np.asarray(mirror_snap.asset_market_value, dtype=float)
+        l_pv = np.asarray(mirror_snap.liability_pv, dtype=float)
+        debt_b = np.asarray(mirror_snap.borrowing_balance, dtype=float)
+        surp = a_mv - l_pv - debt_b
+    else:
+        a_mv = np.asarray(alm.asset_market_value, dtype=float)
+        surp = np.asarray(alm.surplus, dtype=float)
     n = int(a_mv.size)
     if n < 1:
         return pd.DataFrame()
@@ -1878,15 +1914,13 @@ def _alm_modelcheck_key_assets_surplus_df(
         r = dr + excel_off
         ex: float | None = None
         if ws is not None:
-            ex_f = _read_workbook_cell_float(ws, f"F{r}")
-            if ex_f is not None:
-                ex = ex_f
+            c = _read_workbook_cell_float(ws, f"C{r}")
+            d = _read_workbook_cell_float(ws, f"D{r}")
+            e_b = _read_workbook_cell_float(ws, f"E{r}")
+            if c is not None and d is not None and e_b is not None:
+                ex = float(c - d - e_b)
             else:
-                c = _read_workbook_cell_float(ws, f"C{r}")
-                d = _read_workbook_cell_float(ws, f"D{r}")
-                e_b = _read_workbook_cell_float(ws, f"E{r}")
-                if c is not None and d is not None and e_b is not None:
-                    ex = float(c - d - e_b)
+                ex = _read_workbook_cell_float(ws, f"F{r}")
         if ex is None:
             ex = py
         rows.append(
@@ -1977,9 +2011,22 @@ def _render_excel_replicator() -> None:
     if isinstance(alm_chk, sp.ALMResult) and alm_chk_rid == pr_chk_rid:
         st.subheader("ModelCheck — ALM (assets & surplus)")
         xb_mc = st.session_state.get("pricing_xlsx_bytes")
+        asm_chk = st.session_state.get("alm_last_assumptions")
+        aum_chk = st.session_state.get("alm_last_initial_asset_market_value")
+        aum_opt = float(aum_chk) if aum_chk is not None else None
+        mirror = (
+            _alm_workbook_mirror_snapshot(
+                alm_chk,
+                asm_chk if isinstance(asm_chk, sp.ALMAssumptions) else None,
+                initial_asset_market_value=aum_opt,
+            )
+            if isinstance(asm_chk, sp.ALMAssumptions)
+            else None
+        )
         alm_mc_df = _alm_modelcheck_key_assets_surplus_df(
             alm=alm_chk,
             xlsx_bytes=xb_mc if isinstance(xb_mc, bytes) else None,
+            mirror_snap=mirror,
         )
         if not alm_mc_df.empty:
             alm_mc_disp = _round_for_visuals(alm_mc_df)
@@ -1995,7 +2042,8 @@ def _render_excel_replicator() -> None:
             st.caption(
                 f"Workbook **{ALM_SHEET_NAME}** / **{ALM_ENGINE_SHEET}** show the **first {n_on_sheet}** monthly ALM steps "
                 f"(cap {ALM_EXCEL_PATH_MONTH_CAP}; Python may have more months). Rows **{ALM_PROJECTION_FIRST_DATA_ROW}**–**{lr}**. "
-                f"**C** = SUM buckets; **D** from **{LIABILITY_SHEET_NAME}**; **F** = C−D−E. Recalc in Excel before comparing."
+                f"**C** = SUM buckets; **D** from **{LIABILITY_SHEET_NAME}**; **F** = C−D−E. "
+                "Parity uses **C−D−E** (not a stale **F** cache). Recalc in Excel before comparing."
             )
 
     # --- Monte Carlo distribution dashboard ---
