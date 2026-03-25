@@ -12,10 +12,12 @@ import spia_projection as sp
 from alm_excel_ladder import ALM_ENGINE_SHEET
 
 from build_spia_excel_workbook import (
+    ALM_ENGINE_FIELD_GUIDE_SHEET,
     ALM_EXCEL_PATH_MONTH_CAP,
     ALM_ENGINE_STEP_MONTHS,
     ALM_SHEET_NAME,
     ExcelPythonSnapshot,
+    LIABILITY_SHEET_NAME,
     alm_excel_downsample_snapshot,
     alm_excel_period_end_indices,
     alm_excel_snapshot_from_result,
@@ -77,7 +79,7 @@ def test_model_check_sheet_embeds_python_snapshot():
     mc = wb["ModelCheck"]
     assert mc["B5"].value == pytest.approx(res.pv_benefit, rel=1e-9)
     assert mc["B9"].value == pytest.approx(res.annuity_factor, rel=1e-9)
-    assert mc["C5"].value == "=Projection!X4"
+    assert mc["C5"].value == f"={LIABILITY_SHEET_NAME}!X4"
 
 
 def test_alm_projection_sheet_and_dashboard_links():
@@ -163,6 +165,8 @@ def test_alm_projection_sheet_and_dashboard_links():
     )
     assert ALM_SHEET_NAME in wb.sheetnames
     assert ALM_ENGINE_SHEET in wb.sheetnames
+    assert ALM_ENGINE_FIELD_GUIDE_SHEET in wb.sheetnames
+    assert LIABILITY_SHEET_NAME in wb.sheetnames
     ws_alm = wb[ALM_SHEET_NAME]
     dr = 13
     assert int(ws_alm[f"A{dr}"].value) == int(alm_snap_ds.month_index[0]) + 1

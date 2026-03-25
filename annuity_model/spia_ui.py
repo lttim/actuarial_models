@@ -36,11 +36,13 @@ import spia_projection as sp
 from alm_excel_ladder import ALM_ENGINE_SHEET
 
 from build_spia_excel_workbook import (
+    ALM_ENGINE_FIELD_GUIDE_SHEET,
     ALM_EXCEL_PATH_MONTH_CAP,
     ALMExcelSnapshot,
     ALM_PROJECTION_FIRST_DATA_ROW,
     ALM_SHEET_NAME,
     ExcelPythonSnapshot,
+    LIABILITY_SHEET_NAME,
     MCExcelSnapshot,
     alm_excel_snapshot_from_result,
     build_workbook_from_spec,
@@ -1961,8 +1963,8 @@ def _render_excel_replicator() -> None:
         column_config=_number_cols_no_decimals(modelcheck_display),
     )
     st.caption(
-        "Workbook references: PV benefits `Projection!X4`, PV monthly expenses `Projection!X5`, "
-        "PV monthly total `Projection!X7`, single premium `Projection!X8`, annuity factor `Projection!X6`."
+        f"Workbook references: PV benefits `{LIABILITY_SHEET_NAME}!X4`, PV monthly expenses `{LIABILITY_SHEET_NAME}!X5`, "
+        f"PV monthly total `{LIABILITY_SHEET_NAME}!X7`, single premium `{LIABILITY_SHEET_NAME}!X8`, annuity factor `{LIABILITY_SHEET_NAME}!X6`."
     )
     st.caption(
         "After opening the workbook and recalculating, the ModelCheck tab differences should be near zero "
@@ -1993,7 +1995,7 @@ def _render_excel_replicator() -> None:
             st.caption(
                 f"Workbook **{ALM_SHEET_NAME}** / **{ALM_ENGINE_SHEET}** show the **first {n_on_sheet}** monthly ALM steps "
                 f"(cap {ALM_EXCEL_PATH_MONTH_CAP}; Python may have more months). Rows **{ALM_PROJECTION_FIRST_DATA_ROW}**–**{lr}**. "
-                f"**C** = SUM buckets; **D** from Projection; **F** = C−D−E. Recalc in Excel before comparing."
+                f"**C** = SUM buckets; **D** from **{LIABILITY_SHEET_NAME}**; **F** = C−D−E. Recalc in Excel before comparing."
             )
 
     # --- Monte Carlo distribution dashboard ---
@@ -2093,8 +2095,8 @@ def _render_excel_replicator() -> None:
             )
         if xlsx_has_alm:
             st.success(
-                f"Workbook includes **ALM_Projection** / **ALM_Engine** (first {ALM_EXCEL_PATH_MONTH_CAP} months of the ALM path) "
-                "and **Dashboard** ALM charts.",
+                f"Workbook includes **{LIABILITY_SHEET_NAME}**, **ALM_Projection** / **ALM_Engine** / **{ALM_ENGINE_FIELD_GUIDE_SHEET}** "
+                f"(first {ALM_EXCEL_PATH_MONTH_CAP} months of the ALM path) and **Dashboard** ALM charts.",
                 icon="✅",
             )
         else:

@@ -10,12 +10,12 @@ import numpy as np
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, LineChart, Reference
-from openpyxl.styles import Font
+from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
 import spia_projection as sp
 
-from alm_excel_ladder import ALM_ENGINE_SHEET, ENGINE_DATA_FIRST_ROW, write_alm_engine_sheet
+from alm_excel_ladder import ALM_ENGINE_SHEET, write_alm_engine_sheet
 
 BASE_DIR = Path(__file__).resolve().parent
 OUT_XLSX = BASE_DIR / "spia_projection_model.xlsx"
@@ -75,6 +75,9 @@ class ALMDashboardLayout(NamedTuple):
     last_data_row: int
 
 
+# Monthly liability cashflows, survival, discounting, and pricing summary (not asset ALM).
+LIABILITY_SHEET_NAME = "Liabilities"
+ALM_ENGINE_FIELD_GUIDE_SHEET = "ALM_Engine_Field_Guide"
 ALM_SHEET_NAME = "ALM_Projection"
 # First month of ALM path data on ALM_Projection (below header row 12). Keep in sync with _write_alm_projection_sheet.
 ALM_PROJECTION_FIRST_DATA_ROW = 13
@@ -394,7 +397,7 @@ def _write_inputs(ws, spec: ExcelBuildSpec) -> None:
     ws["A21"].font = Font(bold=True)
     ws["A22"] = "Monthly base benefit (pre-index)"
     ws["B22"] = "=B5/B6"
-    ws["A23"] = "Projection Months (info; grid is fixed at build)"
+    ws["A23"] = "Liability sheet months (info; grid is fixed at build)"
     ws["B23"] = "=MAX(1,ROUND((B8-B3)*B6,0))"
 
     ws["D3"] = "Notes"
@@ -405,7 +408,9 @@ def _write_inputs(ws, spec: ExcelBuildSpec) -> None:
     ws["D8"] = "Benefits: return indexation from IndexScenario; expenses: monthly CPI-style from B17."
     ws["D9"] = "Changing horizon/issue age does not auto-resize sheets; regenerate from the launcher."
     ws["D10"] = "Spread B9 is added to zero rates. Negative B9 lowers discount yields and raises PV—must match launcher."
-    ws["D11"] = "See ModelCheck: Python snapshot vs Projection! formulas; large |Difference| means inputs/recalc issues."
+    ws["D11"] = (
+        f"See ModelCheck: Python snapshot vs {LIABILITY_SHEET_NAME}! formulas; large |Difference| means inputs/recalc issues."
+    )
 
 
 def _write_simple_table(ws, title: str, df: pd.DataFrame) -> None:
@@ -476,8 +481,8 @@ def _write_monthly_curve_logdf(ws, n_months: int, y_last_row: int) -> None:
 
 
 def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> None:
-    ws.title = "Projection"
-    ws["A1"] = "SPIA Monthly Projection (Formula Driven)"
+    ws.title = LIABILITY_SHEET_NAME
+    ws["A1"] = "SPIA liability cashflows & pricing (formula-driven; not asset ALM)"
     ws["A1"].font = Font(bold=True, size=12)
 
     headers = [
@@ -574,20 +579,48 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
     ws["V2"] = "=X9"
 
 
-def _alm_liability_pv_cell_formula(*, excel_row: int, proj_last_row: int) -> str:
+def _alm_liability_pv_cell_formula(*, excel_row: int, proj_last_row: int, liability_sheet: str) -> str:
     """
-    Liability PV at end of month A{excel_row} (month numbering matches Projection column A).
-    Mirrors Python ``liab_pv_path``: sum_{j>M} S_j O_j / O_M with S=Projection!S, O=Projection!O.
+    Liability PV at end of month A{excel_row} (month numbering matches liability sheet column A).
+    Mirrors Python ``liab_pv_path``: sum_{j>M} S_j O_j / O_M with S/O from the liability grid.
     """
     pl = int(proj_last_row)
     r = int(excel_row)
+    sh = liability_sheet
     return (
-        f'=IF(INDEX(Projection!$O:$O,3+A{r})<=0,NA(),'
+        f'=IF(INDEX({sh}!$O:$O,3+A{r})<=0,NA(),'
         f'IF(4+A{r}>{pl},0,'
-        f'SUMPRODUCT(INDIRECT("Projection!S" & (4+A{r}) & ":S{pl}"),'
-        f'INDIRECT("Projection!O" & (4+A{r}) & ":O{pl}"))'
-        f'/INDEX(Projection!$O:$O,3+A{r})))'
+        f'SUMPRODUCT(INDIRECT("{sh}!S" & (4+A{r}) & ":S{pl}"),'
+        f'INDIRECT("{sh}!O" & (4+A{r}) & ":O{pl}"))'
+        f'/INDEX({sh}!$O:$O,3+A{r})))'
     )
+
+
+def _write_alm_engine_field_guide_sheet(
+    wb: Workbook, rows: tuple[tuple[str, str, str], ...]
+) -> None:
+    """Insert a readable glossary immediately after **ALM_Engine**."""
+    idx = wb.sheetnames.index(ALM_ENGINE_SHEET) + 1
+    ws = wb.create_sheet(ALM_ENGINE_FIELD_GUIDE_SHEET, idx)
+    ws["A1"] = "ALM_Engine — column reference"
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A2"] = (
+        "Each row is one column on **ALM_Engine**: Excel column letter, the header shown on the engine grid, "
+        "and a full definition of the calculation. The ladder replicates Python ALM for liquidity_only mode."
+    )
+    ws.merge_cells("A2:C2")
+    ws["A2"].alignment = Alignment(wrap_text=True, vertical="top")
+    ws.row_dimensions[2].height = 36
+    for c, h in enumerate(("Excel column", "Header on ALM_Engine", "Definition"), start=1):
+        ws.cell(row=4, column=c, value=h).font = Font(bold=True)
+    for i, (lett, hdr, gl) in enumerate(rows, start=5):
+        ws.cell(row=i, column=1, value=lett)
+        ws.cell(row=i, column=2, value=hdr)
+        c3 = ws.cell(row=i, column=3, value=gl)
+        c3.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.column_dimensions["A"].width = 14
+    ws.column_dimensions["B"].width = 42
+    ws.column_dimensions["C"].width = 88
 
 
 def _write_alm_projection_sheet(
@@ -614,13 +647,15 @@ def _write_alm_projection_sheet(
         initial_aum=float(snap.initial_asset_market_value),
         snap_bucket_names=snap.bucket_names,
         engine_step_months=int(engine_step_months),
+        liability_sheet_name=LIABILITY_SHEET_NAME,
     )
+    _write_alm_engine_field_guide_sheet(wb, layout.field_guide_rows)
     mv0_letter = get_column_letter(layout.col_mv_cash)
     mvb0 = layout.col_mv_bond_start
     debt_letter = get_column_letter(layout.col_debt_eom)
     ws = wb.create_sheet(ALM_SHEET_NAME)
     cap_note = (
-        f"First {n} months only (cap {ALM_EXCEL_PATH_MONTH_CAP}); full horizon remains on Projection."
+        f"First {n} months only (cap {ALM_EXCEL_PATH_MONTH_CAP}); full liability horizon remains on {LIABILITY_SHEET_NAME}."
         if n < spec.n_months
         else "Full horizon through month in col A."
     )
@@ -628,9 +663,10 @@ def _write_alm_projection_sheet(
     ws["A1"].font = Font(bold=True, size=12)
     proj_last = 3 + spec.n_months
     ws["A2"] = (
-        f"{cap_note} Liability PV (D) uses monthly Projection (rows 4–{proj_last}). "
-        f"Buckets (H+) and borrowing (E) link **{ALM_ENGINE_SHEET}** (monthly Δt, Projection col S). "
-        "Surplus F = C−D−E; funding G = C/(D+E). liquidity_only in ALM settings."
+        f"{cap_note} Liability PV (D) uses monthly **{LIABILITY_SHEET_NAME}** (rows 4–{proj_last}). "
+        f"Buckets (H+) and borrowing (E) link **{ALM_ENGINE_SHEET}** (monthly Δt, {LIABILITY_SHEET_NAME} col ExpTotalCF / S). "
+        "Surplus F = C−D−E; funding G = C/(D+E). liquidity_only in ALM settings. "
+        f"See **{ALM_ENGINE_FIELD_GUIDE_SHEET}** for ALM_Engine column definitions."
     )
     last_hdr_col = get_column_letter(7 + n_b)
     ws.merge_cells(f"A2:{last_hdr_col}2")
@@ -660,13 +696,26 @@ def _write_alm_projection_sheet(
     first_data = ALM_PROJECTION_FIRST_DATA_ROW
     first_bkt = get_column_letter(8)
     last_bkt = get_column_letter(7 + n_b)
+    eng0 = int(layout.first_data_row)
     for i in range(n):
         r = first_data + i
-        r_eng = ENGINE_DATA_FIRST_ROW + i
+        r_eng = eng0 + i
         ws.cell(row=r, column=1, value=int(snap.month_index[i]) + 1)
-        ws.cell(row=r, column=2, value=f'=IFERROR(INDEX(Projection!$C:$C,MATCH(A{r},Projection!$A:$A,0)),"")')
+        ws.cell(
+            row=r,
+            column=2,
+            value=(
+                f'=IFERROR(INDEX({LIABILITY_SHEET_NAME}!$C:$C,MATCH(A{r},{LIABILITY_SHEET_NAME}!$A:$A,0)),"")'
+            ),
+        )
         ws.cell(row=r, column=3, value=f"=SUM({first_bkt}{r}:{last_bkt}{r})")
-        ws.cell(row=r, column=4, value=_alm_liability_pv_cell_formula(excel_row=r, proj_last_row=proj_last))
+        ws.cell(
+            row=r,
+            column=4,
+            value=_alm_liability_pv_cell_formula(
+                excel_row=r, proj_last_row=proj_last, liability_sheet=LIABILITY_SHEET_NAME
+            ),
+        )
         ws.cell(row=r, column=5, value=f"={ALM_ENGINE_SHEET}!{debt_letter}{r_eng}")
         ws.cell(row=r, column=6, value=f"=C{r}-D{r}-E{r}")
         ws.cell(row=r, column=7, value=f'=IF((D{r}+E{r})>0,C{r}/(D{r}+E{r}),"")')
@@ -799,17 +848,17 @@ def _write_dashboard(wb: Workbook, n_months: int, *, alm_layout: ALMDashboardLay
     ws["A11"] = "Pricing & Reserve Summary"
     ws["A11"].font = Font(bold=True)
     ws["A12"] = "Single Premium"
-    ws["B12"] = "=Projection!X8"
+    ws["B12"] = f"={LIABILITY_SHEET_NAME}!X8"
     ws["A13"] = "PV Benefits"
-    ws["B13"] = "=Projection!X4"
+    ws["B13"] = f"={LIABILITY_SHEET_NAME}!X4"
     ws["A14"] = "PV Monthly Expenses"
-    ws["B14"] = "=Projection!X5"
+    ws["B14"] = f"={LIABILITY_SHEET_NAME}!X5"
     ws["A15"] = "PV Monthly Total"
-    ws["B15"] = "=Projection!X7"
+    ws["B15"] = f"={LIABILITY_SHEET_NAME}!X7"
     ws["A16"] = "Annuity Factor"
-    ws["B16"] = "=Projection!X6"
+    ws["B16"] = f"={LIABILITY_SHEET_NAME}!X6"
     ws["A17"] = "Economic Reserve at t=0"
-    ws["B17"] = "=Projection!V2"
+    ws["B17"] = f"={LIABILITY_SHEET_NAME}!V2"
 
     for cell in ("B6", "E4", "E6", "B12", "B13", "B14", "B15", "B17"):
         ws[cell].number_format = "#,##0.00"
@@ -823,8 +872,9 @@ def _write_dashboard(wb: Workbook, n_months: int, *, alm_layout: ALMDashboardLay
     chart_surv.title = "Survival to Monthly Payment"
     chart_surv.y_axis.title = "P(alive)"
     chart_surv.x_axis.title = "Attained Age"
-    data_surv = Reference(wb["Projection"], min_col=14, min_row=proj_start, max_row=proj_end)
-    cats_age = Reference(wb["Projection"], min_col=3, min_row=proj_start, max_row=proj_end)
+    liab = wb[LIABILITY_SHEET_NAME]
+    data_surv = Reference(liab, min_col=14, min_row=proj_start, max_row=proj_end)
+    cats_age = Reference(liab, min_col=3, min_row=proj_start, max_row=proj_end)
     chart_surv.add_data(data_surv, titles_from_data=False)
     chart_surv.set_categories(cats_age)
     chart_surv.height = 6
@@ -835,7 +885,7 @@ def _write_dashboard(wb: Workbook, n_months: int, *, alm_layout: ALMDashboardLay
     chart_cf.title = "Expected Monthly Cashflows"
     chart_cf.y_axis.title = "Expected Cashflow ($)"
     chart_cf.x_axis.title = "Attained Age"
-    data_cf = Reference(wb["Projection"], min_col=17, max_col=18, min_row=3, max_row=proj_end)
+    data_cf = Reference(liab, min_col=17, max_col=18, min_row=3, max_row=proj_end)
     chart_cf.add_data(data_cf, titles_from_data=True)
     chart_cf.set_categories(cats_age)
     chart_cf.height = 6
@@ -846,17 +896,17 @@ def _write_dashboard(wb: Workbook, n_months: int, *, alm_layout: ALMDashboardLay
     chart_res.title = "Economic Reserve"
     chart_res.y_axis.title = "Reserve ($)"
     chart_res.x_axis.title = "Attained Age"
-    data_res = Reference(wb["Projection"], min_col=22, min_row=2, max_row=proj_end)
-    cats_res_age = Reference(wb["Projection"], min_col=3, min_row=2, max_row=proj_end)
+    data_res = Reference(liab, min_col=22, min_row=2, max_row=proj_end)
+    cats_res_age = Reference(liab, min_col=3, min_row=2, max_row=proj_end)
     chart_res.add_data(data_res, titles_from_data=False)
     chart_res.set_categories(cats_res_age)
     chart_res.height = 6
     chart_res.width = 18
     ws.add_chart(chart_res, "A36")
 
-    ws["A54"] = "Checkpoint Metrics (Nearest Monthly Projection Point)"
+    ws["A54"] = "Checkpoint metrics (nearest monthly point on Liabilities sheet)"
     ws["A54"].font = Font(bold=True)
-    cp_headers = ["Target Age", "Projection Row", "Survival", "Exp Benefit ($)", "Exp Expense ($)", "Reserve ($)"]
+    cp_headers = ["Target Age", "Liabilities row", "Survival", "Exp Benefit ($)", "Exp Expense ($)", "Reserve ($)"]
     for c, h in enumerate(cp_headers, start=1):
         ws.cell(row=55, column=c, value=h).font = Font(bold=True)
 
@@ -864,14 +914,14 @@ def _write_dashboard(wb: Workbook, n_months: int, *, alm_layout: ALMDashboardLay
     for i, age in enumerate(checkpoint_ages, start=56):
         ws[f"A{i}"] = age
         ws[f"B{i}"] = (
-            f"=IFERROR(MATCH(A{i},Projection!$C$4:$C${3+n_months},0)+3,"
-            f"IF(A{i}<INDEX(Projection!$C$4:$C${3+n_months},1),4,"
-            f"MATCH(A{i},Projection!$C$4:$C${3+n_months},1)+3))"
+            f"=IFERROR(MATCH(A{i},{LIABILITY_SHEET_NAME}!$C$4:$C${3+n_months},0)+3,"
+            f"IF(A{i}<INDEX({LIABILITY_SHEET_NAME}!$C$4:$C${3+n_months},1),4,"
+            f"MATCH(A{i},{LIABILITY_SHEET_NAME}!$C$4:$C${3+n_months},1)+3))"
         )
-        ws[f"C{i}"] = f"=INDEX(Projection!$N:$N,B{i})"
-        ws[f"D{i}"] = f"=INDEX(Projection!$Q:$Q,B{i})"
-        ws[f"E{i}"] = f"=INDEX(Projection!$R:$R,B{i})"
-        ws[f"F{i}"] = f"=INDEX(Projection!$V:$V,B{i})"
+        ws[f"C{i}"] = f"=INDEX({LIABILITY_SHEET_NAME}!$N:$N,B{i})"
+        ws[f"D{i}"] = f"=INDEX({LIABILITY_SHEET_NAME}!$Q:$Q,B{i})"
+        ws[f"E{i}"] = f"=INDEX({LIABILITY_SHEET_NAME}!$R:$R,B{i})"
+        ws[f"F{i}"] = f"=INDEX({LIABILITY_SHEET_NAME}!$V:$V,B{i})"
 
     for r in range(56, 56 + len(checkpoint_ages)):
         ws[f"C{r}"].number_format = "0.000000"
@@ -935,14 +985,14 @@ def _write_model_check_sheet(
     alm_layout: ALMDashboardLayout | None = None,
     alm_snapshot: ALMExcelSnapshot | None = None,
 ) -> None:
-    """Embed Python pricing outputs next to Projection summary formulas; optional ALM row checks vs ALM_Projection."""
+    """Embed Python pricing outputs next to Liabilities summary formulas; optional ALM row checks vs ALM_Projection."""
     ws = wb.create_sheet("ModelCheck")
-    ws["A1"] = "Python snapshot vs Excel (Projection; optional ALM_Projection)"
+    ws["A1"] = f"Python snapshot vs Excel ({LIABILITY_SHEET_NAME}; optional ALM_Projection)"
     ws["A1"].font = Font(bold=True, size=12)
     ws["A2"] = (
         "Column B is the Python snapshot at export. Column C points at workbook formulas or embedded ALM cells; "
         "column D should be ~0 after recalc if Inputs match the launcher. "
-        "ALM: liability PV on ALM_Projection links to Projection; surplus and funding use sheet formulas; "
+        f"ALM: liability PV on ALM_Projection links to {LIABILITY_SHEET_NAME}; surplus and funding use sheet formulas; "
         f"asset MV is SUM of bucket columns; each bucket links to {ALM_ENGINE_SHEET} ladder MV columns."
     )
     ws.merge_cells("A2:D2")
@@ -953,11 +1003,11 @@ def _write_model_check_sheet(
         cell.font = Font(bold=True)
 
     pricing_rows: list[tuple[str, float, str, str]] = [
-        ("PV benefits", snap.pv_benefit, "=Projection!X4", "money"),
-        ("PV monthly expenses", snap.pv_monthly_expenses, "=Projection!X5", "money"),
-        ("PV monthly total (ben+exp)", snap.pv_monthly_total, "=Projection!X7", "money"),
-        ("Single premium", snap.single_premium, "=Projection!X8", "money"),
-        ("Annuity factor", snap.annuity_factor, "=Projection!X6", "factor"),
+        ("PV benefits", snap.pv_benefit, f"={LIABILITY_SHEET_NAME}!X4", "money"),
+        ("PV monthly expenses", snap.pv_monthly_expenses, f"={LIABILITY_SHEET_NAME}!X5", "money"),
+        ("PV monthly total (ben+exp)", snap.pv_monthly_total, f"={LIABILITY_SHEET_NAME}!X7", "money"),
+        ("Single premium", snap.single_premium, f"={LIABILITY_SHEET_NAME}!X8", "money"),
+        ("Annuity factor", snap.annuity_factor, f"={LIABILITY_SHEET_NAME}!X6", "factor"),
     ]
     row_idx = 5
     for label, val, xls_ref, kind in pricing_rows:
@@ -1175,7 +1225,7 @@ def build_workbook_from_spec(
     )
     idx_last_row = 3 + len(spec.index_scenario_df)
 
-    ws_proj = wb.create_sheet("Projection")
+    ws_proj = wb.create_sheet(LIABILITY_SHEET_NAME)
     _write_projection(ws_proj, n_months=n_months, y_last_row=y_last_row, idx_last_row=idx_last_row)
 
     alm_layout: ALMDashboardLayout | None = None

@@ -18,9 +18,6 @@ from openpyxl.utils import get_column_letter
 import spia_projection as sp
 
 ALM_ENGINE_SHEET = "ALM_Engine"
-ENGINE_SECTION_ROW = 39
-ENGINE_HDR_ROW = 40
-ENGINE_DATA_FIRST_ROW = 41
 
 
 def _L(c: int) -> str:
@@ -63,6 +60,8 @@ class ALMEngineLayout:
     col_mv_bond_start: int
     col_debt_eom: int
     n_bonds: int
+    # (Excel column letter, grid header text, full definition) sorted by column index
+    field_guide_rows: tuple[tuple[str, str, str], ...]
 
 
 def write_alm_engine_sheet(
@@ -75,6 +74,7 @@ def write_alm_engine_sheet(
     initial_aum: float,
     snap_bucket_names: tuple[str, ...],
     engine_step_months: int = 1,
+    liability_sheet_name: str = "Liabilities",
 ) -> ALMEngineLayout:
     if asm.rebalance_policy != "liquidity_only":
         raise ValueError(
@@ -98,22 +98,24 @@ def write_alm_engine_sheet(
     if tuple(str(b.name) for b in buckets) != snap_bucket_names:
         raise ValueError("Allocation buckets must match ALMExcelSnapshot.bucket_names.")
 
+    sh = str(liability_sheet_name)
+
     nom = np.array([float(buckets[k + 1].tenor_years) for k in range(nb)], dtype=float)
     wsum_b = float(np.sum(w[1:]))
     wnorm = [float(w[k + 1]) / wsum_b for k in range(nb)] if wsum_b > 1e-15 else [1.0 / nb] * nb
 
-    ws["A1"] = "ALM_Engine — Treasury ladder (YieldCurve + Projection S)"
+    ws["A1"] = f"ALM_Engine — Treasury ladder (YieldCurve + {sh} cash outflows)"
     ws["A1"].font = Font(bold=True, size=12)
     if variable_period:
         ws["A2"] = (
-            "Multi-month rows: **dt_y** = period length (yr); **cf** = SUM(Projection S) in period. "
-            f"Grid row {ENGINE_DATA_FIRST_ROW}+. liquidity_only."
+            f"Multi-month rows: **dt_y** = period length (yr); **cf** = SUM({sh} col ExpTotalCF) in period. "
+            "Data grid starts just below bond parameters. liquidity_only."
         )
         ws["A6"], ws["B6"] = ("Δt note", "(use dt_y col; B6 unused)")
     else:
         ws["A2"] = (
-            f"Monthly rows; **B6** = Δt (yr); **cf** = Projection S for that month. "
-            f"Collapse column groups for detail. Row {ENGINE_DATA_FIRST_ROW}+. liquidity_only."
+            f"Monthly rows; **B6** = Δt (yr); **cf** = SPIA outflow for that month ({sh} col ExpTotalCF). "
+            "Collapse column groups for ladder detail. liquidity_only."
         )
         ws["A6"], ws["B6"] = "Δt (years)", 1.0 / 12.0
     ws.merge_cells("A2:J2")
@@ -157,117 +159,352 @@ def write_alm_engine_sheet(
             value=f"={_excel_df_flat(t_cell=f'$E${w_row0 + k}', y_last_row=y_last_row)}",
         )
 
-    # ---- Fixed column layout (1-based) + row ENGINE_HDR_ROW labels ----
+    last_param_row = w_row0 + nb - 1
+    engine_section_row = last_param_row + 2
+    engine_hdr_row = engine_section_row + 1
+    engine_data_first_row = engine_hdr_row + 1
+
+    # ---- Column layout (1-based) + header row directly under parameters (no fixed blank gap) ----
     c = 1
     col: dict[str, int | list[int]] = {}
     hdr_by_col: dict[int, str] = {}
+    col_gloss: dict[int, str] = {}
 
-    def take1(name: str, header: str) -> int:
+    def take1(name: str, header: str, gloss: str) -> int:
         nonlocal c
         cc = c
         hdr_by_col[cc] = header
+        col_gloss[cc] = gloss
         col[name] = cc
         c += 1
         return cc
 
-    def taken(name: str, n: int, header_for_index: Callable[[int], str]) -> list[int]:
+    def taken(
+        name: str,
+        n: int,
+        header_for_index: Callable[[int], str],
+        gloss_for_index: Callable[[int], str],
+    ) -> list[int]:
         nonlocal c
         cols = list(range(c, c + n))
         for j, cc in enumerate(cols):
             hdr_by_col[cc] = header_for_index(j)
+            col_gloss[cc] = gloss_for_index(j)
         col[name] = cols
         c += n
         return cols
 
-    take1("mon", "Month # (→ Projection col A)")
+    take1(
+        "mon",
+        f"Month index (matches {sh}! column A)",
+        "Calendar month index (1-based) for this engine row; must align with the liability cashflow sheet month column.",
+    )
     if variable_period:
-        take1("m0", "Period start month")
-        take1("dt_y", "Period length (yr)")
-        take1("cf", "Σ Projection S (period)")
+        take1(
+            "m0",
+            "Period start month",
+            "First calendar month included in this row's cashflow aggregation (multi-month steps only).",
+        )
+        take1(
+            "dt_y",
+            "Period length (years)",
+            "Length of the period in years used for interest accrual and tenor roll (sum of months / 12).",
+        )
+        take1(
+            "cf",
+            f"SPIA outflows in period ($, {sh})",
+            f"Sum of expected benefit plus expense cash outflows from **{sh}** column ExpTotalCF for all months in the period.",
+        )
     else:
-        take1("cf", "Liability CF (Proj S)")
-    take1("d_acc", "Debt after accrual")
-    t_pm = taken("t_pm", nb, lambda i: f"B{i + 1} tenor (y)")
-    mat = taken("mat", nb, lambda i: f"B{i + 1} mat $")
-    f_pm = taken("f_pm", nb, lambda i: f"B{i + 1} face post-mat")
-    take1("cash_m", "Cash + maturities")
-    take1("rep1", "Repay debt (1)")
-    take1("cash_r1", "Cash post-repay1")
-    take1("debt_r1", "Debt post-repay1")
-    df_pm = taken("df_pm", nb, lambda i: f"B{i + 1} DF")
-    mv_pm = taken("mv_pm", nb, lambda i: f"B{i + 1} MV")
-    take1("aum_re", "AUM pre-rebal")
-    take1("xsr", "Cash vs target")
-    defc = taken("defc", nb, lambda i: f"B{i + 1} MV gap")
-    take1("dsum", "Σ MV gaps")
-    split = taken("split", nb, lambda i: f"B{i + 1} reinvest %")
-    dmv = taken("dmv", nb, lambda i: f"B{i + 1} reinvest $")
-    take1("cash_re", "Cash post-reinvest")
-    f_re = taken("f_re", nb, lambda i: f"B{i + 1} face reinvest")
-    t_re = taken("t_re", nb, lambda i: f"B{i + 1} tenor reinvest")
-    take1("cash_cf", "Cash − CF")
-    take1("need_raw", "Need (raw)")
-    take1("cash_bb", "Cash (borrow 1st)")
-    take1("debt_bb", "Debt (borrow 1st)")
-    take1("need_dis", "Need (sell)")
+        take1(
+            "cf",
+            f"SPIA outflow, $ ({sh} ExpTotalCF)",
+            f"Expected SPIA benefit plus expense cash outflow for the month from **{sh}** column ExpTotalCF (same as column S).",
+        )
+    take1(
+        "d_acc",
+        "Borrowing after accrual ($)",
+        "Outstanding borrowing balance after accruing interest at the scenario or fixed borrow rate for Δt.",
+    )
+    t_pm = taken(
+        "t_pm",
+        nb,
+        lambda i: f"Bond {i + 1}: tenor after roll (y)",
+        lambda i: (
+            f"Remaining maturity in years for bond bucket {i + 1} after rolling time forward by Δt "
+            "(zero when the bond pays at month-end)."
+        ),
+    )
+    mat = taken(
+        "mat",
+        nb,
+        lambda i: f"Bond {i + 1}: maturity principal ($)",
+        lambda i: f"Face value paid in cash when bucket {i + 1}'s tenor reaches zero this month.",
+    )
+    f_pm = taken(
+        "f_pm",
+        nb,
+        lambda i: f"Bond {i + 1}: face after maturities ($)",
+        lambda i: f"Face amount remaining after maturity payouts for bucket {i + 1}.",
+    )
+    take1(
+        "cash_m",
+        "Cash + maturity proceeds ($)",
+        "Beginning-of-step cash (with growth rules) plus all principal returned from maturing bonds.",
+    )
+    take1(
+        "rep1",
+        "Debt repayment, pass 1 ($)",
+        "Cash used to repay borrowing before reinvestment (minimum of cash and debt after accrual).",
+    )
+    take1(
+        "cash_r1",
+        "Cash after repayment 1 ($)",
+        "Cash remaining after the first debt repayment leg.",
+    )
+    take1(
+        "debt_r1",
+        "Debt after repayment 1 ($)",
+        "Borrowing balance after the first repayment leg.",
+    )
+    df_pm = taken(
+        "df_pm",
+        nb,
+        lambda i: f"Bond {i + 1}: discount factor",
+        lambda i: (
+            f"Zero-coupon discount factor for bucket {i + 1} at its post-roll tenor using **YieldCurve** "
+            "and **Inputs** spread (continuously compounded log-linear zeros)."
+        ),
+    )
+    mv_pm = taken(
+        "mv_pm",
+        nb,
+        lambda i: f"Bond {i + 1}: market value ($)",
+        lambda i: f"Mark-to-market value of bucket {i + 1} (face after maturities × discount factor).",
+    )
+    take1(
+        "aum_re",
+        "Total assets before reinvest ($)",
+        "Cash after repayment 1 plus sum of bond market values — AUM before target-weight reinvestment.",
+    )
+    take1(
+        "xsr",
+        "Cash surplus vs target ($)",
+        "Actual cash minus policy target cash (cash weight × total AUM); drives reinvestment into bonds when positive.",
+    )
+    defc = taken(
+        "defc",
+        nb,
+        lambda i: f"Bond {i + 1}: gap to target MV ($)",
+        lambda i: (
+            f"Dollar shortfall of bucket {i + 1} versus its policy weight times total AUM "
+            "(zero if bond is overweight)."
+        ),
+    )
+    take1(
+        "dsum",
+        "Sum of bond gaps ($)",
+        "Total of all bond bucket gaps; used to split reinvestment when rebalancing toward targets.",
+    )
+    split = taken(
+        "split",
+        nb,
+        lambda i: f"Bond {i + 1}: reinvest share",
+        lambda i: f"Fraction of aggregate reinvestment allocated to bucket {i + 1} (pro-rata to gaps or weights).",
+    )
+    dmv = taken(
+        "dmv",
+        nb,
+        lambda i: f"Bond {i + 1}: buy from cash ($)",
+        lambda i: f"Dollars taken from cash to purchase new par in bucket {i + 1} when underweight.",
+    )
+    take1(
+        "cash_re",
+        "Cash after reinvestment ($)",
+        "Cash after spending on reinvestment purchases (hold-cash rule skips purchases).",
+    )
+    f_re = taken(
+        "f_re",
+        nb,
+        lambda i: f"Bond {i + 1}: face after reinvest ($)",
+        lambda i: f"Face amount after reinvestment for bucket {i + 1}.",
+    )
+    t_re = taken(
+        "t_re",
+        nb,
+        lambda i: f"Bond {i + 1}: tenor after reinvest (y)",
+        lambda i: f"Tenor in years after reinvestment for bucket {i + 1} (new purchases at bucket nominal tenor if flat).",
+    )
+    take1(
+        "cash_cf",
+        "Cash net of SPIA outflow ($)",
+        "Cash after reinvestment minus this row's liability cash outflow.",
+    )
+    take1(
+        "need_raw",
+        "Liquidity need before policy ($)",
+        "Shortfall if SPIA outflow exceeds cash (before borrow-first or sell rules).",
+    )
+    take1(
+        "cash_bb",
+        "Cash after borrow-first ($)",
+        "Cash if borrowing before selling is enabled: need may be funded by increasing debt first.",
+    )
+    take1(
+        "debt_bb",
+        "Debt after borrow-first ($)",
+        "Borrowing balance after optional borrow-before-sell leg.",
+    )
+    take1(
+        "need_dis",
+        "Need met by selling bonds ($)",
+        "Remaining liquidity need to be covered by disinvesting bonds (zero if borrow-first cleared it).",
+    )
     # One DF @ post-reinvest tenor per bond; disinvest block references these cells
     # (inlining DF formulas hits Excel's 8192-char limit).
-    dfd = taken("dfd", nb, lambda i: f"B{i + 1} DF (dis)")
+    dfd = taken(
+        "dfd",
+        nb,
+        lambda i: f"Bond {i + 1}: DF for disinvest",
+        lambda i: (
+            f"Discount factor at post-reinvest tenor for bucket {i + 1}, used to price bond sales when raising cash."
+        ),
+    )
 
     n_dis = nb + 2  # pro_rata disinvest may need > nb peels
     dis_need: list[int] = []
     dis_cash: list[int] = []
     dis_face: list[list[int]] = []
     for di in range(n_dis):
-        dis_need.append(take1(f"nd{di}", f"D{di + 1} need"))
-        dis_cash.append(take1(f"cd{di}", f"D{di + 1} cash"))
+        dis_need.append(
+            take1(
+                f"nd{di}",
+                f"Disinvest pass {di + 1}: need left ($)",
+                f"Remaining liquidity need after pass {di + 1} of bond sales (shortest-first or pro-rata by MV).",
+            )
+        )
+        dis_cash.append(
+            take1(
+                f"cd{di}",
+                f"Disinvest pass {di + 1}: cash ($)",
+                f"Cash after pass {di + 1} of bond sales.",
+            )
+        )
         dis_face.append(
             taken(
                 f"fd{di}",
                 nb,
-                lambda i, d=di: f"D{d + 1}b{i + 1} face",
+                lambda i, d=di: f"Pass {d + 1}: bond {i + 1} face ($)",
+                lambda i, d=di: (
+                    f"Face remaining in bucket {i + 1} after disinvestment pass {d + 1}; "
+                    f"extra passes support pro-rata peels."
+                ),
             )
         )
 
-    take1("cash_pd", "Cash post-D")
-    take1("debt_pb", "Debt post-policy")
-    take1("need_b2", "Borrow need (2)")
-    take1("cash_br2", "Cash pre-repay2")
-    take1("debt_br2", "Debt pre-repay2")
-    take1("rep2", "Repay (2)")
-    take1("cash_af2", "Cash pre-carry")
-    take1("debt_af2", "Debt pre-carry")
-    de = take1("de_e", "Debt EOM")
-    ce = take1("ca_e", "Cash EOM")
-    fe = taken("fe", nb, lambda i: f"B{i + 1} face EOM")
-    te = taken("te", nb, lambda i: f"B{i + 1} tenor EOM")
-    mv0 = take1("mv0", "MV cash → ALM_Proj")
-    mvb = taken("mvb", nb, lambda i: f"B{i + 1} MV EOM")
+    take1(
+        "cash_pd",
+        "Cash after disinvest ($)",
+        "Cash after all disinvestment passes and borrow-first effects.",
+    )
+    take1(
+        "debt_pb",
+        "Debt after borrow / sell ($)",
+        "Borrowing after disinvestment and intermediate policy steps.",
+    )
+    take1(
+        "need_b2",
+        "Borrow need, pass 2 ($)",
+        "Residual shortfall if cash is still negative after disinvest (second borrow leg when not borrow-first).",
+    )
+    take1(
+        "cash_br2",
+        "Cash before repay 2 ($)",
+        "Cash after optional second borrowing.",
+    )
+    take1(
+        "debt_br2",
+        "Debt before repay 2 ($)",
+        "Debt before final scheduled repayment.",
+    )
+    take1(
+        "rep2",
+        "Debt repayment, pass 2 ($)",
+        "Second repayment of debt from available cash.",
+    )
+    take1(
+        "cash_af2",
+        "Cash end before carry ($)",
+        "Cash after second repayment, before end-of-month carry.",
+    )
+    take1(
+        "debt_af2",
+        "Debt end before carry ($)",
+        "Debt after second repayment.",
+    )
+    de = take1(
+        "de_e",
+        "Borrowing balance EOM ($)",
+        "Closing borrowing balance for the month.",
+    )
+    ce = take1(
+        "ca_e",
+        "Cash balance EOM ($)",
+        "Closing cash balance for the month.",
+    )
+    fe = taken(
+        "fe",
+        nb,
+        lambda i: f"Bond {i + 1}: face EOM ($)",
+        lambda i: f"Closing face amount for bucket {i + 1}.",
+    )
+    te = taken(
+        "te",
+        nb,
+        lambda i: f"Bond {i + 1}: tenor EOM (y)",
+        lambda i: f"Closing tenor in years for bucket {i + 1}.",
+    )
+    mv0 = take1(
+        "mv0",
+        "Cash for ALM_Projection ($)",
+        "Closing cash — links to **ALM_Projection** bucket column for cash.",
+    )
+    mvb = taken(
+        "mvb",
+        nb,
+        lambda i: f"Bond {i + 1}: MV EOM ($)",
+        lambda i: f"Closing market value for bucket {i + 1} (face EOM × discount factor at tenor EOM).",
+    )
     last_col = c - 1
 
     def C(name: str) -> int | list[int]:
         return col[name]
 
+    field_guide_rows = tuple(
+        (get_column_letter(cc), hdr_by_col[cc], col_gloss[cc]) for cc in range(1, last_col + 1)
+    )
+
     ws.merge_cells(
-        start_row=ENGINE_SECTION_ROW,
+        start_row=engine_section_row,
         start_column=1,
-        end_row=ENGINE_SECTION_ROW,
+        end_row=engine_section_row,
         end_column=last_col,
     )
-    sec = ws.cell(row=ENGINE_SECTION_ROW, column=1)
+    sec = ws.cell(row=engine_section_row, column=1)
     sec.value = (
-        "Data grid: left→right = accrue → maturities → rebalance/reinvest → fund CF → disinvest → EOM. "
-        "B1…Bn = bond buckets. Use Excel outline (collapse ▶) to hide ladder detail."
+        "Data grid (read left to right): accrue borrowing → roll tenors / maturities → repay debt → "
+        "mark bonds → rebalance toward targets → fund SPIA outflow → disinvest if needed → final borrow/repay → EOM. "
+        "Bond 1…n = Treasury buckets. Use Excel outline (collapse ▶) to hide inner columns."
     )
     sec.font = Font(bold=True, size=11)
     sec.alignment = Alignment(wrap_text=True, vertical="center")
-    ws.row_dimensions[ENGINE_SECTION_ROW].height = 36
+    ws.row_dimensions[engine_section_row].height = 36
 
     for cc in range(1, last_col + 1):
-        hcell = ws.cell(row=ENGINE_HDR_ROW, column=cc, value=hdr_by_col.get(cc, ""))
+        hcell = ws.cell(row=engine_hdr_row, column=cc, value=hdr_by_col.get(cc, ""))
         hcell.font = Font(bold=True, size=9)
         hcell.alignment = Alignment(wrap_text=True, vertical="top")
-    ws.row_dimensions[ENGINE_HDR_ROW].height = 44
+    ws.row_dimensions[engine_hdr_row].height = 44
     for cc in range(1, last_col + 1):
         ws.column_dimensions[get_column_letter(cc)].width = 10.5
     tpm_cols = C("t_pm")
@@ -279,9 +516,9 @@ def write_alm_engine_sheet(
     o_lo, o_hi = int(tpm_cols[0]), int(last_fd[-1])
     for cc in range(o_lo, o_hi + 1):
         ws.column_dimensions[get_column_letter(cc)].outline_level = 1
-    ws.freeze_panes = f"B{ENGINE_DATA_FIRST_ROW}"
+    ws.freeze_panes = None
 
-    R0 = ENGINE_DATA_FIRST_ROW
+    R0 = engine_data_first_row
     WBASE = w_row0
     n_periods = len(period_end_months_1based)
     mon_c = int(C("mon"))
@@ -300,13 +537,13 @@ def write_alm_engine_sheet(
             ws.cell(
                 row=r,
                 column=cf_i,
-                value=f'=SUM(INDIRECT("Projection!S"&(3+{_L(m0_c)}{r})&":S"&(3+{_L(mon_c)}{r})))',
+                value=f'=SUM(INDIRECT("{sh}!S"&(3+{_L(m0_c)}{r})&":S"&(3+{_L(mon_c)}{r})))',
             )
         else:
             ws.cell(
                 row=r,
                 column=cf_i,
-                value=f"=INDEX(Projection!$S:$S,3+{_L(mon_c)}{r})",
+                value=f"=INDEX({sh}!$S:$S,3+{_L(mon_c)}{r})",
             )
 
         d_acc = int(C("d_acc"))
@@ -564,4 +801,5 @@ def write_alm_engine_sheet(
         col_mv_bond_start=int(mvb_l[0]),
         col_debt_eom=int(C("de_e")),
         n_bonds=nb,
+        field_guide_rows=field_guide_rows,
     )
