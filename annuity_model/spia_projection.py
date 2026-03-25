@@ -1198,7 +1198,11 @@ def yield_curve_twist_linear_bps(
     Intermediate maturities interpolate linearly within each segment.
     """
     mats = np.asarray(yield_curve.maturities_years, dtype=float)
+    if mats.size == 0:
+        raise ValueError("yield_curve_twist_linear_bps requires a non-empty yield curve.")
     zeros = np.asarray(yield_curve.zero_rates, dtype=float).copy()
+    if zeros.shape != mats.shape:
+        raise ValueError("yield_curve maturities_years and zero_rates must have the same shape.")
     p = float(max(pivot_years, 1e-9))
     t_end = float(max(np.max(mats), p, 1e-9))
     mid_bps = 0.5 * (float(bps_short) + float(bps_long))
@@ -1250,6 +1254,16 @@ class ALMAssumptions:
     disinvest_rule: ALMDisinvestRule
     # Liquidity buffer: cash + bond MV with residual maturity <= this (years) counts as "near-liquid".
     liquidity_near_liquid_years: float = 0.25
+
+    def __post_init__(self) -> None:
+        b = float(self.rebalance_band)
+        if not math.isfinite(b) or b < 0.0 or b > 1.0:
+            raise ValueError("rebalance_band must be finite and in [0, 1].")
+        if int(self.rebalance_frequency_months) < 1:
+            raise ValueError("rebalance_frequency_months must be >= 1.")
+        liq = float(self.liquidity_near_liquid_years)
+        if not math.isfinite(liq) or liq < 0.0:
+            raise ValueError("liquidity_near_liquid_years must be finite and non-negative.")
 
 
 @dataclass(frozen=True)
@@ -1614,7 +1628,12 @@ def run_alm_projection(
         L = liability_pv_after_paid_months(pricing, yc_l, spread, m, cashflows=cf)
         asset_mv[m] = aum_end
         liab_pv[m] = L
-        fr[m] = aum_end / L if L > 1e-9 else float("inf") if aum_end > 0 else 0.0
+        if L > 1e-9:
+            fr[m] = aum_end / L
+        elif aum_end > 0.0:
+            fr[m] = float("inf")
+        else:
+            fr[m] = 0.0
         surp[m] = aum_end - L
 
         liquid = float(cash)

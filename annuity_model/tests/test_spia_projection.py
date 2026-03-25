@@ -822,3 +822,21 @@ def test_liability_pv_cashflows_length_guard():
     with pytest.raises(ValueError, match="cashflows length"):
         sp.liability_pv_after_paid_months(res, yc, 0.0, -1, cashflows=bad)
 
+
+def test_yield_curve_twist_rejects_empty_curve():
+    empty = sp.YieldCurve(maturities_years=np.array([], dtype=float), zero_rates=np.array([], dtype=float))
+    with pytest.raises(ValueError, match="non-empty"):
+        sp.yield_curve_twist_linear_bps(empty, bps_short=1.0, bps_long=2.0)
+
+
+def test_alm_assumptions_validates_rebalance_band():
+    alloc = sp.alm_default_allocation_spec()
+    with pytest.raises(ValueError, match="rebalance_band"):
+        sp.ALMAssumptions(
+            allocation=alloc,
+            rebalance_band=1.5,
+            rebalance_frequency_months=1,
+            reinvest_rule="hold_cash",
+            disinvest_rule="shortest_first",
+        )
+

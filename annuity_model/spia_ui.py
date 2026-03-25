@@ -1445,11 +1445,14 @@ def _render_alm_section() -> None:
 
     last = st.session_state.get("alm_last")
     if isinstance(last, sp.ALMResult):
-        st.subheader("ALM metrics (issue snapshot from engine)")
+        st.subheader("ALM metrics (first month-end)")
+        st.caption(
+            "Path metrics are recorded after each month’s flows and trades. Scalar PV01 and durations are issue-time (initial portfolio)."
+        )
         m1, m2, m3, m4, m5 = st.columns(5)
         with m1:
             fr0 = float(last.funding_ratio[0]) if last.funding_ratio.size else float("nan")
-            st.metric("Funding ratio (m=1)", f"{fr0:.3f}")
+            st.metric("Funding ratio (month 1)", f"{fr0:.3f}")
         with m2:
             st.metric("Surplus ($)", f"${float(last.surplus[0]):,.0f}")
         with m3:
