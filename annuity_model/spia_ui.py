@@ -68,11 +68,20 @@ SECTION_LABELS: dict[str, str] = {
     "overview": "Overview",
     "run": "Pricing Run",
     "charts": "Charts",
+    "alm": "ALM",
     "what_if": "What-if Analysis",
     "excel_replicator": "Excel Replicator",
     "tests": "Unit Tests",
 }
-SECTION_ORDER: list[str] = list(SECTION_LABELS.keys())
+SECTION_ORDER: list[str] = [
+    "overview",
+    "run",
+    "charts",
+    "alm",
+    "what_if",
+    "excel_replicator",
+    "tests",
+]
 
 # Keep this list updated whenever capabilities change; overview is generated from it.
 MODEL_FEATURES: list[str] = [
@@ -84,6 +93,8 @@ MODEL_FEATURES: list[str] = [
     "Dedicated Charts section with index, survival, PV, reserve, and profit decomposition waterfall visuals.",
     "What-if studio with live shocks (rates, spread, inflation, longevity, equity regime, expense ratio).",
     "Before/after/impact dashboard for premium, margin, reserve path, and tail-risk distribution.",
+    "ALM tab: Treasury ladder + cash, drift-band rebalancing, disinvestment rules, and five KPIs tied to the pricing run.",
+    "What-if ALM shocks: parallel earned-rate tilt on assets, twist across tenors, and liability cashflow stress with KPI deltas.",
     "Excel replicator export with ModelCheck parity and optional MC_Summary workbook content.",
     "Embedded unit-test dashboard for quick verification inside Streamlit.",
 ]
@@ -468,6 +479,38 @@ def _render_what_if_studio() -> None:
         )
         mc_sims = st.slider("Tail-risk MC simulations", min_value=200, max_value=5000, value=800, step=200)
 
+    st.markdown("**ALM add-on shocks**")
+    st.caption(
+        "These apply on top of the main What-if scenario. Asset curve shocks tilt **mark-to-market** on the Treasury ladder; "
+        "liability stress scales **After** SPIA outflows in the ALM engine. "
+        "Uses assumptions from the **ALM** tab if you ran them there; otherwise built-in defaults."
+    )
+    wa1, wa2, wa3, wa4 = st.columns(4)
+    with wa1:
+        alm_asset_parallel_bps = st.slider(
+            "Asset earned-rate parallel shift (bps)",
+            min_value=-200,
+            max_value=200,
+            value=0,
+            step=5,
+            help="Extra parallel shift on the **After** zero curve for **asset** discounting only.",
+        )
+    with wa2:
+        alm_twist_short_bps = st.slider("Twist: short-end add-on (bps)", -75, 75, 0, 5)
+    with wa3:
+        alm_twist_long_bps = st.slider("Twist: long-end add-on (bps)", -75, 75, 0, 5)
+    with wa4:
+        alm_liability_cf_pct = st.slider(
+            "Liability outflow stress (%)",
+            -40.0,
+            40.0,
+            0.0,
+            0.5,
+            help="Scales **After** SPIA cash outflows in the ALM projection (stress on liquidity / disinvestment).",
+        )
+
+    alm_whatif_base: sp.ALMResult | None = None
+    alm_whatif_after: sp.ALMResult | None = None
     try:
         horizon_age = int(ctx.get("horizon_age", 110))
         base_spread = float(ctx.get("spread", 0.0))
@@ -566,6 +609,44 @@ def _render_what_if_studio() -> None:
             seed=42,
             s0=float(s0),
         )
+
+        try:
+            asm_wf = st.session_state.get("alm_last_assumptions")
+            if not isinstance(asm_wf, sp.ALMAssumptions):
+                asm_wf = sp.ALMAssumptions(
+                    allocation=sp.alm_default_allocation_spec(),
+                    rebalance_band=0.05,
+                    rebalance_frequency_months=1,
+                    reinvest_rule="hold_cash",
+                    disinvest_rule="shortest_first",
+                    liquidity_near_liquid_years=0.25,
+                )
+            alm_whatif_base = sp.run_alm_projection(
+                pricing=base_res,
+                yield_curve=base_curve,
+                spread=base_spread,
+                assumptions=asm_wf,
+            )
+            yc_alm_asset = sp.yield_curve_twist_linear_bps(
+                sp.yield_curve_parallel_bps(shocked_curve, float(alm_asset_parallel_bps)),
+                bps_short=float(alm_twist_short_bps),
+                bps_long=float(alm_twist_long_bps),
+            )
+            cf_alm = np.asarray(shocked_res.expected_total_cashflows, dtype=float) * (
+                1.0 + float(alm_liability_cf_pct) / 100.0
+            )
+            alm_whatif_after = sp.run_alm_projection(
+                pricing=shocked_res,
+                yield_curve=shocked_curve,
+                spread=shocked_spread,
+                assumptions=asm_wf,
+                asset_curve=yc_alm_asset,
+                liability_cashflows=cf_alm,
+            )
+        except Exception as alm_ex:
+            alm_whatif_base = None
+            alm_whatif_after = None
+            st.warning(f"ALM what-if layer skipped: {alm_ex!r}")
     except Exception as ex:
         st.error(f"What-if scenario failed: {ex!r}")
         return
@@ -637,6 +718,75 @@ def _render_what_if_studio() -> None:
         counts_a, edges_a = np.histogram(shocked_mc.single_premium, bins=35)
         mids_a = 0.5 * (edges_a[:-1] + edges_a[1:])
         st.bar_chart(_round_for_visuals(pd.DataFrame({"bin": mids_a, "count_after": counts_a}).set_index("bin")))
+
+    if alm_whatif_base is not None and alm_whatif_after is not None:
+        _alm_b = alm_whatif_base
+        _alm_a = alm_whatif_after
+        st.subheader("ALM KPI impact")
+        st.caption(
+            "Before = ALM on the **Pricing Run** baseline; After = ALM on the shocked liability pricing with **After** curve "
+            "for liability PV, optional extra asset **earned-rate** shifts, and scaled outflows. "
+            "**Liquidity buffer** = (cash + bonds within near-liquid residual maturity) divided by mean expected monthly "
+            "outflow over the next 12 months."
+        )
+
+        def _alm_snap(r: sp.ALMResult) -> dict[str, float]:
+            return {
+                "fr_m1": float(r.funding_ratio[0]) if r.funding_ratio.size else float("nan"),
+                "surp_m1": float(r.surplus[0]) if r.surplus.size else float("nan"),
+                "liq_m1": float(r.liquidity_buffer_months[0]) if r.liquidity_buffer_months.size else float("nan"),
+                "pv01_net": float(r.pv01_net),
+                "dur_gap": float(r.duration_gap),
+            }
+
+        sb = _alm_snap(_alm_b)
+        sa = _alm_snap(_alm_a)
+        alm_cmp = pd.DataFrame(
+            {
+                "Metric": [
+                    "Funding ratio (month-end 1)",
+                    "Surplus ($)",
+                    "Liquidity buffer (months)",
+                    "PV01 net ($ per 1bp)",
+                    "Duration gap (years)",
+                ],
+                "Before": [
+                    sb["fr_m1"],
+                    sb["surp_m1"],
+                    sb["liq_m1"],
+                    sb["pv01_net"],
+                    sb["dur_gap"],
+                ],
+                "After": [
+                    sa["fr_m1"],
+                    sa["surp_m1"],
+                    sa["liq_m1"],
+                    sa["pv01_net"],
+                    sa["dur_gap"],
+                ],
+            }
+        )
+        alm_cmp["Impact"] = alm_cmp["After"] - alm_cmp["Before"]
+        alm_show = alm_cmp.copy()
+        alm_show[["Before", "After", "Impact"]] = alm_show[["Before", "After", "Impact"]].round(4)
+        st.dataframe(alm_show, use_container_width=True, hide_index=True)
+
+        age_alm = base_contract.issue_age + _alm_b.times_years
+        path_cmp = pd.DataFrame(
+            {
+                "Funding ratio (before)": _alm_b.funding_ratio,
+                "Funding ratio (after)": _alm_a.funding_ratio,
+            },
+            index=age_alm,
+        )
+        st.markdown("**Funding ratio path**")
+        st.line_chart(path_cmp)
+        sur_cmp = pd.DataFrame(
+            {"Surplus before": _alm_b.surplus, "Surplus after": _alm_a.surplus},
+            index=age_alm,
+        )
+        st.markdown("**Surplus path**")
+        st.line_chart(_round_for_visuals(sur_cmp))
 
     st.caption(
         "Impact shown as After - Before. Tail risk uses the 95th percentile of simulated premiums under the selected equity regime."
@@ -825,6 +975,8 @@ def _render_run_and_results() -> None:
             )
             st.session_state["pricing_res"] = res
             st.session_state["pricing_contract"] = contract
+            st.session_state.pop("alm_last", None)
+            st.session_state.pop("alm_last_assumptions", None)
             st.session_state["pricing_err"] = None
             st.session_state["pricing_meta"] = {
                 "yield_mode": y_mode,
@@ -920,6 +1072,8 @@ def _render_run_and_results() -> None:
         except Exception as e:
             st.session_state["pricing_err"] = repr(e)
             st.session_state["pricing_res"] = None
+            st.session_state.pop("alm_last", None)
+            st.session_state.pop("alm_last_assumptions", None)
             st.session_state.pop("pricing_excel_context", None)
             st.session_state.pop("pricing_xlsx_bytes", None)
             st.session_state.pop("pricing_xlsx_built_error", None)
@@ -1163,6 +1317,182 @@ def _render_excel_replicator() -> None:
         st.warning("Excel workbook not available yet for this run.")
 
 
+def _render_alm_section() -> None:
+    st.header("Asset–liability management (ALM)")
+    st.caption(
+        "Dynamic Treasury ladder + cash versus priced SPIA outflows. Earned rate on assets and liability discounting use "
+        "the same zero curve + credit spread as **Pricing Run** for consistency. "
+        "Rebalancing uses a drift band versus target weights on the review months you choose."
+    )
+
+    res = st.session_state.get("pricing_res")
+    contract_state = st.session_state.get("pricing_contract")
+    ctx = st.session_state.get("pricing_excel_context") or {}
+    yc = ctx.get("yield_curve")
+    spr = float(ctx.get("spread", 0.0))
+
+    if (
+        res is None
+        or contract_state is None
+        or not isinstance(yc, sp.YieldCurve)
+    ):
+        st.info("Run **Pricing Run** first. ALM anchors on that liability path, curve, and spread.")
+        return
+
+    base_spec = sp.alm_default_allocation_spec()
+    n_bk = len(base_spec.buckets)
+
+    with st.expander("Target allocation (% weights, must sum to 100%)", expanded=True):
+        cols = st.columns(min(n_bk, 6))
+        raw: list[float] = []
+        for i, b in enumerate(base_spec.buckets):
+            with cols[i % len(cols)]:
+                raw.append(
+                    float(
+                        st.number_input(
+                            f"{b.name} %",
+                            min_value=0.0,
+                            max_value=100.0,
+                            value=float(round(base_spec.weights[i] * 100.0, 2)),
+                            step=0.5,
+                            key=f"alm_alloc_{i}",
+                        )
+                    )
+                )
+        norm_run = st.checkbox("Normalize percentages to 100% on run", value=True)
+        ws = np.array(raw, dtype=float) / 100.0
+        s = float(np.sum(ws))
+        if s <= 0.0:
+            st.error("Allocation must include positive weights.")
+        elif abs(s - 1.0) > 1e-3 and not norm_run:
+            st.warning(f"Weights currently sum to {s * 100:.2f}%. Enable normalization or adjust inputs.")
+        elif abs(s - 1.0) > 1e-3 and norm_run:
+            st.info(f"Weights sum to {s * 100:.2f}% — will scale to 100% on run.")
+
+    with st.expander("Rebalancing, flows, liquidity definition", expanded=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            band_pct = st.slider("Drift band vs targets (± share of AUM)", 0.5, 20.0, 5.0, 0.5)
+            freq_m = st.number_input("Check rebalance every N months", min_value=1, value=1, step=1)
+            near_liq_y = st.number_input(
+                "Near-liquid residual maturity (years)",
+                min_value=0.0,
+                max_value=3.0,
+                value=0.25,
+                step=0.05,
+                help="Liquidity buffer counts cash plus bond market value in buckets with residual maturity here or below.",
+            )
+        with c2:
+            reinvest = st.selectbox(
+                "Reinvest matured principal",
+                options=["hold_cash", "pro_rata"],
+                index=0,
+                format_func=lambda x: {
+                    "hold_cash": "Keep in cash until band rebalance (or next review)",
+                    "pro_rata": "Re-deploy into bonds pro-rata to bond targets (excess over cash target)",
+                }[x],
+            )
+            disinvest = st.selectbox(
+                "Disinvest if cash is short after outflows",
+                options=["shortest_first", "pro_rata"],
+                index=0,
+                format_func=lambda x: {
+                    "shortest_first": "Shortest residual maturity first",
+                    "pro_rata": "Pro-rata across bond buckets",
+                }[x],
+            )
+
+    aum0 = st.number_input(
+        "Initial asset market value ($)",
+        min_value=0.0,
+        value=float(res.single_premium),
+        step=10_000.0,
+        help="Usually the priced single premium invested at issue.",
+    )
+
+    run_alm = st.button("Run ALM projection", type="primary")
+    if run_alm:
+        if aum0 <= 0.0:
+            st.error("Initial assets must be positive.")
+        elif float(np.sum(ws)) <= 0.0:
+            st.error("Invalid allocation.")
+        else:
+            ws_run = ws.copy()
+            if norm_run and float(np.sum(ws_run)) > 0:
+                ws_run = ws_run / float(np.sum(ws_run))
+            try:
+                alloc = sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=ws_run)
+                asm = sp.ALMAssumptions(
+                    allocation=alloc,
+                    rebalance_band=float(band_pct) / 100.0,
+                    rebalance_frequency_months=int(freq_m),
+                    reinvest_rule=reinvest,  # type: ignore[arg-type]
+                    disinvest_rule=disinvest,  # type: ignore[arg-type]
+                    liquidity_near_liquid_years=float(near_liq_y),
+                )
+                out = sp.run_alm_projection(
+                    pricing=res,
+                    yield_curve=yc,
+                    spread=spr,
+                    assumptions=asm,
+                    initial_asset_market_value=float(aum0),
+                )
+                st.session_state["alm_last"] = out
+                st.session_state["alm_last_assumptions"] = asm
+                st.success("ALM projection complete.")
+            except Exception as ex:
+                st.error(f"ALM run failed: {ex!r}")
+
+    last = st.session_state.get("alm_last")
+    if isinstance(last, sp.ALMResult):
+        st.subheader("ALM metrics (issue snapshot from engine)")
+        m1, m2, m3, m4, m5 = st.columns(5)
+        with m1:
+            fr0 = float(last.funding_ratio[0]) if last.funding_ratio.size else float("nan")
+            st.metric("Funding ratio (m=1)", f"{fr0:.3f}")
+        with m2:
+            st.metric("Surplus ($)", f"${float(last.surplus[0]):,.0f}")
+        with m3:
+            st.metric("PV01 net ($/bp)", f"{float(last.pv01_net):,.0f}")
+        with m4:
+            st.metric("Duration gap (y)", f"{float(last.duration_gap):.2f}")
+        with m5:
+            lb0 = float(last.liquidity_buffer_months[0]) if last.liquidity_buffer_months.size else float("nan")
+            st.metric("Liquidity buffer (mo)", f"{lb0:.2f}")
+
+        st.subheader("Paths (attained age)")
+        age_ax = contract_state.issue_age + last.times_years
+        st.line_chart(
+            pd.DataFrame(
+                {"Funding ratio": last.funding_ratio, "Liability PV": last.liability_pv},
+                index=age_ax,
+            )
+        )
+        st.line_chart(
+            pd.DataFrame({"Surplus": last.surplus, "Asset MV path": last.asset_market_value}, index=age_ax)
+        )
+        st.line_chart(pd.DataFrame({"Liquidity buffer (months)": last.liquidity_buffer_months}, index=age_ax))
+
+        asm_vis = st.session_state.get("alm_last_assumptions")
+        if isinstance(asm_vis, sp.ALMAssumptions):
+            bnames = [b.name for b in asm_vis.allocation.buckets]
+        else:
+            bnames = [b.name for b in base_spec.buckets]
+        bucket_df = pd.DataFrame(last.bucket_asset_mv.T, columns=bnames, index=age_ax)
+        st.markdown("**Bucket market values**")
+        st.line_chart(_round_for_visuals(bucket_df))
+
+        kpi_tbl = pd.DataFrame(
+            {
+                "PV01 assets": [last.pv01_assets],
+                "PV01 liabilities": [last.pv01_liabilities],
+                "Mac duration assets": [last.duration_assets_mac],
+                "Mac duration liabilities": [last.duration_liabilities_mac],
+            }
+        )
+        st.dataframe(kpi_tbl.round(4), use_container_width=True, hide_index=True)
+
+
 def _render_charts_section() -> None:
     st.header("Charts")
 
@@ -1200,6 +1530,8 @@ def main() -> None:
         _render_run_and_results()
     elif page == "charts":
         _render_charts_section()
+    elif page == "alm":
+        _render_alm_section()
     elif page == "what_if":
         _render_what_if_studio()
     elif page == "excel_replicator":

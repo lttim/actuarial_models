@@ -35,6 +35,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional, Sequence, Tuple
 
+ALMReinvestRule = Literal["hold_cash", "pro_rata"]
+ALMDisinvestRule = Literal["shortest_first", "pro_rata"]
+
 import math
 
 import numpy as np
@@ -1166,6 +1169,497 @@ def price_spia_single_premium_monte_carlo(
         premium_p95=float(np.percentile(prem, 95.0)),
         pv_benefit_mean=float(np.mean(pvb)),
         pv_total_mean=float(np.mean(pvt)),
+    )
+
+
+# --- ALM (deterministic, single-scenario) ---------------------------------
+
+
+def yield_curve_parallel_bps(yield_curve: YieldCurve, bps: float) -> YieldCurve:
+    shift = float(bps) / 10000.0
+    return YieldCurve(
+        maturities_years=np.asarray(yield_curve.maturities_years, dtype=float).copy(),
+        zero_rates=np.asarray(yield_curve.zero_rates, dtype=float).copy() + shift,
+    )
+
+
+def yield_curve_twist_linear_bps(
+    yield_curve: YieldCurve,
+    *,
+    bps_short: float,
+    bps_long: float,
+    pivot_years: float = 5.0,
+) -> YieldCurve:
+    """
+    Add a piecewise-linear twist in zero rates (in bps) across curve nodes.
+
+    At maturity 0 (short end) the extra bump is ``bps_short``; at ``pivot_years`` the bump is the
+    average of short and long; at and beyond ``max(longest node, pivot_years)`` the bump is ``bps_long``.
+    Intermediate maturities interpolate linearly within each segment.
+    """
+    mats = np.asarray(yield_curve.maturities_years, dtype=float)
+    zeros = np.asarray(yield_curve.zero_rates, dtype=float).copy()
+    p = float(max(pivot_years, 1e-9))
+    t_end = float(max(np.max(mats), p, 1e-9))
+    mid_bps = 0.5 * (float(bps_short) + float(bps_long))
+
+    def bump_bps_at_t(t: float) -> float:
+        if t <= p:
+            u = t / p
+            return float(bps_short) * (1.0 - u) + mid_bps * u
+        u = (t - p) / max(t_end - p, 1e-9)
+        u = min(1.0, max(0.0, u))
+        return mid_bps * (1.0 - u) + float(bps_long) * u
+
+    for i, t in enumerate(mats):
+        zeros[i] += bump_bps_at_t(float(t)) / 10000.0
+    return YieldCurve(maturities_years=mats.copy(), zero_rates=zeros)
+
+
+@dataclass(frozen=True)
+class ALMBucketSpec:
+    """One investable bucket: cash (tenor 0) or Treasury ZCB ladder slot."""
+
+    name: str
+    tenor_years: float  # 0 for cash
+
+
+@dataclass(frozen=True)
+class ALMAllocationSpec:
+    """
+    Target mix across buckets. ``weights`` aligns with ``buckets``; must sum to 1.
+    """
+
+    buckets: Tuple[ALMBucketSpec, ...]
+    weights: np.ndarray
+
+    def __post_init__(self) -> None:
+        w = np.asarray(self.weights, dtype=float)
+        if w.shape != (len(self.buckets),):
+            raise ValueError("weights must have one entry per bucket.")
+        if np.any(w < -1e-12) or abs(float(np.sum(w)) - 1.0) > 1e-6:
+            raise ValueError("ALM weights must be non-negative and sum to 1.")
+
+
+@dataclass(frozen=True)
+class ALMAssumptions:
+    allocation: ALMAllocationSpec
+    rebalance_band: float
+    rebalance_frequency_months: int
+    reinvest_rule: ALMReinvestRule
+    disinvest_rule: ALMDisinvestRule
+    # Liquidity buffer: cash + bond MV with residual maturity <= this (years) counts as "near-liquid".
+    liquidity_near_liquid_years: float = 0.25
+
+
+@dataclass(frozen=True)
+class ALMResult:
+    """Monthly ALM path (end-of-month after liability and trades)."""
+
+    month_index: np.ndarray  # 0..n-1 paid months
+    times_years: np.ndarray
+    asset_market_value: np.ndarray
+    liability_pv: np.ndarray
+    funding_ratio: np.ndarray
+    surplus: np.ndarray
+    liquidity_buffer_months: np.ndarray
+    bucket_asset_mv: np.ndarray  # shape (n_buckets, n_months)
+    # Issue-time risk stats: PV01 is PV change from a +1bp parallel move to asset vs liability discounting
+    pv01_assets: float
+    pv01_liabilities: float
+    pv01_net: float
+    duration_assets_mac: float
+    duration_liabilities_mac: float
+    duration_gap: float
+
+
+def alm_default_allocation_spec() -> ALMAllocationSpec:
+    """5% cash + equal-weight Treasury ladder on the remainder (sums to 100%)."""
+    w_cash = 0.05
+    bond_names = ("1Y", "3Y", "5Y", "10Y", "20Y")
+    bond_tenors = (1.0, 3.0, 5.0, 10.0, 20.0)
+    n_b = len(bond_names)
+    w_each = (1.0 - w_cash) / n_b
+    buckets = (ALMBucketSpec("Cash", 0.0),) + tuple(
+        ALMBucketSpec(nm, ty) for nm, ty in zip(bond_names, bond_tenors)
+    )
+    w = np.array([w_cash] + [w_each] * n_b, dtype=float)
+    return ALMAllocationSpec(buckets=buckets, weights=w)
+
+
+def liability_pv_after_paid_months(
+    res: SPIAProjectionResult,
+    yield_curve: YieldCurve,
+    spread: float,
+    last_paid_index: int,
+    *,
+    cashflows: np.ndarray | None = None,
+) -> float:
+    """
+    PV at end of month ``last_paid_index`` (0-based CF index) of remaining expected outflows.
+
+    ``last_paid_index = -1`` -> PV at issue (t=0) of all ``expected_total_cashflows``.
+    """
+    cf = np.asarray(res.expected_total_cashflows if cashflows is None else cashflows, dtype=float)
+    ty = np.asarray(res.times_years, dtype=float)
+    if cf.shape != ty.shape:
+        raise ValueError("cashflows length must match pricing.times_years.")
+    n = cf.shape[0]
+    if last_paid_index >= n - 1:
+        return 0.0
+    if last_paid_index < 0:
+        df = yield_curve.discount_factors(ty, spread=spread)
+        return float(np.sum(cf * df))
+    t_now = float(ty[last_paid_index])
+    df_now = float(yield_curve.discount_factors(np.array([t_now]), spread=spread)[0])
+    if df_now <= 0.0:
+        return float("nan")
+    j = slice(last_paid_index + 1, n)
+    df_f = yield_curve.discount_factors(ty[j], spread=spread)
+    return float(np.sum(cf[j] * (df_f / df_now)))
+
+
+def _df_rem(yield_curve: YieldCurve, spread: float, t_rem_years: np.ndarray) -> np.ndarray:
+    t = np.maximum(np.asarray(t_rem_years, dtype=float), 0.0)
+    out = np.ones_like(t, dtype=float)
+    mask = t > 1e-15
+    if np.any(mask):
+        out[mask] = yield_curve.discount_factors(t[mask], spread=spread)
+    return out
+
+
+def _liability_mac_duration_years(
+    res: SPIAProjectionResult,
+    yield_curve: YieldCurve,
+    spread: float,
+    *,
+    cashflows: np.ndarray | None = None,
+) -> float:
+    cf = np.asarray(res.expected_total_cashflows if cashflows is None else cashflows, dtype=float)
+    ty = np.asarray(res.times_years, dtype=float)
+    if cf.shape != ty.shape:
+        raise ValueError("cashflows length must match pricing.times_years.")
+    df = yield_curve.discount_factors(ty, spread=spread)
+    pv = float(np.sum(cf * df))
+    if pv <= 0.0:
+        return 0.0
+    return float(np.sum(ty * cf * df) / pv)
+
+
+def _alm_micro_reinvest_pro_rata(
+    *,
+    cash: float,
+    faces: np.ndarray,
+    t_rem: np.ndarray,
+    w: np.ndarray,
+    yield_curve: YieldCurve,
+    spread: float,
+) -> tuple[float, np.ndarray]:
+    """After maturity credits: move cash above target into bonds pro-rata to bond weights."""
+    nb = faces.shape[0]
+    df = _df_rem(yield_curve, spread, t_rem)
+    mv = faces * df
+    aum = float(cash + np.sum(mv))
+    if aum <= 0.0:
+        return cash, faces
+    w_b = np.asarray(w[1:], dtype=float)
+    s = float(np.sum(w_b))
+    if s <= 1e-15:
+        return cash, faces
+    w_b = w_b / s
+    cash_tgt = float(w[0] * aum)
+    excess = float(cash - cash_tgt)
+    if excess <= 1e-6:
+        return cash, faces
+    faces = np.asarray(faces, dtype=float).copy()
+    cash = float(cash)
+    for k in range(nb):
+        if t_rem[k] <= 1e-14:
+            continue
+        d_mv = excess * float(w_b[k])
+        dff = float(df[k])
+        if dff <= 1e-15:
+            continue
+        faces[k] += d_mv / dff
+        cash -= d_mv
+    return cash, faces
+
+
+def _alm_disinvest(
+    *,
+    cash: float,
+    faces: np.ndarray,
+    t_rem: np.ndarray,
+    yield_curve: YieldCurve,
+    spread: float,
+    need: float,
+    rule: ALMDisinvestRule,
+) -> tuple[float, np.ndarray]:
+    faces = np.asarray(faces, dtype=float).copy()
+    cash = float(cash)
+    need = float(need)
+    if need <= 1e-9:
+        return cash, faces
+    df = _df_rem(yield_curve, spread, t_rem)
+    nb = faces.shape[0]
+    remaining = need
+
+    if rule == "pro_rata":
+        while remaining > 1e-6:
+            df = _df_rem(yield_curve, spread, t_rem)
+            mv = faces * df
+            mv_tot = float(np.sum(mv))
+            if mv_tot <= 1e-9:
+                break
+            for k in range(nb):
+                if mv[k] <= 1e-12:
+                    continue
+                take = remaining * (mv[k] / mv_tot)
+                dff = float(df[k])
+                if dff <= 1e-15:
+                    continue
+                redu = min(float(faces[k]), take / dff)
+                faces[k] -= redu
+                cash += redu * dff
+                remaining -= redu * dff
+        return cash, faces
+
+    # shortest_first: by remaining tenor then iterate
+    order = np.argsort(t_rem + (faces <= 1e-15) * 1e6)
+    for k in order:
+        if remaining <= 1e-9:
+            break
+        if faces[k] <= 1e-15:
+            continue
+        dff = float(df[k])
+        if dff <= 1e-15:
+            continue
+        redu = min(float(faces[k]), remaining / dff)
+        faces[k] -= redu
+        cash += redu * dff
+        remaining -= redu * dff
+        df = _df_rem(yield_curve, spread, t_rem)
+    return cash, faces
+
+
+def _alm_maybe_rebalance(
+    *,
+    cash: float,
+    faces: np.ndarray,
+    t_rem: np.ndarray,
+    w: np.ndarray,
+    yield_curve: YieldCurve,
+    spread: float,
+    band: float,
+    month: int,
+    freq: int,
+) -> tuple[float, np.ndarray]:
+    df = _df_rem(yield_curve, spread, t_rem)
+    mv = faces * df
+    aum = float(cash + np.sum(mv))
+    if aum <= 1e-9:
+        return cash, faces
+    w = np.asarray(w, dtype=float)
+    tgt = w * aum
+    tgt_mv_bonds = tgt[1:]
+    act = np.concatenate(([cash], mv))
+    drift = np.max(np.abs(act - tgt)) / aum
+    if (month + 1) % freq != 0:
+        return cash, faces
+    if drift <= float(band):
+        return cash, faces
+
+    faces = np.asarray(faces, dtype=float).copy()
+    for k in range(faces.shape[0]):
+        if t_rem[k] <= 1e-14:
+            faces[k] = 0.0
+            continue
+        dff = float(_df_rem(yield_curve, spread, np.array([t_rem[k]]))[0])
+        if dff <= 1e-15:
+            faces[k] = 0.0
+            continue
+        faces[k] = float(tgt_mv_bonds[k]) / dff
+    cash = float(aum - np.sum(faces * _df_rem(yield_curve, spread, t_rem)))
+    return cash, faces
+
+
+def run_alm_projection(
+    *,
+    pricing: SPIAProjectionResult,
+    yield_curve: YieldCurve,
+    spread: float,
+    assumptions: ALMAssumptions,
+    initial_asset_market_value: float | None = None,
+    asset_curve: YieldCurve | None = None,
+    liability_curve: YieldCurve | None = None,
+    liability_cashflows: np.ndarray | None = None,
+) -> ALMResult:
+    """
+    Roll forward Treasury ladder + cash against ``expected_total_cashflows``.
+
+    Optional ``asset_curve`` / ``liability_curve`` split discounting for bonds vs liability PV
+    (default: both use ``yield_curve``). Mark-to-market and liability PV include ``spread``.
+
+    ``liability_cashflows`` overrides ``pricing.expected_total_cashflows`` when provided (same length).
+    """
+    if initial_asset_market_value is None:
+        initial_asset_market_value = float(pricing.single_premium)
+    aum0 = float(initial_asset_market_value)
+    if aum0 <= 0.0:
+        raise ValueError("initial_asset_market_value must be positive.")
+
+    yc_a = asset_curve if asset_curve is not None else yield_curve
+    yc_l = liability_curve if liability_curve is not None else yield_curve
+
+    spec = assumptions.allocation
+    buckets = spec.buckets
+    w = np.asarray(spec.weights, dtype=float)
+    n_b = len(buckets) - 1
+    if n_b < 1:
+        raise ValueError("Need at least one bond bucket besides cash.")
+    dt = 1.0 / 12.0
+
+    faces = np.zeros(n_b, dtype=float)
+    t_rem = np.zeros(n_b, dtype=float)
+    for k in range(n_b):
+        ten = float(buckets[k + 1].tenor_years)
+        t_rem[k] = max(ten, 0.0)
+        mv_t = float(w[k + 1] * aum0)
+        if t_rem[k] <= 1e-14:
+            continue
+        d0 = float(yc_a.discount_factors(np.array([t_rem[k]]), spread=spread)[0])
+        if d0 <= 1e-15:
+            raise ValueError("Discount factor too small for ALM initialization.")
+        faces[k] = mv_t / d0
+
+    cash = float(w[0] * aum0)
+    cf = np.asarray(
+        pricing.expected_total_cashflows if liability_cashflows is None else liability_cashflows,
+        dtype=float,
+    )
+    if cf.shape != (pricing.expected_total_cashflows.shape[0],):
+        raise ValueError("liability_cashflows must match pricing horizon length.")
+    ty_full = np.asarray(pricing.times_years, dtype=float)
+    init_cash = float(cash)
+    init_faces = np.asarray(faces, dtype=float).copy()
+    init_t_rem = np.asarray(t_rem, dtype=float).copy()
+    n = cf.shape[0]
+    band = float(assumptions.rebalance_band)
+    freq = max(1, int(assumptions.rebalance_frequency_months))
+    near_liq = float(assumptions.liquidity_near_liquid_years)
+
+    asset_mv = np.zeros(n, dtype=float)
+    liab_pv = np.zeros(n, dtype=float)
+    fr = np.zeros(n, dtype=float)
+    surp = np.zeros(n, dtype=float)
+    liq_buf = np.zeros(n, dtype=float)
+    bucket_hist = np.zeros((len(buckets), n), dtype=float)
+
+    for m in range(n):
+        # 1) accrue & mature
+        t_rem = np.maximum(t_rem - dt, 0.0)
+        df = _df_rem(yc_a, spread, t_rem)
+        matured = np.where((faces > 1e-15) & (t_rem <= 1e-14), True, False)
+        for k in np.flatnonzero(matured):
+            cash += float(faces[k])
+            faces[k] = 0.0
+        t_rem = np.where(faces <= 1e-15, 0.0, t_rem)
+        df = _df_rem(yc_a, spread, t_rem)
+        mv = faces * df
+
+        if assumptions.reinvest_rule == "pro_rata" and bool(np.any(matured)):
+            cash, faces = _alm_micro_reinvest_pro_rata(
+                cash=cash,
+                faces=faces,
+                t_rem=t_rem,
+                w=w,
+                yield_curve=yc_a,
+                spread=spread,
+            )
+            df = _df_rem(yc_a, spread, t_rem)
+            mv = faces * df
+
+        # 2) liability cashflow
+        cash -= float(cf[m])
+
+        need = max(0.0, -cash)
+        if need > 1e-9:
+            cash, faces = _alm_disinvest(
+                cash=cash,
+                faces=faces,
+                t_rem=t_rem,
+                yield_curve=yc_a,
+                spread=spread,
+                need=need,
+                rule=assumptions.disinvest_rule,
+            )
+            df = _df_rem(yc_a, spread, t_rem)
+            mv = faces * df
+
+        cash, faces = _alm_maybe_rebalance(
+            cash=cash,
+            faces=faces,
+            t_rem=t_rem,
+            w=w,
+            yield_curve=yc_a,
+            spread=spread,
+            band=band,
+            month=m,
+            freq=freq,
+        )
+        df = _df_rem(yc_a, spread, t_rem)
+        mv = faces * df
+        aum_end = float(cash + np.sum(mv))
+
+        L = liability_pv_after_paid_months(pricing, yc_l, spread, m, cashflows=cf)
+        asset_mv[m] = aum_end
+        liab_pv[m] = L
+        fr[m] = aum_end / L if L > 1e-9 else float("inf") if aum_end > 0 else 0.0
+        surp[m] = aum_end - L
+
+        liquid = float(cash)
+        for k in range(n_b):
+            if t_rem[k] <= near_liq + 1e-12:
+                liquid += float(mv[k])
+        out_next12 = float(np.mean(cf[m : min(m + 12, n)])) if m < n else 0.0
+        liq_buf[m] = liquid / max(out_next12, 1e-6)
+
+        hist_row = np.concatenate(([cash], mv))
+        bucket_hist[:, m] = hist_row
+
+    yc_a_b = yield_curve_parallel_bps(yc_a, 1.0)
+    yc_l_b = yield_curve_parallel_bps(yc_l, 1.0)
+    L0 = liability_pv_after_paid_months(pricing, yc_l, spread, -1, cashflows=cf)
+    L0b = liability_pv_after_paid_months(pricing, yc_l_b, spread, -1, cashflows=cf)
+    pv01_liab = float(L0b - L0)
+
+    Ab = float(init_cash + np.sum(init_faces * _df_rem(yc_a_b, spread, init_t_rem)))
+    A0 = float(init_cash + np.sum(init_faces * _df_rem(yc_a, spread, init_t_rem)))
+    pv01_assets = float(Ab - A0)
+    pv01_net = float(pv01_assets - pv01_liab)
+
+    d_l = _liability_mac_duration_years(pricing, yc_l, spread, cashflows=cf)
+    df_i = _df_rem(yc_a, spread, init_t_rem)
+    mv_i = init_faces * df_i
+    aum_i = float(init_cash + np.sum(mv_i))
+    d_a = float(np.sum(mv_i * init_t_rem) / aum_i) if aum_i > 1e-9 else 0.0
+    d_gap = float(d_a - d_l)
+
+    return ALMResult(
+        month_index=np.arange(n, dtype=int),
+        times_years=ty_full,
+        asset_market_value=asset_mv,
+        liability_pv=liab_pv,
+        funding_ratio=fr,
+        surplus=surp,
+        liquidity_buffer_months=liq_buf,
+        bucket_asset_mv=bucket_hist,
+        pv01_assets=pv01_assets,
+        pv01_liabilities=pv01_liab,
+        pv01_net=pv01_net,
+        duration_assets_mac=d_a,
+        duration_liabilities_mac=d_l,
+        duration_gap=d_gap,
     )
 
 

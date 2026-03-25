@@ -758,3 +758,67 @@ def test_return_indexation_doubles_with_doubling_index(tmp_path):
         assert b[k] == pytest.approx(2.0 * b[k - 1])
 
 
+def test_yield_curve_twist_short_equals_short_bps_at_zero():
+    """Twist add-on at 0y maturity node must equal bps_short."""
+    yc = sp.YieldCurve(
+        maturities_years=np.array([0.0, 5.0, 20.0], dtype=float),
+        zero_rates=np.array([0.03, 0.03, 0.03], dtype=float),
+    )
+    out = sp.yield_curve_twist_linear_bps(yc, bps_short=10.0, bps_long=0.0, pivot_years=5.0)
+    assert out.zero_rates[0] == pytest.approx(0.03 + 10.0 / 10000.0)
+
+
+def test_run_alm_projection_smoke_matches_horizon():
+    """ALM paths align with pricing horizon and respect liability cashflow override length."""
+    contract, yc, mort, ex = _mc_contract_and_setup()
+    res = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=75,
+        spread=0.0,
+        expenses=ex,
+        expense_annual_inflation=0.0,
+    )
+    asm = sp.ALMAssumptions(
+        allocation=sp.alm_default_allocation_spec(),
+        rebalance_band=0.10,
+        rebalance_frequency_months=1,
+        reinvest_rule="hold_cash",
+        disinvest_rule="shortest_first",
+        liquidity_near_liquid_years=0.25,
+    )
+    alm = sp.run_alm_projection(pricing=res, yield_curve=yc, spread=0.0, assumptions=asm)
+    n = res.months.size
+    assert alm.asset_market_value.shape == (n,)
+    assert alm.bucket_asset_mv.shape == (len(asm.allocation.buckets), n)
+    assert np.isfinite(alm.pv01_net)
+    assert np.isfinite(alm.duration_gap)
+
+    cf2 = np.asarray(res.expected_total_cashflows, dtype=float) * 1.05
+    alm2 = sp.run_alm_projection(
+        pricing=res,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=asm,
+        liability_cashflows=cf2,
+    )
+    assert alm2.liability_pv[0] > alm.liability_pv[0]
+
+
+def test_liability_pv_cashflows_length_guard():
+    """Mismatched cashflows array must raise."""
+    contract, yc, mort, ex = _mc_contract_and_setup()
+    res = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=75,
+        spread=0.0,
+        expenses=ex,
+        expense_annual_inflation=0.0,
+    )
+    bad = np.ones(3, dtype=float)
+    with pytest.raises(ValueError, match="cashflows length"):
+        sp.liability_pv_after_paid_months(res, yc, 0.0, -1, cashflows=bad)
+
