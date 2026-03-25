@@ -158,6 +158,9 @@ def write_alm_engine_sheet(
     take1("cash_bb")
     take1("debt_bb")
     take1("need_dis")
+    # DF at post-reinvest tenors (one LET per bond per row). Inlining these in disinvest
+    # formulas exceeds Excel's 8192-char limit when nb or n_dis is moderately large.
+    dfd = taken("dfd", nb)
 
     n_dis = nb + 2  # pro_rata disinvest may need > nb peels
     dis_need: list[int] = []
@@ -331,6 +334,16 @@ def write_alm_engine_sheet(
                 ),
             )
 
+        dfd_cols = C("dfd")
+        if not isinstance(dfd_cols, list):
+            raise RuntimeError("dfd")
+        for k in range(nb):
+            ws.cell(
+                row=r,
+                column=dfd_cols[k],
+                value=f"={_excel_df_let(t_cell=f'{_L(t_re[k])}{r}', y_last_row=y_last_row)}",
+            )
+
         ccf = int(C("cash_cf"))
         ws.cell(row=r, column=ccf, value=f"={_L(cash_re)}{r}-{_L(cf_i)}{r}")
 
@@ -353,7 +366,7 @@ def write_alm_engine_sheet(
         ws.cell(row=r, column=need_dis, value=f"=IF($B$10=1,0,{_L(need_raw)}{r})")
 
         tref = [f"{_L(t_re[k])}{r}" for k in range(nb)]
-        df_dis = [_excel_df_let(t_cell=tref[k], y_last_row=y_last_row) for k in range(nb)]
+        df_dis = [f"{_L(dfd_cols[k])}{r}" for k in range(nb)]
 
         for ir in range(n_dis):
             nc, cc, fk_list = dis_need[ir], dis_cash[ir], dis_face[ir]

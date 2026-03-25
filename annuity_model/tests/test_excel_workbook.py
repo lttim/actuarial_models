@@ -136,6 +136,16 @@ def test_alm_projection_sheet_and_dashboard_links():
         spec, out_path=None, python_snapshot=snap, alm_snapshot=alm_snap, alm_assumptions=asm
     )
     wb = load_workbook(io.BytesIO(raw))
+    max_formula_len = 0
+    for sheet in wb.worksheets:
+        for row in sheet.iter_rows():
+            for cell in row:
+                v = cell.value
+                if isinstance(v, str) and v.startswith("="):
+                    max_formula_len = max(max_formula_len, len(v))
+    assert max_formula_len <= 8192, (
+        f"Excel rejects formulas over 8192 chars (longest was {max_formula_len})"
+    )
     assert ALM_SHEET_NAME in wb.sheetnames
     assert ALM_ENGINE_SHEET in wb.sheetnames
     ws_alm = wb[ALM_SHEET_NAME]
