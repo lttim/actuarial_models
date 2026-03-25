@@ -892,6 +892,22 @@ def test_key_rate_duration_helpers_shapes_and_mismatch():
     assert np.isfinite(sc) and sc >= 0.0
 
 
+def test_refine_weights_on_simplex_improves_quadratic_target():
+    """Greedy simplex refinement should not increase a convex distance-to-target score."""
+    w_star = np.array([0.55, 0.28, 0.17], dtype=float)
+
+    def score(w):
+        w = np.maximum(np.asarray(w, dtype=float), 0.0)
+        w = w / float(np.sum(w))
+        return float(np.sum((w - w_star) ** 2))
+
+    w0 = np.ones(3, dtype=float) / 3.0
+    s0 = score(w0)
+    wr, sr = sp.refine_weights_on_probability_simplex(w0, score, max_rounds=40)
+    assert sr <= s0 + 1e-9
+    assert abs(float(np.sum(wr)) - 1.0) < 1e-9
+
+
 def test_liability_pv_cashflows_length_guard():
     """Mismatched cashflows array must raise."""
     contract, yc, mort, ex = _mc_contract_and_setup()

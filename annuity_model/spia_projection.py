@@ -33,7 +33,7 @@ Important:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional, Sequence, Tuple
+from typing import Callable, Literal, Optional, Sequence, Tuple
 
 ALMReinvestRule = Literal["hold_cash", "pro_rata"]
 ALMDisinvestRule = Literal["shortest_first", "pro_rata"]
@@ -1500,15 +1500,87 @@ def key_rate_duration_hedge_mismatch_score(
     asset_krd_years: np.ndarray,
     liability_krd_years: np.ndarray,
     *,
-    abs_floor: float = 0.05,
+    abs_floor: float = 0.03,
+    liability_weighted: bool = True,
+    absolute_blend: float = 0.35,
 ) -> float:
-    """Mean squared relative error between asset and liability KRD vectors (robust floor on denominator)."""
+    """Hedge mismatch between asset and liability KRD vectors (lower is better).
+
+    Combines (1) liability-|KRD|-weighted mean squared **relative** error and (2) a scaled mean
+    squared **absolute** gap so tenors with small liability KRD still contribute to the objective.
+    """
     a = np.asarray(asset_krd_years, dtype=float)
     l = np.asarray(liability_krd_years, dtype=float)
     if a.shape != l.shape:
         raise ValueError("asset and liability KRD vectors must have the same length.")
-    rel = (a - l) / np.maximum(np.abs(l), float(abs_floor))
-    return float(np.mean(rel * rel))
+    floor = float(abs_floor)
+    rel = (a - l) / np.maximum(np.abs(l), floor)
+    rel_sq = rel * rel
+    if liability_weighted:
+        tw = np.abs(l)
+        sm = float(np.sum(tw))
+        if sm > 1e-15:
+            tw = tw / sm
+        else:
+            tw = np.full_like(l, 1.0 / max(1, l.size))
+        rel_loss = float(np.sum(tw * rel_sq))
+    else:
+        rel_loss = float(np.mean(rel_sq))
+
+    abs_scale = max(float(np.std(l)), 0.08, float(np.mean(np.abs(l))), floor)
+    abs_loss = float(np.mean(((a - l) / abs_scale) ** 2))
+    b = float(np.clip(absolute_blend, 0.0, 1.0))
+    return (1.0 - b) * rel_loss + b * abs_loss
+
+
+def refine_weights_on_probability_simplex(
+    w0: np.ndarray,
+    score_fn: Callable[[np.ndarray], float],
+    *,
+    max_rounds: int = 24,
+    transfer_fracs: tuple[float, ...] = (0.06, 0.04, 0.02, 0.01, 0.005),
+) -> tuple[np.ndarray, float]:
+    """Greedy coordinate transfers on the simplex to reduce ``score_fn`` (e.g. KRD mismatch).
+
+    Moves mass between pairs of buckets in small steps;     cheap when ``score_fn`` is analytical.
+    """
+    w = np.maximum(np.asarray(w0, dtype=float), 0.0)
+    s0 = float(np.sum(w))
+    if s0 <= 1e-15:
+        raise ValueError("w0 must have positive sum.")
+    w = w / s0
+    best_w = w.copy()
+    best_sc = float(score_fn(best_w))
+
+    for _ in range(int(max_rounds)):
+        improved_round = False
+        cur_sc = float(score_fn(w))
+        for i in range(w.size):
+            for j in range(w.size):
+                if i == j:
+                    continue
+                for dt in transfer_fracs:
+                    if w[i] + 1e-15 < dt:
+                        continue
+                    wt = w.copy()
+                    wt[i] -= dt
+                    wt[j] += dt
+                    wt = np.maximum(wt, 0.0)
+                    sm = float(np.sum(wt))
+                    if sm <= 1e-15:
+                        continue
+                    wt = wt / sm
+                    sc = float(score_fn(wt))
+                    if sc < cur_sc - 1e-15:
+                        w = wt
+                        cur_sc = sc
+                        improved_round = True
+                        if sc < best_sc - 1e-15:
+                            best_sc = sc
+                            best_w = wt.copy()
+        if not improved_round:
+            break
+    return best_w, best_sc
 
 
 def _alm_micro_reinvest_pro_rata(

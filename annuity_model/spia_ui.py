@@ -2148,8 +2148,8 @@ def _render_alm_section() -> None:
         index=0,
         help=(
             "Balanced mix scores weights for diversification vs targets, then runs ALM on each candidate until caps. "
-            "KRD match first ranks many weights by analytical asset vs liability key-rate duration mismatch (no ALM), "
-            "then runs ALM only on the best few for surplus feasibility — faster but coarser."
+            "KRD match uses a larger random pool plus simplex coordinate refinement on the analytical hedge score, "
+            "then runs ALM on more top candidates (higher time budget) for surplus feasibility."
         ),
     )
     run_alm_opt = st.button("Optimize allocation and run ALM")
@@ -2273,13 +2273,22 @@ def _render_alm_section() -> None:
                 else:
                     max_eval = min(400, max(80, int(opt_samples)))
                     time_budget_sec = 12.0
+                opt_krd_match = str(opt_objective).startswith("Match")
+                if opt_krd_match:
+                    # Allow more full ALM checks and wall-clock time for KRD matching.
+                    time_budget_sec = min(32.0, float(time_budget_sec) + 14.0)
+                    max_eval = min(520, int(max_eval) + 140)
+
                 max_random = max(0, max_eval - len(candidates))
                 # Random simplex samples (bounded by max_eval).
                 alpha = np.ones(n_assets, dtype=float)
                 for _ in range(min(int(opt_samples), max_random)):
                     candidates.append(rng.dirichlet(alpha))
+                if opt_krd_match:
+                    extra_draws = min(950, max(320, int(opt_samples) * 2 + 150))
+                    for _ in range(extra_draws):
+                        candidates.append(rng.dirichlet(alpha))
 
-                opt_krd_match = str(opt_objective).startswith("Match")
                 key_tenors_opt = np.array(
                     [float(b.tenor_years) for b in base_spec.buckets[1:] if float(b.tenor_years) > 1e-12],
                     dtype=float,
@@ -2400,29 +2409,76 @@ def _render_alm_section() -> None:
                             np.asarray(pricing_for_alm.times_years, dtype=float),
                             key_tenors_opt,
                         )
-                        stage1_n = min(len(candidates), max(200, int(opt_samples) + 80))
+
+                        def _analytical_krd_mismatch(wv: np.ndarray) -> float:
+                            wv = np.maximum(np.asarray(wv, dtype=float), 0.0)
+                            s = float(np.sum(wv))
+                            if s <= 1e-15:
+                                return float("inf")
+                            wv = wv / s
+                            ak = sp.initial_ladder_asset_key_rate_durations_years(
+                                yc,
+                                float(spr),
+                                float(aum0),
+                                wv,
+                                bond_tenors_opt,
+                                key_tenors_opt,
+                            )
+                            return float(sp.key_rate_duration_hedge_mismatch_score(ak, liab_krd_vec))
+
+                        stage1_n = min(len(candidates), max(520, int(opt_samples) * 2 + 120))
                         krd_scored: list[tuple[float, np.ndarray]] = []
                         for w_try in candidates[:stage1_n]:
                             w_arr = np.asarray(w_try, dtype=float)
                             if float(np.sum(w_arr)) <= 1e-15:
                                 continue
                             w_arr = w_arr / float(np.sum(w_arr))
-                            ak = sp.initial_ladder_asset_key_rate_durations_years(
-                                yc,
-                                float(spr),
-                                float(aum0),
-                                w_arr,
-                                bond_tenors_opt,
-                                key_tenors_opt,
-                            )
-                            sc = float(sp.key_rate_duration_hedge_mismatch_score(ak, liab_krd_vec))
+                            sc = _analytical_krd_mismatch(w_arr)
                             krd_scored.append((sc, w_arr))
                         krd_scored.sort(key=lambda t: t[0])
-                        top_m = min(25, max_eval, len(krd_scored))
-                        for i in range(top_m):
+
+                        refined_seen: set[tuple[float, ...]] = set()
+                        seeds_to_refine: list[np.ndarray] = []
+                        for _sc, wv in krd_scored[: min(18, len(krd_scored))]:
+                            key = tuple(np.round(wv, 5).tolist())
+                            if key in refined_seen:
+                                continue
+                            refined_seen.add(key)
+                            seeds_to_refine.append(wv)
+                            if len(seeds_to_refine) >= 10:
+                                break
+                        for w_seed in seeds_to_refine:
+                            w_ref, sc_ref = sp.refine_weights_on_probability_simplex(
+                                w_seed,
+                                _analytical_krd_mismatch,
+                                max_rounds=32,
+                                transfer_fracs=(0.08, 0.05, 0.03, 0.02, 0.01, 0.006),
+                            )
+                            krd_scored.append((sc_ref, w_ref))
+
+                        for rank in range(min(4, len(krd_scored))):
+                            w_anchor = krd_scored[rank][1]
+                            conc = 35.0 + 12.0 * float(rank)
+                            for _ in range(72):
+                                alpha_loc = np.maximum(np.asarray(w_anchor, dtype=float), 1e-4) * conc + 0.06
+                                w_loc = rng.dirichlet(alpha_loc)
+                                krd_scored.append((_analytical_krd_mismatch(w_loc), w_loc))
+
+                        krd_scored.sort(key=lambda t: t[0])
+                        top_m = min(58, max(38, max_eval // 2 + 8), len(krd_scored))
+                        alm_picked: list[tuple[float, np.ndarray]] = []
+                        seen_alm_weights: set[tuple[float, ...]] = set()
+                        for sc_i, w_i in krd_scored:
+                            keyw = tuple(np.round(np.asarray(w_i, dtype=float), 5).tolist())
+                            if keyw in seen_alm_weights:
+                                continue
+                            seen_alm_weights.add(keyw)
+                            alm_picked.append((sc_i, w_i))
+                            if len(alm_picked) >= top_m:
+                                break
+                        for sc_i, w_i in alm_picked:
                             if (time.perf_counter() - start_t) >= time_budget_sec:
                                 break
-                            sc_i, w_i = krd_scored[i]
                             _run_one_alm_candidate(w_i, objective_score=sc_i)
                 else:
                     for w_try in candidates:
