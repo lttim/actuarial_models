@@ -93,7 +93,7 @@ MODEL_FEATURES: list[str] = [
     "Dedicated Charts section with index, survival, PV, reserve, and profit decomposition waterfall visuals.",
     "What-if studio with live shocks (rates, spread, inflation, longevity, equity regime, expense ratio).",
     "Before/after/impact dashboard for premium, margin, reserve path, and tail-risk distribution.",
-    "ALM tab: Treasury ladder + cash, drift-band rebalancing, disinvestment rules, and five KPIs tied to the pricing run.",
+    "ALM tab: Treasury ladder + cash, pro-rata maturity reinvestment (optional hold-cash), drift-band rebalancing, disinvestment rules, and five KPIs tied to the pricing run.",
     "What-if ALM shocks: parallel earned-rate tilt on assets, twist across tenors, and liability cashflow stress with KPI deltas.",
     "Excel replicator export with ModelCheck parity and optional MC_Summary workbook content.",
     "Embedded unit-test dashboard for quick verification inside Streamlit.",
@@ -617,7 +617,7 @@ def _render_what_if_studio() -> None:
                     allocation=sp.alm_default_allocation_spec(),
                     rebalance_band=0.05,
                     rebalance_frequency_months=1,
-                    reinvest_rule="hold_cash",
+                    reinvest_rule="pro_rata",
                     disinvest_rule="shortest_first",
                     liquidity_near_liquid_years=0.25,
                 )
@@ -1386,7 +1386,7 @@ def _render_alm_section() -> None:
             reinvest = st.selectbox(
                 "Reinvest matured principal",
                 options=["hold_cash", "pro_rata"],
-                index=0,
+                index=1,
                 format_func=lambda x: {
                     "hold_cash": "Keep in cash until band rebalance (or next review)",
                     "pro_rata": "Re-deploy into bonds pro-rata to bond targets (excess over cash target)",

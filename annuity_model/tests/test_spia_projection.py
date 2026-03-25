@@ -806,6 +806,40 @@ def test_run_alm_projection_smoke_matches_horizon():
     assert alm2.liability_pv[0] > alm.liability_pv[0]
 
 
+def test_alm_pro_rata_refills_matured_slots_cash_near_target():
+    """Matured ladder slots must redeploy at nominal tenors; with no outflows cash stays near target weight."""
+    contract, yc, mort, ex = _mc_contract_and_setup()
+    res = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=75,
+        spread=0.0,
+        expenses=ex,
+        expense_annual_inflation=0.0,
+    )
+    cfz = np.zeros_like(res.expected_total_cashflows, dtype=float)
+    asm = sp.ALMAssumptions(
+        allocation=sp.alm_default_allocation_spec(),
+        rebalance_band=0.05,
+        rebalance_frequency_months=1,
+        reinvest_rule="pro_rata",
+        disinvest_rule="shortest_first",
+        liquidity_near_liquid_years=0.25,
+    )
+    alm = sp.run_alm_projection(
+        pricing=res,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=asm,
+        liability_cashflows=cfz,
+    )
+    w0 = float(asm.allocation.weights[0])
+    share = alm.bucket_asset_mv[0, :] / alm.asset_market_value
+    assert float(np.max(share)) <= w0 + 0.002
+    assert float(np.min(share)) >= w0 - 0.002
+
+
 def test_liability_pv_cashflows_length_guard():
     """Mismatched cashflows array must raise."""
     contract, yc, mort, ex = _mc_contract_and_setup()

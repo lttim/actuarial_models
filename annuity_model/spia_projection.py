@@ -1368,9 +1368,15 @@ def _alm_micro_reinvest_pro_rata(
     w: np.ndarray,
     yield_curve: YieldCurve,
     spread: float,
+    nominal_tenors: np.ndarray,
 ) -> tuple[float, np.ndarray]:
-    """After maturity credits: move cash above target into bonds pro-rata to bond weights."""
+    """After maturity credits: move cash above target into bonds pro-rata to bond weights.
+
+    Empty ladder slots (matured to cash) redeploy at each bucket's **nominal** tenor; otherwise
+    principal would remain in cash with no working bond slot.
+    """
     nb = faces.shape[0]
+    nom = np.asarray(nominal_tenors, dtype=float)
     df = _df_rem(yield_curve, spread, t_rem)
     mv = faces * df
     aum = float(cash + np.sum(mv))
@@ -1388,14 +1394,17 @@ def _alm_micro_reinvest_pro_rata(
     faces = np.asarray(faces, dtype=float).copy()
     cash = float(cash)
     for k in range(nb):
-        if t_rem[k] <= 1e-14:
+        t_use = float(t_rem[k]) if t_rem[k] > 1e-14 else float(nom[k])
+        if t_use <= 1e-14:
             continue
-        d_mv = excess * float(w_b[k])
-        dff = float(df[k])
+        dff = float(_df_rem(yield_curve, spread, np.array([t_use], dtype=float))[0])
         if dff <= 1e-15:
             continue
+        d_mv = excess * float(w_b[k])
         faces[k] += d_mv / dff
         cash -= d_mv
+        if float(t_rem[k]) <= 1e-14:
+            t_rem[k] = float(nom[k])
     return cash, faces
 
 
@@ -1467,6 +1476,7 @@ def _alm_maybe_rebalance(
     band: float,
     month: int,
     freq: int,
+    nominal_tenors: np.ndarray,
 ) -> tuple[float, np.ndarray]:
     df = _df_rem(yield_curve, spread, t_rem)
     mv = faces * df
@@ -1483,16 +1493,28 @@ def _alm_maybe_rebalance(
     if drift <= float(band):
         return cash, faces
 
+    nom = np.asarray(nominal_tenors, dtype=float)
     faces = np.asarray(faces, dtype=float).copy()
     for k in range(faces.shape[0]):
+        tgt_mv = float(tgt_mv_bonds[k])
         if t_rem[k] <= 1e-14:
-            faces[k] = 0.0
+            T = float(nom[k])
+            if T <= 1e-14:
+                faces[k] = 0.0
+                continue
+            dff = float(_df_rem(yield_curve, spread, np.array([T], dtype=float))[0])
+            if dff <= 1e-15:
+                faces[k] = 0.0
+                continue
+            faces[k] = tgt_mv / dff
+            t_rem[k] = T
             continue
-        dff = float(_df_rem(yield_curve, spread, np.array([t_rem[k]]))[0])
+        dff = float(_df_rem(yield_curve, spread, np.array([t_rem[k]], dtype=float))[0])
         if dff <= 1e-15:
             faces[k] = 0.0
+            t_rem[k] = 0.0
             continue
-        faces[k] = float(tgt_mv_bonds[k]) / dff
+        faces[k] = tgt_mv / dff
     cash = float(aum - np.sum(faces * _df_rem(yield_curve, spread, t_rem)))
     return cash, faces
 
@@ -1561,6 +1583,7 @@ def run_alm_projection(
     band = float(assumptions.rebalance_band)
     freq = max(1, int(assumptions.rebalance_frequency_months))
     near_liq = float(assumptions.liquidity_near_liquid_years)
+    nominal_tenors = np.array([float(buckets[k + 1].tenor_years) for k in range(n_b)], dtype=float)
 
     asset_mv = np.zeros(n, dtype=float)
     liab_pv = np.zeros(n, dtype=float)
@@ -1589,6 +1612,7 @@ def run_alm_projection(
                 w=w,
                 yield_curve=yc_a,
                 spread=spread,
+                nominal_tenors=nominal_tenors,
             )
             df = _df_rem(yc_a, spread, t_rem)
             mv = faces * df
@@ -1620,6 +1644,7 @@ def run_alm_projection(
             band=band,
             month=m,
             freq=freq,
+            nominal_tenors=nominal_tenors,
         )
         df = _df_rem(yc_a, spread, t_rem)
         mv = faces * df
