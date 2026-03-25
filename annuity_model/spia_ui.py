@@ -998,6 +998,10 @@ def _render_what_if_studio() -> None:
         }
     ).set_index("age")
     reserve_display = _round_for_visuals(reserve_df)
+    # Clean up x-axis labels and monetary formatting.
+    reserve_display.index = np.round(reserve_display.index.values.astype(float), 2)
+    for col in ["Before reserve", "After reserve", "Impact"]:
+        reserve_display[col] = reserve_display[col].astype(int)
     st.line_chart(reserve_display[["Before reserve", "After reserve"]])
     st.bar_chart(reserve_display[["Impact"]])
 
@@ -1062,9 +1066,14 @@ def _render_what_if_studio() -> None:
         alm_cmp["Impact"] = alm_cmp["After"] - alm_cmp["Before"]
         alm_show = alm_cmp.copy()
         alm_show[["Before", "After", "Impact"]] = alm_show[["Before", "After", "Impact"]].round(4)
+        money_rows = alm_show["Metric"].isin(["Surplus ($)", "PV01 net ($ per 1bp)"])
+        if bool(money_rows.any()):
+            alm_show.loc[money_rows, ["Before", "After", "Impact"]] = alm_show.loc[
+                money_rows, ["Before", "After", "Impact"]
+            ].round(0).astype(int)
         st.dataframe(alm_show, use_container_width=True, hide_index=True)
 
-        age_alm = base_contract.issue_age + _alm_b.times_years
+        age_alm = np.round((base_contract.issue_age + _alm_b.times_years).astype(float), 2)
         path_cmp = pd.DataFrame(
             {
                 "Funding ratio (before)": _alm_b.funding_ratio,
@@ -1079,7 +1088,29 @@ def _render_what_if_studio() -> None:
             index=age_alm,
         )
         st.markdown("**Surplus path**")
-        st.line_chart(_round_for_visuals(sur_cmp))
+        sur_disp = _round_for_visuals(sur_cmp)
+        sur_disp[["Surplus before", "Surplus after"]] = sur_disp[["Surplus before", "Surplus after"]].astype(int)
+        st.line_chart(sur_disp)
+
+        st.markdown("**PV assets and liabilities**")
+        pv_cmp = pd.DataFrame(
+            {
+                "PV assets (before)": _alm_b.asset_market_value,
+                "PV assets (after)": _alm_a.asset_market_value,
+                "PV liabilities (before)": _alm_b.liability_pv,
+                "PV liabilities (after)": _alm_a.liability_pv,
+            },
+            index=age_alm,
+        )
+        pv_disp = _round_for_visuals(pv_cmp)
+        for c in [
+            "PV assets (before)",
+            "PV assets (after)",
+            "PV liabilities (before)",
+            "PV liabilities (after)",
+        ]:
+            pv_disp[c] = pv_disp[c].astype(int)
+        st.line_chart(pv_disp)
 
     st.caption(
         "Impact shown as After - Before. Tail risk uses the 95th percentile of simulated premiums under the selected equity regime."
@@ -1458,7 +1489,6 @@ def _render_run_and_results() -> None:
             )
         with c_dl2:
             st.caption("Excel download moved to the Excel Replicator section.")
-        st.info("Charts have moved to the dedicated Charts section in the sidebar.")
 
 
 def _render_excel_replicator() -> None:
@@ -1658,6 +1688,30 @@ def _render_alm_section() -> None:
         st.info("Run **Pricing Run** first. ALM anchors on that liability path, curve, and spread.")
         return
 
+    # Allow the ALM engine to run against either the Pricing Run deterministic baseline,
+    # or against a single Monte Carlo index path scenario (liability PV + discounting).
+    scenario_source: str = "Base (Pricing Run deterministic)"
+    mc_params = st.session_state.get("pricing_mc_params") or {}
+    mc_n_sims = int(mc_params.get("n_sims", 0) or 0)
+    mc_seed = int(mc_params.get("seed", 42) or 42)
+    mc_scenario_idx: int = 0
+    if mc_n_sims > 0:
+        scenario_source = st.selectbox(
+            "ALM pricing scenario (for liability PV and discounting)",
+            options=["Base (Pricing Run deterministic)", "MC simulation (single path)"],
+            index=0,
+        )
+        if scenario_source == "MC simulation (single path)":
+            mc_scenario_idx = st.number_input(
+                "MC simulation index (0-based)",
+                min_value=0,
+                max_value=max(0, mc_n_sims - 1),
+                value=0,
+                step=1,
+            )
+    else:
+        st.caption("MC scenario selection is unavailable because Pricing Run MC inputs are missing.")
+
     base_spec = sp.alm_default_allocation_spec()
     n_bk = len(base_spec.buckets)
 
@@ -1771,8 +1825,44 @@ def _render_alm_section() -> None:
                     disinvest_rule=disinvest,  # type: ignore[arg-type]
                     liquidity_near_liquid_years=float(near_liq_y),
                 )
+                pricing_for_alm = res
+                if scenario_source == "MC simulation (single path)":
+                    mort = ctx.get("mortality")
+                    expenses = ctx.get("expenses")
+                    valuation_year = ctx.get("valuation_year")
+                    horizon_age = ctx.get("horizon_age")
+                    if not isinstance(mort, (sp.MortalityTableQx, sp.MortalityTableRP2014MP2016)):
+                        raise ValueError("Pricing Run mortality missing from session state.")
+                    if not isinstance(expenses, sp.ExpenseAssumptions):
+                        raise ValueError("Pricing Run expenses missing from session state.")
+
+                    n_months = int(res.months.size)
+                    idx_paths = sp.simulate_index_levels_gbm(
+                        n_sims=mc_n_sims,
+                        n_months=n_months,
+                        s0=float(mc_params.get("s0", 100.0) or 100.0),
+                        annual_drift=float(mc_params.get("annual_drift", 0.06) or 0.06),
+                        annual_vol=float(mc_params.get("annual_vol", 0.15) or 0.15),
+                        seed=mc_seed,
+                    )
+                    idx_one = idx_paths[int(mc_scenario_idx)]
+                    idx_levels_payment = np.asarray(idx_one[1:], dtype=float)
+                    idx_s0 = float(idx_one[0])
+
+                    pricing_for_alm = sp.price_spia_single_premium(
+                        contract=contract_state,
+                        yield_curve=yc,
+                        mortality=mort,
+                        horizon_age=int(horizon_age),
+                        spread=spr,
+                        valuation_year=int(valuation_year) if valuation_year is not None else None,
+                        expenses=expenses,
+                        expense_annual_inflation=float(res.expense_annual_inflation),
+                        index_s0=idx_s0,
+                        index_levels_payment=idx_levels_payment,
+                    )
                 out = sp.run_alm_projection(
-                    pricing=res,
+                    pricing=pricing_for_alm,
                     yield_curve=yc,
                     spread=spr,
                     assumptions=asm,
