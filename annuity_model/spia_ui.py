@@ -184,17 +184,7 @@ def _alm_result_to_dict(alm: sp.ALMResult, asm: sp.ALMAssumptions | None, *, inc
         "duration_gap": float(alm.duration_gap),
     }
     if asm is not None:
-        out["assumptions"] = {
-            "rebalance_band": float(asm.rebalance_band),
-            "rebalance_frequency_months": int(asm.rebalance_frequency_months),
-            "reinvest_rule": str(asm.reinvest_rule),
-            "disinvest_rule": str(asm.disinvest_rule),
-            "liquidity_near_liquid_years": float(asm.liquidity_near_liquid_years),
-            "allocation": {
-                "buckets": [{"name": b.name, "tenor_years": float(b.tenor_years)} for b in asm.allocation.buckets],
-                "weights": _serialize_array(asm.allocation.weights, include_full=True),
-            },
-        }
+        out["assumptions"] = _alm_assumptions_to_dict(asm)
     if include_buckets:
         out["bucket_asset_mv"] = _serialize_array(alm.bucket_asset_mv, include_full=True)
     else:
@@ -202,6 +192,20 @@ def _alm_result_to_dict(alm: sp.ALMResult, asm: sp.ALMAssumptions | None, *, inc
             "shape": list(alm.bucket_asset_mv.shape),
         }
     return out
+
+
+def _alm_assumptions_to_dict(asm: sp.ALMAssumptions) -> dict[str, Any]:
+    return {
+        "rebalance_band": float(asm.rebalance_band),
+        "rebalance_frequency_months": int(asm.rebalance_frequency_months),
+        "reinvest_rule": str(asm.reinvest_rule),
+        "disinvest_rule": str(asm.disinvest_rule),
+        "liquidity_near_liquid_years": float(asm.liquidity_near_liquid_years),
+        "allocation": {
+            "buckets": [{"name": b.name, "tenor_years": float(b.tenor_years)} for b in asm.allocation.buckets],
+            "weights": _serialize_array(asm.allocation.weights, include_full=True),
+        },
+    }
 
 
 def _whatif_result_to_dict(
@@ -814,7 +818,9 @@ def _render_what_if_studio() -> None:
         )
 
         try:
-            asm_wf = st.session_state.get("alm_last_assumptions")
+            asm_wf = st.session_state.get("alm_current_assumptions")
+            if not isinstance(asm_wf, sp.ALMAssumptions):
+                asm_wf = st.session_state.get("alm_last_assumptions")
             if not isinstance(asm_wf, sp.ALMAssumptions):
                 asm_wf = sp.ALMAssumptions(
                     allocation=sp.alm_default_allocation_spec(),
@@ -1638,6 +1644,28 @@ def _render_alm_section() -> None:
         help="Usually the priced single premium invested at issue.",
     )
 
+    # Persist the current ALM selection so What-if and diagnostics can reflect the user's latest inputs
+    # even before they click "Run ALM projection".
+    try:
+        ws_run_current = ws.copy()
+        if norm_run and float(np.sum(ws_run_current)) > 0.0:
+            ws_run_current = ws_run_current / float(np.sum(ws_run_current))
+        alloc_current = sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=ws_run_current)
+        asm_current = sp.ALMAssumptions(
+            allocation=alloc_current,
+            rebalance_band=float(band_pct) / 100.0,
+            rebalance_frequency_months=int(freq_m),
+            reinvest_rule=reinvest,  # type: ignore[arg-type]
+            disinvest_rule=disinvest,  # type: ignore[arg-type]
+            liquidity_near_liquid_years=float(near_liq_y),
+        )
+        st.session_state["alm_current_assumptions"] = asm_current
+        st.session_state["alm_current_initial_asset_market_value"] = float(aum0)
+    except Exception:
+        # Don't block UI if current weights/band inputs are temporarily invalid while user is editing.
+        st.session_state.pop("alm_current_assumptions", None)
+        st.session_state.pop("alm_current_initial_asset_market_value", None)
+
     run_alm = st.button("Run ALM projection", type="primary")
     if run_alm:
         if aum0 <= 0.0:
@@ -1771,6 +1799,8 @@ def main() -> None:
             pricing_excel_context = st.session_state.get("pricing_excel_context") or {}
             alm_last = st.session_state.get("alm_last")
             alm_last_assumptions = st.session_state.get("alm_last_assumptions")
+            alm_current_assumptions = st.session_state.get("alm_current_assumptions")
+            alm_current_aum0 = st.session_state.get("alm_current_initial_asset_market_value")
 
             if pricing_res is None or pricing_contract is None:
                 st.warning("Run Pricing Run first to populate diagnostics.")
@@ -1807,6 +1837,7 @@ def main() -> None:
                         "expense_annual_inflation": pricing_excel_context.get("expense_annual_inflation"),
                     },
                     "alm": None,
+                    "alm_current": None,
                     "what_if": None,
                 }
 
@@ -1817,6 +1848,12 @@ def main() -> None:
                         include_buckets=include_alm_buckets,
                         include_full=include_full_paths,
                     )
+
+                if isinstance(alm_current_assumptions, sp.ALMAssumptions):
+                    payload["alm_current"] = {
+                        "initial_asset_market_value": float(alm_current_aum0) if alm_current_aum0 is not None else None,
+                        "assumptions": _alm_assumptions_to_dict(alm_current_assumptions),
+                    }
 
                 what_if_shocked_res = st.session_state.get("whatif_last_shocked_res")
                 what_if_base_res = st.session_state.get("whatif_last_base_res")
