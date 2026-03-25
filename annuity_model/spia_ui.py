@@ -163,6 +163,12 @@ def _pricing_result_to_dict(
         "expected_total_cashflows": _serialize_array(res.expected_total_cashflows, include_full=include_full),
         "economic_reserve": _serialize_array(res.economic_reserve, include_full=include_full),
         "survival_to_payment": _serialize_array(res.survival_to_payment, include_full=include_full),
+        # Index / inflation scaffolding (needed for full Before/After diagnostics).
+        "index_s0": float(res.index_s0),
+        "index_level_at_payment": _serialize_array(res.index_level_at_payment, include_full=include_full),
+        "index_simple_return": _serialize_array(res.index_simple_return, include_full=include_full),
+        "index_log_return": _serialize_array(res.index_log_return, include_full=include_full),
+        "index_cumulative_return": _serialize_array(res.index_cumulative_return, include_full=include_full),
     }
 
 
@@ -229,6 +235,11 @@ def _whatif_result_to_dict(
             "economic_reserve_issue": float(base_res.economic_reserve[0]) if base_res.economic_reserve.size else None,
             "times_years": _serialize_array(base_res.times_years, include_full=include_full),
             "economic_reserve": _serialize_array(base_res.economic_reserve, include_full=include_full),
+            "index_s0": float(base_res.index_s0),
+            "index_level_at_payment": _serialize_array(base_res.index_level_at_payment, include_full=include_full),
+            "index_simple_return": _serialize_array(base_res.index_simple_return, include_full=include_full),
+            "index_log_return": _serialize_array(base_res.index_log_return, include_full=include_full),
+            "index_cumulative_return": _serialize_array(base_res.index_cumulative_return, include_full=include_full),
         },
         "after": {
             "single_premium": float(shocked_res.single_premium),
@@ -237,6 +248,11 @@ def _whatif_result_to_dict(
             "economic_reserve_issue": float(shocked_res.economic_reserve[0]) if shocked_res.economic_reserve.size else None,
             "times_years": _serialize_array(shocked_res.times_years, include_full=include_full),
             "economic_reserve": _serialize_array(shocked_res.economic_reserve, include_full=include_full),
+            "index_s0": float(shocked_res.index_s0),
+            "index_level_at_payment": _serialize_array(shocked_res.index_level_at_payment, include_full=include_full),
+            "index_simple_return": _serialize_array(shocked_res.index_simple_return, include_full=include_full),
+            "index_log_return": _serialize_array(shocked_res.index_log_return, include_full=include_full),
+            "index_cumulative_return": _serialize_array(shocked_res.index_cumulative_return, include_full=include_full),
         },
         "tail_risk_mc": {
             "baseline": {
@@ -256,11 +272,13 @@ def _whatif_result_to_dict(
         },
     }
     if alm_base is not None:
-        out["alm_base"] = _alm_result_to_dict(alm_base, asm, include_buckets=False, include_full=include_full)
+        # Always include bucket time series for diagnostics completeness.
+        out["alm_base"] = _alm_result_to_dict(alm_base, asm, include_buckets=True, include_full=include_full)
     else:
         out["alm_base"] = None
     if alm_after is not None:
-        out["alm_after"] = _alm_result_to_dict(alm_after, asm, include_buckets=False, include_full=include_full)
+        # Always include bucket time series for diagnostics completeness.
+        out["alm_after"] = _alm_result_to_dict(alm_after, asm, include_buckets=True, include_full=include_full)
     else:
         out["alm_after"] = None
     return out
@@ -736,11 +754,52 @@ def _render_what_if_studio() -> None:
         shocked_infl = max(-0.99, base_infl + float(inflation_shift_pct) / 100.0)
         shocked_spread = base_spread + float(spread_shift_bps) / 10000.0
 
-        drift, vol = _equity_regime_params(equity_regime)
-        idx_levels = _deterministic_index_levels_from_regime(s0=s0, annual_drift=drift, n_months=n_months)
+        # Equity regime controls how the (deterministic) index levels used for "After" evolve.
+        #
+        # Key requirement: when What-if dials are at identity (all 0 / multipliers at 1) and
+        # equity_regime == "base", "After" must reproduce the Pricing Run deterministic result.
+        # We do that by applying a regime-specific multiplicative tilt to the Pricing Run's
+        # actual baseline index_level_at_payment.
+        drift_map, vol_map = _equity_regime_params(equity_regime)
+        drift_base_map, vol_base_map = _equity_regime_params("base")
+
+        base_is_identity = (
+            equity_regime == "base"
+            and abs(float(rate_shift_bps)) < 1e-12
+            and abs(float(spread_shift_bps)) < 1e-12
+            and abs(float(inflation_shift_pct)) < 1e-12
+            and abs(float(longevity_improvement_pct)) < 1e-9
+            and abs(float(expense_ratio_mult) - 1.0) < 1e-9
+        )
+
+        # Monte Carlo drift/vol are anchored to the Pricing Run's MC parameters so that
+        # equity_regime=="base" gives an identity for tail-risk stats too.
         base_mc_params = st.session_state.get("pricing_mc_params") or {}
         base_drift = float(base_mc_params.get("annual_drift", 0.06))
         base_vol = float(base_mc_params.get("annual_vol", 0.15))
+
+        if base_is_identity:
+            idx_levels = np.asarray(base_res.index_level_at_payment, dtype=float)
+        else:
+            idx_regime_det = _deterministic_index_levels_from_regime(
+                s0=s0, annual_drift=drift_map, n_months=n_months
+            )
+            idx_base_det = _deterministic_index_levels_from_regime(
+                s0=s0, annual_drift=drift_base_map, n_months=n_months
+            )
+            idx_base_det = np.asarray(idx_base_det, dtype=float)
+            idx_regime_det = np.asarray(idx_regime_det, dtype=float)
+            scale = idx_regime_det / idx_base_det
+            idx_levels = np.asarray(base_res.index_level_at_payment, dtype=float) * scale
+
+        if equity_regime == "base":
+            drift_mc = base_drift
+            vol_mc = base_vol
+        else:
+            # Scale regime drifts/vols relative to the regime mapping's "base" so the meaning
+            # of defensive/bullish/stressed stays consistent even if the Pricing Run used different MC inputs.
+            drift_mc = base_drift * (drift_map / drift_base_map) if abs(drift_base_map) > 1e-15 else base_drift
+            vol_mc = base_vol * (vol_map / vol_base_map) if abs(vol_base_map) > 1e-15 else base_vol
 
         shocked_res = sp.price_spia_single_premium(
             contract=base_contract,
@@ -789,8 +848,8 @@ def _render_what_if_studio() -> None:
             int(horizon_age),
             float(shocked_spread),
             float(shocked_infl),
-            float(drift),
-            float(vol),
+            float(drift_mc),
+            float(vol_mc),
             float(s0),
             float(rate_shift_bps),
             float(spread_shift_bps),
@@ -811,8 +870,8 @@ def _render_what_if_studio() -> None:
             expenses=shocked_expenses,
             expense_annual_inflation=shocked_infl,
             n_sims=int(mc_sims),
-            annual_drift=float(drift),
-            annual_vol=float(vol),
+            annual_drift=float(drift_mc),
+            annual_vol=float(vol_mc),
             seed=42,
             s0=float(s0),
         )
@@ -1217,6 +1276,31 @@ def _render_run_and_results() -> None:
                 "mortality_mode": m_mode,
                 "expense_mode": expense_mode,
                 "mc_enabled": bool(mc_enable),
+                "use_index": bool(use_index),
+                "index_scenario_csv_path": idx_path,
+            }
+            st.session_state["pricing_run_inputs"] = {
+                "sex": "male" if sex == "male" else "female",
+                "issue_age": int(issue_age),
+                "benefit_annual": float(benefit_annual),
+                "horizon_age": int(horizon_age),
+                "valuation_year": vy_inputs,
+                "spread": float(spread),
+                "expense_annual_inflation": float(expense_annual_inflation),
+                "use_index": bool(use_index),
+                "index_scenario_csv_path": idx_path,
+                "mc_enabled": bool(mc_enable),
+                "mc_n_sims": int(mc_n_sims),
+                "mc_seed": int(mc_seed),
+                "mc_annual_drift": float(mc_drift_pct) / 100.0,
+                "mc_annual_vol": float(mc_vol_pct) / 100.0,
+                "mc_s0": float(mc_s0),
+                "mc_base_settings_for_tail_risk": {
+                    "annual_drift": float(mc_drift_pct) / 100.0,
+                    "annual_vol": float(mc_vol_pct) / 100.0,
+                    "seed": int(mc_seed),
+                    "s0": float(mc_s0),
+                },
             }
             st.session_state["pricing_excel_context"] = {
                 "contract": contract,
@@ -1308,6 +1392,7 @@ def _render_run_and_results() -> None:
             st.session_state["pricing_res"] = None
             st.session_state.pop("alm_last", None)
             st.session_state.pop("alm_last_assumptions", None)
+            st.session_state.pop("pricing_run_inputs", None)
             st.session_state.pop("pricing_excel_context", None)
             st.session_state.pop("pricing_xlsx_bytes", None)
             st.session_state.pop("pricing_xlsx_built_error", None)
@@ -1791,8 +1876,10 @@ def main() -> None:
         st.caption(f"Project root: `{ROOT}`")
 
         st.subheader("Diagnostics export")
-        include_full_paths = st.checkbox("Include full monthly paths (larger file)", value=True)
-        include_alm_buckets = st.checkbox("Include ALM bucket MV time series", value=False)
+        # Diagnostics should be fully self-contained for offline review/debugging.
+        # Always include everything (no include/exclude toggles).
+        include_full_paths = True
+        include_alm_buckets = True
         if st.button("Prepare diagnostics JSON", type="secondary"):
             pricing_res = st.session_state.get("pricing_res")
             pricing_contract = st.session_state.get("pricing_contract")
@@ -1811,6 +1898,7 @@ def main() -> None:
                 payload: dict[str, Any] = {
                     "exported_at_utc": _dt.datetime.utcnow().isoformat() + "Z",
                     "pricing_meta": st.session_state.get("pricing_meta") or {},
+                    "pricing_run_inputs": st.session_state.get("pricing_run_inputs") or {},
                     "pricing": _pricing_result_to_dict(
                         pricing_res,
                         pricing_contract,
