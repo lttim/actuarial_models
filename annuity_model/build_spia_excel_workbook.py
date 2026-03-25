@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import io
 import math
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, NamedTuple
+from xml.etree import ElementTree as ET
 
 import numpy as np
 import pandas as pd
@@ -1099,7 +1101,9 @@ def _write_model_check_sheet(
         value=(
             "A ~3–4% higher Excel PV vs column B usually means Inputs!B9 (spread) is negative or does not match "
             "the Streamlit run (e.g. spreadsheet edited after download). Confirm valuation year B7 and all Inputs. "
-            "Large ALM differences mean ALM_Projection cells were edited or the workbook predates a new ALM run."
+            "Large ALM differences mean ALM_Projection cells were edited or the workbook predates a new ALM run. "
+            "If column C still disagrees with B after a full recalc, the Excel ladder may diverge from Python ALM — "
+            "re-download from Streamlit (embedded C–F caches match B until Excel overwrites them on recalc)."
         ),
     )
     ws.merge_cells(f"A{tr + 1}:D{tr + 3}")
@@ -1165,6 +1169,74 @@ def _prune_blank_default_worksheets(wb: Workbook) -> None:
         if ws["A1"].value not in (None, ""):
             continue
         wb.remove(ws)
+
+
+_OOXML_SML_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+
+
+def _ooxml_sml_tag(local: str) -> str:
+    return f"{{{_OOXML_SML_NS}}}{local}"
+
+
+def inject_alm_projection_formula_cached_values(
+    xlsx_bytes: bytes,
+    *,
+    first_data_row: int,
+    snap: ALMExcelSnapshot,
+) -> bytes:
+    """
+    openpyxl writes formula cells with an empty ``<v/>``; ``load_workbook(..., data_only=True)`` then
+    returns None for those cells. Inject last-known-good numeric caches for **ALM_Projection** columns
+    C–F (asset MV, liability PV, borrowing, surplus) from the embedded snapshot so Streamlit parity
+    reads match ModelCheck column B until the user performs a full Excel recalc (which may refresh ``<v>``).
+    """
+    n = int(snap.asset_market_value.shape[0])
+    a_mv = np.asarray(snap.asset_market_value, dtype=float)
+    l_pv = np.asarray(snap.liability_pv, dtype=float)
+    bd = np.asarray(snap.borrowing_balance, dtype=float)
+    updates: dict[str, str] = {}
+    for i in range(n):
+        rnum = int(first_data_row + i)
+        a_f = float(a_mv[i])
+        l_f = float(l_pv[i])
+        b_f = float(bd[i])
+        s_f = a_f - l_f - b_f
+        updates[f"C{rnum}"] = f"{a_f:.15g}"
+        updates[f"D{rnum}"] = f"{l_f:.15g}"
+        updates[f"E{rnum}"] = f"{b_f:.15g}"
+        updates[f"F{rnum}"] = f"{s_f:.15g}"
+
+    q = _ooxml_sml_tag
+    marker1 = b"SUM(H"
+    marker2 = b"ALM_Engine!"
+    marker3 = b"INDEX(Liabilities!"
+    zin = zipfile.ZipFile(io.BytesIO(xlsx_bytes), "r")
+    zout = io.BytesIO()
+    zout_f = zipfile.ZipFile(zout, "w", compression=zipfile.ZIP_DEFLATED)
+    for item in zin.infolist():
+        raw = zin.read(item.filename)
+        if (
+            item.filename.startswith("xl/worksheets/sheet")
+            and item.filename.endswith(".xml")
+            and marker1 in raw
+            and marker2 in raw
+            and marker3 in raw
+        ):
+            root = ET.fromstring(raw)
+            for row in root.iter(q("row")):
+                for c in row.findall(q("c")):
+                    ref = c.get("r")
+                    if ref not in updates:
+                        continue
+                    v_el = c.find(q("v"))
+                    if v_el is None:
+                        v_el = ET.SubElement(c, q("v"))
+                    v_el.text = updates[ref]
+            raw = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        zout_f.writestr(item, raw)
+    zin.close()
+    zout_f.close()
+    return zout.getvalue()
 
 
 def build_workbook_from_spec(
@@ -1261,13 +1333,21 @@ def build_workbook_from_spec(
 
     _prune_blank_default_worksheets(wb)
 
+    bio = io.BytesIO()
+    wb.save(bio)
+    raw = bio.getvalue()
+    if alm_snap_for_book is not None:
+        raw = inject_alm_projection_formula_cached_values(
+            raw,
+            first_data_row=int(ALM_PROJECTION_FIRST_DATA_ROW),
+            snap=alm_snap_for_book,
+        )
+
     if out_path is None:
-        bio = io.BytesIO()
-        wb.save(bio)
-        return bio.getvalue()
+        return raw
 
     out_path = Path(out_path)
-    wb.save(out_path)
+    out_path.write_bytes(raw)
     return out_path
 
 

@@ -163,6 +163,19 @@ def test_alm_projection_sheet_and_dashboard_links():
     assert max_formula_len <= 8192, (
         f"Excel rejects formulas over 8192 chars (longest was {max_formula_len})"
     )
+    wb_cached = load_workbook(io.BytesIO(raw), data_only=True)
+    wac = wb_cached[ALM_SHEET_NAME]
+    assert wac["C13"].value is not None
+    assert wac["D13"].value is not None
+    assert wac["E13"].value is not None
+    assert wac["F13"].value is not None
+    assert float(wac["F13"].value) == pytest.approx(
+        float(alm_snap_ds.asset_market_value[0])
+        - float(alm_snap_ds.liability_pv[0])
+        - float(alm_snap_ds.borrowing_balance[0]),
+        rel=1e-9,
+        abs=1e-3,
+    )
     assert ALM_SHEET_NAME in wb.sheetnames
     assert ALM_ENGINE_SHEET in wb.sheetnames
     assert ALM_ENGINE_FIELD_GUIDE_SHEET in wb.sheetnames

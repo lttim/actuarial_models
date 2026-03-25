@@ -1849,8 +1849,10 @@ def _alm_modelcheck_key_assets_surplus_df(
     Uses the same truncated ALM snapshot as the Excel export when ``mirror_snap`` is provided so the
     Python column matches ModelCheck column B and the first ``ALM_EXCEL_PATH_MONTH_CAP`` rows on the sheet.
 
-    Surplus from Excel is read as **C−D−E** whenever those caches exist. Column **F** can hold a stale
-    cached value after edits or partial recalc even though F is defined as C−D−E, which inflated differences.
+    Surplus from Excel is read as **C−D−E** when cached values exist (then **F** is not used). If the
+    workbook has no cached results for those cells (typical before a full Excel recalc), the expected
+    Excel column is **NaN** — do not treat that as a match. New downloads embed snapshot caches on
+    **ALM_Projection** C–F so ``data_only`` reads align with ModelCheck column B until Excel recalculates.
     """
     if mirror_snap is not None:
         a_mv = np.asarray(mirror_snap.asset_market_value, dtype=float)
@@ -1899,13 +1901,14 @@ def _alm_modelcheck_key_assets_surplus_df(
         if ws is not None:
             ex = _read_workbook_cell_float(ws, f"C{r}")
         if ex is None:
-            ex = py
+            # Do not substitute Python: empty formula caches would fake a match (openpyxl data_only).
+            ex = float("nan") if ws is not None else py
         rows.append(
             {
                 "Metric": lab,
                 "Python snapshot": py,
                 "Expected Excel value (after recalc)": ex,
-                "Difference (Excel - Python)": float(ex - py),
+                "Difference (Excel - Python)": float(ex - py) if np.isfinite(ex) else float("nan"),
             }
         )
 
@@ -1922,13 +1925,13 @@ def _alm_modelcheck_key_assets_surplus_df(
             else:
                 ex = _read_workbook_cell_float(ws, f"F{r}")
         if ex is None:
-            ex = py
+            ex = float("nan") if ws is not None else py
         rows.append(
             {
                 "Metric": lab,
                 "Python snapshot": py,
                 "Expected Excel value (after recalc)": ex,
-                "Difference (Excel - Python)": float(ex - py),
+                "Difference (Excel - Python)": float(ex - py) if np.isfinite(ex) else float("nan"),
             }
         )
 
@@ -2043,7 +2046,8 @@ def _render_excel_replicator() -> None:
                 f"Workbook **{ALM_SHEET_NAME}** / **{ALM_ENGINE_SHEET}** show the **first {n_on_sheet}** monthly ALM steps "
                 f"(cap {ALM_EXCEL_PATH_MONTH_CAP}; Python may have more months). Rows **{ALM_PROJECTION_FIRST_DATA_ROW}**–**{lr}**. "
                 f"**C** = SUM buckets; **D** from **{LIABILITY_SHEET_NAME}**; **F** = C−D−E. "
-                "Parity uses **C−D−E** (not a stale **F** cache). Recalc in Excel before comparing."
+                "Parity uses cached **C−D−E** (embedded on export). After a full recalc in Excel, "
+                "saved values may differ if formulas diverge from Python; re-download to reset caches."
             )
 
     # --- Monte Carlo distribution dashboard ---
