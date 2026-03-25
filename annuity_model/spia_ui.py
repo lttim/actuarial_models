@@ -1734,6 +1734,14 @@ def _render_alm_section() -> None:
 
     base_spec = sp.alm_default_allocation_spec()
     n_bk = len(base_spec.buckets)
+    # Apply optimized weights safely on next rerun (avoid mutating active widget keys mid-run).
+    pending_alloc = st.session_state.pop("alm_alloc_pending", None)
+    if isinstance(pending_alloc, (list, tuple, np.ndarray)) and len(pending_alloc) == n_bk:
+        try:
+            for i, wi in enumerate(np.asarray(pending_alloc, dtype=float)):
+                st.session_state[f"alm_alloc_{i}"] = float(wi * 100.0)
+        except Exception:
+            pass
 
     with st.expander("Target allocation (% weights, must sum to 100%)", expanded=True):
         cols = st.columns(min(n_bk, 6))
@@ -2012,6 +2020,9 @@ def _render_alm_section() -> None:
                         wb = wb / float(np.sum(wb))
                         w_try = np.concatenate(([cash_w], (1.0 - cash_w) * wb))
                         candidates.append(w_try)
+                # Add an explicit long-tenor-heavy seed (similar to user-observed feasible mix).
+                if n_assets == 6:
+                    candidates.append(np.array([0.05, 0.05, 0.05, 0.05, 0.20, 0.60], dtype=float))
 
                 # Runtime guardrails to avoid very long runs on large horizons.
                 max_eval = min(400, max(60, int(opt_samples)))
@@ -2082,10 +2093,13 @@ def _render_alm_section() -> None:
 
                 if best_w is None or best_out is None:
                     if best_fallback_w is None or best_fallback_out is None:
-                        st.warning("No feasible allocation found under the selected surplus constraint.")
+                        st.warning(
+                            "No feasible allocation found under the selected surplus constraint. "
+                            "This can happen when constraints are too strict for current assumptions "
+                            "(cashflows, borrowing policy/rate, rebalance policy, and curve)."
+                        )
                     else:
-                        for i, wi in enumerate(best_fallback_w):
-                            st.session_state[f"alm_alloc_{i}"] = float(wi * 100.0)
+                        st.session_state["alm_alloc_pending"] = np.asarray(best_fallback_w, dtype=float).tolist()
                         asm_best = sp.ALMAssumptions(
                             allocation=sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=best_fallback_w),
                             rebalance_band=float(band_pct) / 100.0,
@@ -2106,8 +2120,7 @@ def _render_alm_section() -> None:
                             "No feasible allocation found within runtime limits; showing nearest candidate (highest minimum surplus)."
                         )
                 else:
-                    for i, wi in enumerate(best_w):
-                        st.session_state[f"alm_alloc_{i}"] = float(wi * 100.0)
+                    st.session_state["alm_alloc_pending"] = np.asarray(best_w, dtype=float).tolist()
                     asm_best = sp.ALMAssumptions(
                         allocation=sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=best_w),
                         rebalance_band=float(band_pct) / 100.0,
