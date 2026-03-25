@@ -1913,7 +1913,7 @@ def _render_alm_section() -> None:
         opt_surplus_constraint = st.selectbox(
             "Optimization surplus constraint",
             options=["Path never negative", "Ending surplus non-negative"],
-            index=0,
+            index=1,
             help="Select whether optimization enforces surplus >= 0 at every month, or only at the ending month.",
         )
     with opt_col2:
@@ -2021,22 +2021,28 @@ def _render_alm_section() -> None:
                 rem = 0.80 / max(1, n_assets - 1)
                 w_cons[1:] = rem
                 candidates.append(w_cons)
-                # Structured tenor-tilt candidates (fast path to feasible long-duration mixes).
+                # Structured tenor candidates around diversified bond ladders.
                 tenors = np.array([float(b.tenor_years) for b in base_spec.buckets], dtype=float)
                 bond_ten = np.clip(tenors[1:], 1e-9, None)
                 for cash_w in [0.0, 0.05, 0.10, 0.20]:
-                    for tilt in [0.0, 0.5, 1.0, 2.0, 3.0]:
+                    for tilt in [-1.0, -0.5, 0.0, 0.5, 1.0]:
                         wb = bond_ten ** tilt
                         wb = wb / float(np.sum(wb))
                         w_try = np.concatenate(([cash_w], (1.0 - cash_w) * wb))
                         candidates.append(w_try)
-                # Add an explicit long-tenor-heavy seed (similar to user-observed feasible mix).
-                if n_assets == 6:
-                    candidates.append(np.array([0.05, 0.05, 0.05, 0.05, 0.20, 0.60], dtype=float))
+                # Explicitly include near-even spreads to accelerate convergence to diversified mixes.
+                for cash_w in [0.0, 0.05, 0.10]:
+                    wb_even = np.full(n_assets - 1, (1.0 - cash_w) / float(max(1, n_assets - 1)), dtype=float)
+                    candidates.append(np.concatenate(([cash_w], wb_even)))
 
                 # Runtime guardrails to avoid very long runs on large horizons.
-                max_eval = min(400, max(60, int(opt_samples)))
-                time_budget_sec = 12.0
+                if opt_surplus_constraint == "Ending surplus non-negative":
+                    # Default mode is easier to satisfy; use tighter limits for better responsiveness.
+                    max_eval = min(220, max(50, int(opt_samples)))
+                    time_budget_sec = 6.0
+                else:
+                    max_eval = min(400, max(80, int(opt_samples)))
+                    time_budget_sec = 12.0
                 max_random = max(0, max_eval - len(candidates))
                 # Random simplex samples (bounded by max_eval).
                 alpha = np.ones(n_assets, dtype=float)
@@ -2044,7 +2050,8 @@ def _render_alm_section() -> None:
                     candidates.append(rng.dirichlet(alpha))
 
                 tenor_axis = np.array([float(b.tenor_years) for b in base_spec.buckets], dtype=float)
-                best_tenor = float("inf")
+                target_tenor = float(np.median(tenor_axis[1:])) if tenor_axis.size > 1 else 0.0
+                best_score = float("inf")
                 best_end_surplus = -float("inf")
                 best_w: np.ndarray | None = None
                 best_out: sp.ALMResult | None = None
@@ -2096,14 +2103,34 @@ def _render_alm_section() -> None:
                     if not feasible:
                         continue
 
-                    # Objective: shortest feasible tenor mix first; ending surplus as tie-breaker.
-                    tenor_score = float(np.dot(np.asarray(w_try, dtype=float), tenor_axis))
+                    # Objective: diversified bond ladder with mild anti-long bias.
+                    w_eval = np.asarray(w_try, dtype=float)
+                    w_bond = w_eval[1:] if w_eval.size > 1 else np.asarray([], dtype=float)
+                    if w_bond.size > 0:
+                        bond_sum = float(np.sum(w_bond))
+                        if bond_sum > 1e-12:
+                            w_bond_norm = w_bond / bond_sum
+                            even_penalty = float(np.std(w_bond_norm))
+                        else:
+                            even_penalty = 1.0
+                    else:
+                        even_penalty = 0.0
+                    tenor_score = float(np.dot(w_eval, tenor_axis))
+                    tenor_dev_penalty = abs(tenor_score - target_tenor) / max(1.0, target_tenor)
+                    long_penalty = float(w_eval[-1]) if w_eval.size > 1 else 0.0
+                    concentration_penalty = float(np.max(w_eval))
+                    score = (
+                        1.00 * even_penalty
+                        + 0.40 * tenor_dev_penalty
+                        + 0.35 * long_penalty
+                        + 0.25 * concentration_penalty
+                    )
                     end_surplus = float(out_try.surplus[-1])
                     if (
-                        tenor_score < best_tenor - 1e-12
-                        or (abs(tenor_score - best_tenor) <= 1e-12 and end_surplus > best_end_surplus)
+                        score < best_score - 1e-12
+                        or (abs(score - best_score) <= 1e-12 and end_surplus > best_end_surplus)
                     ):
-                        best_tenor = tenor_score
+                        best_score = score
                         best_end_surplus = end_surplus
                         best_w = np.asarray(w_try, dtype=float)
                         best_out = out_try
@@ -2162,8 +2189,10 @@ def _render_alm_section() -> None:
                     st.session_state["alm_opt_notice"] = {
                         "level": "success",
                         "message": (
-                            "Optimized allocation found (shortest feasible tenor mix) and ALM projection completed. "
-                            f"Weighted tenor: {best_tenor:.2f}Y; ending surplus: ${float(best_out.surplus[-1]):,.0f}. "
+                            "Optimized allocation found (balanced tenor spread with anti-concentration bias) "
+                            "and ALM projection completed. "
+                            f"Weighted tenor: {float(np.dot(np.asarray(best_w, dtype=float), tenor_axis)):.2f}Y; "
+                            f"ending surplus: ${float(best_out.surplus[-1]):,.0f}. "
                             "Target allocation inputs updated."
                         ),
                     }
