@@ -871,6 +871,27 @@ def test_alm_pro_rata_reinvest_prioritizes_underweights():
     assert abs(cash2 - float(w[0] * aum2)) <= 1e-6
 
 
+def test_key_rate_duration_helpers_shapes_and_mismatch():
+    """Liability and initial-ladder asset KRD vectors should align lengths; mismatch score non-negative."""
+    yc = sp.YieldCurve.from_flat_rate(0.03)
+    times = np.array([1.0, 2.0, 5.0], dtype=float)
+    cf = np.array([1000.0, 1000.0, 1000.0], dtype=float)
+    keys = np.array([1.0, 3.0, 5.0], dtype=float)
+    lk = sp.liability_key_rate_durations_years(yc, 0.0, cf, times, keys)
+    assert lk.shape == keys.shape
+    assert np.all(np.isfinite(lk))
+
+    alloc = sp.alm_default_allocation_spec()
+    w = np.asarray(alloc.weights, dtype=float)
+    bond_t = np.array([float(b.tenor_years) for b in alloc.buckets[1:]], dtype=float)
+    ak = sp.initial_ladder_asset_key_rate_durations_years(yc, 0.0, 1_000_000.0, w, bond_t, keys)
+    assert ak.shape == keys.shape
+    assert np.all(np.isfinite(ak))
+
+    sc = sp.key_rate_duration_hedge_mismatch_score(ak, lk)
+    assert np.isfinite(sc) and sc >= 0.0
+
+
 def test_liability_pv_cashflows_length_guard():
     """Mismatched cashflows array must raise."""
     contract, yc, mort, ex = _mc_contract_and_setup()

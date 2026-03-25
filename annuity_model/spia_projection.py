@@ -1398,6 +1398,119 @@ def _liability_mac_duration_years(
     return float(np.sum(ty * cf * df) / pv)
 
 
+def yield_curve_key_rate_bump(
+    curve: YieldCurve,
+    *,
+    key_tenor_years: float,
+    key_tenors_years: np.ndarray,
+    bump_bps: float = 1.0,
+) -> YieldCurve:
+    """Apply a localized triangular key-rate bump (in zero rates, bps) centered at ``key_tenor_years``."""
+    mats = np.asarray(curve.maturities_years, dtype=float)
+    zeros = np.asarray(curve.zero_rates, dtype=float).copy()
+    keys = np.unique(np.sort(np.asarray(key_tenors_years, dtype=float)))
+    if keys.size == 0:
+        return YieldCurve(maturities_years=mats.copy(), zero_rates=zeros)
+
+    idx = int(np.argmin(np.abs(keys - float(key_tenor_years))))
+    k = float(keys[idx])
+    left = float(keys[idx - 1]) if idx > 0 else 0.0
+    right = float(keys[idx + 1]) if idx < (keys.size - 1) else float(max(np.max(mats), k))
+    amp = float(bump_bps) / 10000.0
+
+    bump = np.zeros_like(mats, dtype=float)
+    left_span = max(1e-12, k - left)
+    right_span = max(1e-12, right - k)
+    for i, t in enumerate(mats):
+        tt = float(t)
+        if tt < left or tt > right:
+            continue
+        if tt <= k:
+            bump[i] = amp * (tt - left) / left_span
+        else:
+            bump[i] = amp * (right - tt) / right_span
+    return YieldCurve(maturities_years=mats.copy(), zero_rates=zeros + bump)
+
+
+def liability_key_rate_durations_years(
+    yield_curve: YieldCurve,
+    spread: float,
+    cashflows: np.ndarray,
+    times_years: np.ndarray,
+    key_tenors_years: np.ndarray,
+    *,
+    bump_bps: float = 1.0,
+) -> np.ndarray:
+    """Key-rate durations (years) of liability PV at each key tenor (1bp localized bump convention).
+
+    Definition matches UI KRD charts: ``- (PV_bump - PV_0) / (PV_0 * 1e-4)``.
+    """
+    cf = np.asarray(cashflows, dtype=float)
+    ty = np.asarray(times_years, dtype=float)
+    if cf.shape != ty.shape:
+        raise ValueError("cashflows length must match times_years.")
+    keys = np.asarray(key_tenors_years, dtype=float)
+    if keys.size == 0:
+        return np.zeros(0, dtype=float)
+    l0 = float(np.sum(cf * yield_curve.discount_factors(ty, spread=spread)))
+    out = np.zeros(keys.size, dtype=float)
+    for i, kt in enumerate(keys):
+        yc_b = yield_curve_key_rate_bump(
+            yield_curve, key_tenor_years=float(kt), key_tenors_years=keys, bump_bps=bump_bps
+        )
+        l_b = float(np.sum(cf * yc_b.discount_factors(ty, spread=spread)))
+        out[i] = -((l_b - l0) / (max(1e-9, l0) * 1e-4))
+    return out
+
+
+def initial_ladder_asset_key_rate_durations_years(
+    yield_curve: YieldCurve,
+    spread: float,
+    initial_aum: float,
+    allocation_weights: np.ndarray,
+    bond_nominal_tenors_years: np.ndarray,
+    key_tenors_years: np.ndarray,
+    *,
+    bump_bps: float = 1.0,
+) -> np.ndarray:
+    """Key-rate durations (years) of initial par-value ladder + cash portfolio at each key tenor."""
+    a0 = float(initial_aum)
+    w = np.asarray(allocation_weights, dtype=float)
+    bond_ten = np.asarray(bond_nominal_tenors_years, dtype=float)
+    keys = np.asarray(key_tenors_years, dtype=float)
+    if keys.size == 0:
+        return np.zeros(0, dtype=float)
+    if w.shape[0] != bond_ten.size + 1:
+        raise ValueError("allocation_weights must include cash plus one weight per bond bucket.")
+    df0 = yield_curve.discount_factors(bond_ten, spread=spread)
+    target_mv_bonds = w[1:] * a0
+    bond_faces = np.where(df0 > 1e-15, target_mv_bonds / df0, 0.0)
+    out = np.zeros(keys.size, dtype=float)
+    for i, kt in enumerate(keys):
+        yc_b = yield_curve_key_rate_bump(
+            yield_curve, key_tenor_years=float(kt), key_tenors_years=keys, bump_bps=bump_bps
+        )
+        dfb = yc_b.discount_factors(bond_ten, spread=spread)
+        a_b = float(w[0] * a0 + np.sum(bond_faces * dfb))
+        out[i] = -((a_b - a0) / (max(1e-9, a0) * 1e-4))
+    return out
+
+
+def key_rate_duration_hedge_mismatch_score(
+    asset_krd_years: np.ndarray,
+    liability_krd_years: np.ndarray,
+    *,
+    abs_floor: float = 0.05,
+) -> float:
+    """Mean squared relative error between asset and liability KRD vectors (robust floor on denominator)."""
+    a = np.asarray(asset_krd_years, dtype=float)
+    l = np.asarray(liability_krd_years, dtype=float)
+    if a.shape != l.shape:
+        raise ValueError("asset and liability KRD vectors must have the same length.")
+    rel = (a - l) / np.maximum(np.abs(l), float(abs_floor))
+    return float(np.mean(rel * rel))
+
+
 def _alm_micro_reinvest_pro_rata(
     *,
     cash: float,

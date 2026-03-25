@@ -620,31 +620,12 @@ def _key_rate_bump_curve(
     key_tenors_years: np.ndarray,
     bump_bps: float = 1.0,
 ) -> sp.YieldCurve:
-    """Apply a localized triangular key-rate bump centered at one tenor."""
-    mats = np.asarray(curve.maturities_years, dtype=float)
-    zeros = np.asarray(curve.zero_rates, dtype=float).copy()
-    keys = np.unique(np.sort(np.asarray(key_tenors_years, dtype=float)))
-    if keys.size == 0:
-        return sp.YieldCurve(maturities_years=mats.copy(), zero_rates=zeros)
-
-    idx = int(np.argmin(np.abs(keys - float(key_tenor_years))))
-    k = float(keys[idx])
-    left = float(keys[idx - 1]) if idx > 0 else 0.0
-    right = float(keys[idx + 1]) if idx < (keys.size - 1) else float(max(np.max(mats), k))
-    amp = float(bump_bps) / 10000.0
-
-    bump = np.zeros_like(mats, dtype=float)
-    left_span = max(1e-12, k - left)
-    right_span = max(1e-12, right - k)
-    for i, t in enumerate(mats):
-        tt = float(t)
-        if tt < left or tt > right:
-            continue
-        if tt <= k:
-            bump[i] = amp * (tt - left) / left_span
-        else:
-            bump[i] = amp * (right - tt) / right_span
-    return sp.YieldCurve(maturities_years=mats.copy(), zero_rates=zeros + bump)
+    return sp.yield_curve_key_rate_bump(
+        curve,
+        key_tenor_years=key_tenor_years,
+        key_tenors_years=key_tenors_years,
+        bump_bps=bump_bps,
+    )
 
 
 def _shock_mortality(
@@ -2138,6 +2119,16 @@ def _render_alm_section() -> None:
             step=100,
             help="Requested random candidates; runtime controls may cap evaluated candidates for responsiveness.",
         )
+    opt_objective = st.selectbox(
+        "Optimization objective",
+        options=["Balanced mix (diversified weights)", "Match liability KRD by tenor (fast screen + ALM)"],
+        index=0,
+        help=(
+            "Balanced mix scores weights for diversification vs targets, then runs ALM on each candidate until caps. "
+            "KRD match first ranks many weights by analytical asset vs liability key-rate duration mismatch (no ALM), "
+            "then runs ALM only on the best few for surplus feasibility — faster but coarser."
+        ),
+    )
     run_alm_opt = st.button("Optimize allocation and run ALM")
 
     def _build_pricing_for_selected_scenario() -> sp.SPIAProjectionResult:
@@ -2265,6 +2256,13 @@ def _render_alm_section() -> None:
                 for _ in range(min(int(opt_samples), max_random)):
                     candidates.append(rng.dirichlet(alpha))
 
+                opt_krd_match = str(opt_objective).startswith("Match")
+                key_tenors_opt = np.array(
+                    [float(b.tenor_years) for b in base_spec.buckets[1:] if float(b.tenor_years) > 1e-12],
+                    dtype=float,
+                )
+                bond_tenors_opt = key_tenors_opt.copy()
+
                 tenor_axis = np.array([float(b.tenor_years) for b in base_spec.buckets], dtype=float)
                 target_tenor = float(np.median(tenor_axis[1:])) if tenor_axis.size > 1 else 0.0
                 best_score = float("inf")
@@ -2274,15 +2272,20 @@ def _render_alm_section() -> None:
                 best_min_surplus = -float("inf")
                 best_fallback_w: np.ndarray | None = None
                 best_fallback_out: sp.ALMResult | None = None
+                best_krd_mismatch = float("nan")
 
                 start_t = time.perf_counter()
                 eval_count = 0
-                for w_try in candidates:
-                    if eval_count >= max_eval:
-                        break
-                    if (time.perf_counter() - start_t) >= time_budget_sec:
-                        break
-                    alloc_try = sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=np.asarray(w_try, dtype=float))
+
+                def _run_one_alm_candidate(w_try: np.ndarray, *, objective_score: float | None) -> None:
+                    nonlocal best_score, best_end_surplus, best_w, best_out, eval_count
+                    nonlocal best_min_surplus, best_fallback_w, best_fallback_out, best_krd_mismatch
+                    w_norm = np.asarray(w_try, dtype=float)
+                    s_wm = float(np.sum(w_norm))
+                    if s_wm <= 1e-15:
+                        return
+                    w_norm = w_norm / s_wm
+                    alloc_try = sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=w_norm)
                     asm_try = sp.ALMAssumptions(
                         allocation=alloc_try,
                         rebalance_band=float(band_pct) / 100.0,
@@ -2309,7 +2312,7 @@ def _render_alm_section() -> None:
                     min_surp = float(np.min(np.asarray(out_try.surplus, dtype=float)))
                     if min_surp > best_min_surplus:
                         best_min_surplus = min_surp
-                        best_fallback_w = np.asarray(w_try, dtype=float)
+                        best_fallback_w = w_norm.copy()
                         best_fallback_out = out_try
 
                     if opt_surplus_constraint == "Path never negative":
@@ -2317,10 +2320,23 @@ def _render_alm_section() -> None:
                     else:
                         feasible = bool(float(out_try.surplus[-1]) >= -1e-6)
                     if not feasible:
-                        continue
+                        return
 
-                    # Objective: diversified bond ladder with mild anti-long bias.
-                    w_eval = np.asarray(w_try, dtype=float)
+                    end_surplus = float(out_try.surplus[-1])
+                    if opt_krd_match:
+                        sc = float(objective_score) if objective_score is not None else float("inf")
+                        if (
+                            sc < best_score - 1e-15
+                            or (abs(sc - best_score) <= 1e-15 and end_surplus > best_end_surplus)
+                        ):
+                            best_score = sc
+                            best_end_surplus = end_surplus
+                            best_w = w_norm.copy()
+                            best_out = out_try
+                            best_krd_mismatch = sc
+                        return
+
+                    w_eval = w_norm
                     w_bond = w_eval[1:] if w_eval.size > 1 else np.asarray([], dtype=float)
                     if w_bond.size > 0:
                         bond_sum = float(np.sum(w_bond))
@@ -2341,15 +2357,57 @@ def _render_alm_section() -> None:
                         + 0.35 * long_penalty
                         + 0.25 * concentration_penalty
                     )
-                    end_surplus = float(out_try.surplus[-1])
                     if (
                         score < best_score - 1e-12
                         or (abs(score - best_score) <= 1e-12 and end_surplus > best_end_surplus)
                     ):
                         best_score = score
                         best_end_surplus = end_surplus
-                        best_w = np.asarray(w_try, dtype=float)
+                        best_w = w_norm.copy()
                         best_out = out_try
+
+                if opt_krd_match:
+                    if key_tenors_opt.size == 0:
+                        st.error("KRD matching requires bond buckets with positive tenor.")
+                    else:
+                        liab_krd_vec = sp.liability_key_rate_durations_years(
+                            yc,
+                            float(spr),
+                            np.asarray(pricing_for_alm.expected_total_cashflows, dtype=float),
+                            np.asarray(pricing_for_alm.times_years, dtype=float),
+                            key_tenors_opt,
+                        )
+                        stage1_n = min(len(candidates), max(200, int(opt_samples) + 80))
+                        krd_scored: list[tuple[float, np.ndarray]] = []
+                        for w_try in candidates[:stage1_n]:
+                            w_arr = np.asarray(w_try, dtype=float)
+                            if float(np.sum(w_arr)) <= 1e-15:
+                                continue
+                            w_arr = w_arr / float(np.sum(w_arr))
+                            ak = sp.initial_ladder_asset_key_rate_durations_years(
+                                yc,
+                                float(spr),
+                                float(aum0),
+                                w_arr,
+                                bond_tenors_opt,
+                                key_tenors_opt,
+                            )
+                            sc = float(sp.key_rate_duration_hedge_mismatch_score(ak, liab_krd_vec))
+                            krd_scored.append((sc, w_arr))
+                        krd_scored.sort(key=lambda t: t[0])
+                        top_m = min(25, max_eval, len(krd_scored))
+                        for i in range(top_m):
+                            if (time.perf_counter() - start_t) >= time_budget_sec:
+                                break
+                            sc_i, w_i = krd_scored[i]
+                            _run_one_alm_candidate(w_i, objective_score=sc_i)
+                else:
+                    for w_try in candidates:
+                        if eval_count >= max_eval:
+                            break
+                        if (time.perf_counter() - start_t) >= time_budget_sec:
+                            break
+                        _run_one_alm_candidate(np.asarray(w_try, dtype=float), objective_score=None)
 
                 if best_w is None or best_out is None:
                     if best_fallback_w is None or best_fallback_out is None:
@@ -2408,20 +2466,28 @@ def _render_alm_section() -> None:
                     st.session_state["alm_last_initial_asset_market_value"] = float(aum0)
                     st.session_state["alm_last_pricing_run_id"] = st.session_state.get("pricing_run_id")
                     _invalidate_diagnostics_export()
-                    st.session_state["alm_opt_notice"] = {
-                        "level": "success",
-                        "message": (
+                    if opt_krd_match:
+                        krd_msg = (
+                            "Optimized allocation found (KRD screen: match asset key-rate sensitivities to liability "
+                            f"by tenor; mean sq. rel. error {best_krd_mismatch:.4f}) and ALM projection completed. "
+                            f"Weighted tenor: {float(np.dot(np.asarray(best_w, dtype=float), tenor_axis)):.2f}Y; "
+                            f"ending surplus: ${float(best_out.surplus[-1]):,.0f}. "
+                            "Target allocation inputs updated."
+                        )
+                    else:
+                        krd_msg = (
                             "Optimized allocation found (balanced tenor spread with anti-concentration bias) "
                             "and ALM projection completed. "
                             f"Weighted tenor: {float(np.dot(np.asarray(best_w, dtype=float), tenor_axis)):.2f}Y; "
                             f"ending surplus: ${float(best_out.surplus[-1]):,.0f}. "
                             "Target allocation inputs updated."
-                        ),
-                    }
+                        )
+                    st.session_state["alm_opt_notice"] = {"level": "success", "message": krd_msg}
                     st.rerun()
                 st.caption(
-                    f"Optimization evaluated {eval_count} candidates "
+                    f"Optimization evaluated {eval_count} ALM projection(s) "
                     f"(cap {max_eval}, time budget {time_budget_sec:.0f}s)."
+                    + (" KRD mode ranks weights analytically first, then ALM-checks only the best few." if opt_krd_match else "")
                 )
             except Exception as ex:
                 st.error(f"ALM optimization failed: {ex!r}")
