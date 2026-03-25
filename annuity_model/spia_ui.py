@@ -1734,6 +1734,11 @@ def _render_alm_section() -> None:
 
     base_spec = sp.alm_default_allocation_spec()
     n_bk = len(base_spec.buckets)
+    # Initialize allocation widget state once; keyed widgets then read from session state only.
+    for i in range(n_bk):
+        k = f"alm_alloc_{i}"
+        if k not in st.session_state:
+            st.session_state[k] = float(round(base_spec.weights[i] * 100.0, 2))
     # Apply optimized weights safely on next rerun (avoid mutating active widget keys mid-run).
     pending_alloc = st.session_state.pop("alm_alloc_pending", None)
     if isinstance(pending_alloc, (list, tuple, np.ndarray)) and len(pending_alloc) == n_bk:
@@ -1764,7 +1769,6 @@ def _render_alm_section() -> None:
                             f"{b.name} %",
                             min_value=0.0,
                             max_value=100.0,
-                            value=float(round(base_spec.weights[i] * 100.0, 2)),
                             step=0.5,
                             key=f"alm_alloc_{i}",
                         )
