@@ -35,6 +35,7 @@ if str(ROOT) not in sys.path:
 import spia_projection as sp
 from build_spia_excel_workbook import (
     ALMExcelSnapshot,
+    ALM_BUCKET_MV_SHEET,
     ALM_PROJECTION_FIRST_DATA_ROW,
     ALM_SHEET_NAME,
     ExcelPythonSnapshot,
@@ -1973,50 +1974,10 @@ def _render_excel_replicator() -> None:
             )
             lr = ALM_PROJECTION_FIRST_DATA_ROW + int(np.asarray(alm_chk.asset_market_value).size) - 1
             st.caption(
-                f"Compares the current ALM path to **{ALM_SHEET_NAME}**: assets in **C**; "
-                f"liability **D** recalculates from Projection; surplus **F** = C−D−E (or cached F). "
-                "Row-1 asset/surplus differences should be near zero for an unedited file."
+                f"Compares the current ALM path to **{ALM_SHEET_NAME}**: **C** = SUM of bucket columns (each bucket "
+                f"pulls **{ALM_BUCKET_MV_SHEET}** via INDEX/MATCH); liability **D** from Projection; surplus **F** = "
+                "C−D−E (or cached F). Row-1 asset/surplus differences should be near zero for an unedited file."
             )
-
-    st.divider()
-    st.subheader("ALM in workbook (latest run)")
-    alm_last = st.session_state.get("alm_last")
-    alm_asm = st.session_state.get("alm_last_assumptions")
-    alm_rid = st.session_state.get("alm_last_pricing_run_id")
-    pr_rid = st.session_state.get("pricing_run_id")
-    if (
-        isinstance(alm_last, sp.ALMResult)
-        and isinstance(alm_asm, sp.ALMAssumptions)
-        and alm_rid == pr_rid
-    ):
-        surp = np.asarray(alm_last.surplus, dtype=float)
-        fr = np.asarray(alm_last.funding_ratio, dtype=float)
-        st.caption(
-            "Workbook **ALM_Projection**: liability PV (D) is formula-driven from **Projection**; **Surplus** (F) and "
-            "**Funding** (G) are formulas on assets (C), liability, and borrowing (E). Asset and bucket columns "
-            "refresh from Python when you re-run ALM."
-        )
-        e1, e2, e3, e4 = st.columns(4)
-        aum_lab = st.session_state.get("alm_last_initial_asset_market_value")
-        e1.metric("Initial AUM ($)", f"${float(aum_lab):,.0f}" if aum_lab is not None else "—")
-        e2.metric("Funding ratio (mo 1)", f"{float(fr[0]):.3f}" if fr.size else "—")
-        e3.metric("Min surplus ($)", f"${float(np.min(surp)):,.0f}" if surp.size else "—")
-        e4.metric("Ending surplus ($)", f"${float(surp[-1]):,.0f}" if surp.size else "—")
-        e5, e6, e7 = st.columns(3)
-        e5.metric("Ending funding ratio", f"{float(fr[-1]):.3f}" if fr.size else "—")
-        e6.metric("Duration gap (y)", f"{float(alm_last.duration_gap):.2f}")
-        e7.metric("PV01 net ($/bp)", f"{float(alm_last.pv01_net):,.0f}")
-        wt = np.asarray(alm_asm.allocation.weights, dtype=float)
-        buckets = [b.name for b in alm_asm.allocation.buckets]
-        st.caption(
-            "Target allocation in this file: "
-            + ", ".join(f"{buckets[i]} {wt[i]:.1%}" for i in range(len(buckets)))
-        )
-    else:
-        st.info(
-            "Run **ALM** (manual or optimized) on the current pricing baseline to add **ALM_Projection** "
-            "and ALM charts on **Dashboard** to the workbook. Pricing clears prior ALM until you run it again."
-        )
 
     # --- Monte Carlo distribution dashboard ---
     mc_res = st.session_state.get("pricing_mc")

@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 
 import spia_projection as sp
 from build_spia_excel_workbook import (
+    ALM_BUCKET_MV_SHEET,
     ALM_SHEET_NAME,
     ExcelPythonSnapshot,
     alm_excel_snapshot_from_result,
@@ -132,8 +133,11 @@ def test_alm_projection_sheet_and_dashboard_links():
     raw = build_workbook_from_spec(spec, out_path=None, python_snapshot=snap, alm_snapshot=alm_snap)
     wb = load_workbook(io.BytesIO(raw))
     assert ALM_SHEET_NAME in wb.sheetnames
+    assert ALM_BUCKET_MV_SHEET in wb.sheetnames
     ws_alm = wb[ALM_SHEET_NAME]
     dr = 13
+    assert isinstance(ws_alm[f"C{dr}"].value, str) and str(ws_alm[f"C{dr}"].value).startswith("=SUM(")
+    assert isinstance(ws_alm[f"H{dr}"].value, str) and str(ws_alm[f"H{dr}"].value).startswith("=INDEX(")
     assert isinstance(ws_alm[f"D{dr}"].value, str) and str(ws_alm[f"D{dr}"].value).startswith("=")
     assert isinstance(ws_alm[f"F{dr}"].value, str) and str(ws_alm[f"F{dr}"].value).startswith("=")
     assert isinstance(ws_alm[f"G{dr}"].value, str) and str(ws_alm[f"G{dr}"].value).startswith("=")

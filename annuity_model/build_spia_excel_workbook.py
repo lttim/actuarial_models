@@ -74,6 +74,8 @@ class ALMDashboardLayout(NamedTuple):
 
 
 ALM_SHEET_NAME = "ALM_Projection"
+# Grid of month × bucket MV (Python ALM snapshot); ALM_Projection bucket columns reference this sheet.
+ALM_BUCKET_MV_SHEET = "ALM_BucketMV"
 # First month of ALM path data on ALM_Projection (below header row 12). Keep in sync with _write_alm_projection_sheet.
 ALM_PROJECTION_FIRST_DATA_ROW = 13
 
@@ -505,6 +507,57 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
     ws["V2"] = "=X9"
 
 
+def _write_alm_bucket_mv_sheet(wb: Workbook, snap: ALMExcelSnapshot) -> tuple[int, int]:
+    """Write embedded bucket-level MVs; return ``(first_data_row, last_data_row)`` on ``ALM_BucketMV``."""
+    ws = wb.create_sheet(ALM_BUCKET_MV_SHEET)
+    n = int(snap.asset_market_value.shape[0])
+    n_b = len(snap.bucket_names)
+    ws["A1"] = "ALM bucket market values (Python ladder snapshot)"
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A2"] = (
+        "Frozen from the latest ALM run. **ALM_Projection** bucket columns are formulas that INDEX/MATCH into this "
+        "grid; **Asset MV** there is the SUM of those bucket columns. Curve path, reinvestment, rebalance, and "
+        "borrowing rules are not re-simulated in Excel — refresh by re-running ALM."
+    )
+    last_col = get_column_letter(1 + n_b)
+    ws.merge_cells(f"A2:{last_col}2")
+    header_row = 3
+    ws.cell(row=header_row, column=1, value="Month").font = Font(bold=True)
+    for b in range(n_b):
+        ws.cell(row=header_row, column=2 + b, value=snap.bucket_names[b]).font = Font(bold=True)
+    first_data = header_row + 1
+    last_data = first_data + n - 1
+    bmv = np.asarray(snap.bucket_asset_mv, dtype=float)
+    for i in range(n):
+        r = first_data + i
+        ws.cell(row=r, column=1, value=int(snap.month_index[i] + 1))
+        for b in range(n_b):
+            ws.cell(row=r, column=2 + b, value=float(bmv[b, i]))
+    ws.column_dimensions["A"].width = 10
+    for c in range(2, 2 + n_b):
+        ws.column_dimensions[get_column_letter(c)].width = 16
+    for r in range(first_data, last_data + 1):
+        ws.cell(row=r, column=1).number_format = "0"
+        for c in range(2, 2 + n_b):
+            ws.cell(row=r, column=c).number_format = "#,##0.00"
+    return first_data, last_data
+
+
+def _alm_bucket_mv_cell_formula(
+    *,
+    alm_row: int,
+    bucket_index: int,
+    bucket_first_data: int,
+    bucket_last_data: int,
+) -> str:
+    col_letter = get_column_letter(2 + int(bucket_index))
+    sh = ALM_BUCKET_MV_SHEET
+    return (
+        f"=INDEX({sh}!${col_letter}${bucket_first_data}:${col_letter}${bucket_last_data},"
+        f"MATCH($A{alm_row},{sh}!$A${bucket_first_data}:$A${bucket_last_data},0))"
+    )
+
+
 def _alm_liability_pv_cell_formula(*, excel_row: int, proj_last_row: int) -> str:
     """
     Liability PV at end of month A{excel_row} (month numbering matches Projection column A).
@@ -522,18 +575,19 @@ def _alm_liability_pv_cell_formula(*, excel_row: int, proj_last_row: int) -> str
 
 
 def _write_alm_projection_sheet(wb: Workbook, snap: ALMExcelSnapshot) -> ALMDashboardLayout:
-    ws = wb.create_sheet(ALM_SHEET_NAME)
-    ws["A1"] = "ALM monthly path (mixed: liability from Projection formulas; assets from Python ladder)"
-    ws["A1"].font = Font(bold=True, size=12)
     n = int(snap.asset_market_value.shape[0])
     n_b = len(snap.bucket_names)
+    b_first, b_last = _write_alm_bucket_mv_sheet(wb, snap)
+    ws = wb.create_sheet(ALM_SHEET_NAME)
+    ws["A1"] = "ALM monthly path (liability PV from Projection; assets as formulas over bucket grid)"
+    ws["A1"].font = Font(bold=True, size=12)
     proj_last = 3 + n
     ws["A2"] = (
-        f"Liability PV (column D) is calculated as SUMPRODUCT(Projection!S×O for months after row A) ÷ Projection!O, "
-        f"matching the Python ALM liability measure (rows 4–{proj_last} on Projection). "
-        "Asset MV (C) and bucket columns still use the Python Treasury-ladder path (reinvest / rebalance / "
-        "disinvest / borrowing rules are not rebuilt as native formulas). Borrowing (E) is from that Python path. "
-        "Surplus F = C−D−E; funding G = C/(D+E). Re-run ALM in the app to refresh embedded asset columns."
+        f"Liability PV (column D) is SUMPRODUCT(Projection!S×O for months after row A) ÷ Projection!O "
+        f"(rows 4–{proj_last} on Projection), matching Python. **Asset MV (C)** = SUM of bucket columns (H…); "
+        f"each bucket is **=INDEX({ALM_BUCKET_MV_SHEET}!…, MATCH(Month))** into the ladder snapshot on "
+        f"**{ALM_BUCKET_MV_SHEET}**. **Borrowing (E)** remains values from the Python path. "
+        "Surplus F = C−D−E; funding G = C/(D+E). Re-run ALM to refresh the bucket grid."
     )
     last_hdr_col = get_column_letter(7 + n_b)
     ws.merge_cells(f"A2:{last_hdr_col}2")
@@ -564,17 +618,28 @@ def _write_alm_projection_sheet(wb: Workbook, snap: ALMExcelSnapshot) -> ALMDash
     debt = np.asarray(snap.borrowing_balance, dtype=float).reshape(-1)
     if debt.shape[0] != n:
         raise ValueError("borrowing_balance length must match asset path.")
+    first_bkt = get_column_letter(8)
+    last_bkt = get_column_letter(7 + n_b)
     for i in range(n):
         r = first_data + i
         ws.cell(row=r, column=1, value=int(snap.month_index[i] + 1))
         ws.cell(row=r, column=2, value=f'=IFERROR(INDEX(Projection!$C:$C,MATCH(A{r},Projection!$A:$A,0)),"")')
-        ws.cell(row=r, column=3, value=float(snap.asset_market_value[i]))
+        ws.cell(row=r, column=3, value=f"=SUM({first_bkt}{r}:{last_bkt}{r})")
         ws.cell(row=r, column=4, value=_alm_liability_pv_cell_formula(excel_row=r, proj_last_row=proj_last))
         ws.cell(row=r, column=5, value=float(debt[i]))
         ws.cell(row=r, column=6, value=f"=C{r}-D{r}-E{r}")
         ws.cell(row=r, column=7, value=f'=IF((D{r}+E{r})>0,C{r}/(D{r}+E{r}),"")')
         for b in range(n_b):
-            ws.cell(row=r, column=8 + b, value=float(snap.bucket_asset_mv[b, i]))
+            ws.cell(
+                row=r,
+                column=8 + b,
+                value=_alm_bucket_mv_cell_formula(
+                    alm_row=r,
+                    bucket_index=b,
+                    bucket_first_data=b_first,
+                    bucket_last_data=b_last,
+                ),
+            )
 
     last_data = first_data + n - 1
     ws["B3"].number_format = "#,##0.00"
@@ -841,8 +906,8 @@ def _write_model_check_sheet(
     ws["A2"] = (
         "Column B is the Python snapshot at export. Column C points at workbook formulas or embedded ALM cells; "
         "column D should be ~0 after recalc if Inputs match the launcher. "
-        "ALM: liability PV on ALM_Projection is formula-linked to Projection; surplus and funding use sheet formulas; "
-        "asset column remains the Python ladder snapshot."
+        "ALM: liability PV on ALM_Projection links to Projection; surplus and funding use sheet formulas; "
+        f"asset MV is SUM of bucket columns; each bucket INDEX/MATCHes {ALM_BUCKET_MV_SHEET}."
     )
     ws.merge_cells("A2:D2")
 
