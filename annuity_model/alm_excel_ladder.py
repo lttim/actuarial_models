@@ -68,7 +68,8 @@ class ALMEngineLayout:
 def write_alm_engine_sheet(
     ws,
     *,
-    n_months: int,
+    period_end_months_1based: list[int],
+    n_projection_months: int,
     y_last_row: int,
     asm: sp.ALMAssumptions,
     initial_aum: float,
@@ -78,6 +79,12 @@ def write_alm_engine_sheet(
         raise ValueError(
             "Excel ALM ladder requires rebalance_policy='liquidity_only'. "
             "Select Hold-to-maturity bias in ALM settings for this export."
+        )
+    if not period_end_months_1based:
+        raise ValueError("period_end_months_1based must be non-empty.")
+    if period_end_months_1based[-1] != n_projection_months:
+        raise ValueError(
+            f"Last period end {period_end_months_1based[-1]} != n_projection_months {n_projection_months}."
         )
 
     buckets = asm.allocation.buckets
@@ -95,15 +102,19 @@ def write_alm_engine_sheet(
     ws["A1"] = "ALM ladder engine (first principles — YieldCurve + Projection cashflows)"
     ws["A1"].font = Font(bold=True, size=12)
     ws["A2"] = (
-        "Month recursion matches Python ALM when rebalance policy is liquidity_only. "
-        "Discount factors interpolate YieldCurve zeros with Inputs spread (no LET/LAMBDA). "
-        "Weights and notionals below seed the ladder; the wide grid starts at row "
-        f"{ENGINE_DATA_FIRST_ROW}."
+        "Each engine row is one **period** (e.g. a calendar quarter). Column **dt_y** is that period’s length in years; "
+        "tenor roll and debt accrual use **dt_y** (not a fixed 1/12). "
+        "Column **cf** sums Projection **S** over all months in the period. "
+        "Discount factors use YieldCurve + Inputs spread (INDEX/MATCH only). Grid starts row "
+        f"{ENGINE_DATA_FIRST_ROW}. Rebalance policy liquidity_only."
     )
     ws.merge_cells("A2:J2")
 
     ws["A5"], ws["B5"] = "Initial AUM ($)", float(initial_aum)
-    ws["A6"], ws["B6"] = "Δt (years)", 1.0 / 12.0
+    ws["A6"], ws["B6"] = (
+        "Δt per row",
+        "(see dt_y; B6 unused)",
+    )
     ws["A7"], ws["B7"] = "Borrow: 1=scenario-linked rate, 0=fixed annual", int(
         1 if asm.borrowing_rate_mode == "scenario_linked" else 0
     )
@@ -164,9 +175,11 @@ def write_alm_engine_sheet(
         c += n
         return cols
 
-    take1("mon", "Month index (1..N)")
-    take1("cf", "Monthly liability cashflow (Projection col S)")
-    take1("d_acc", "Debt balance after accrual (month start)")
+    take1("mon", "Month at period end (matches Projection col A)")
+    take1("m0", "First month in period (1-based)")
+    take1("dt_y", "Period length (years) for accrual & tenor roll")
+    take1("cf", "Sum of Projection col S over months in period")
+    take1("d_acc", "Debt balance after accrual (period start)")
     t_pm = taken(
         "t_pm", nb, lambda i: f"Bond {i + 1}: years to maturity (pre-paydown)"
     )
@@ -258,7 +271,7 @@ def write_alm_engine_sheet(
     )
     sec = ws.cell(row=ENGINE_SECTION_ROW, column=1)
     sec.value = (
-        "Engine grid — each row is one calendar month; read stages left → right "
+        "Engine grid — each row is one multi-month **period** (e.g. quarter); read stages left → right "
         "(maturity → rebalance/reinvest → funding → disinvest ladder → EOM). "
         "Bond 1…n are Treasury ladder buckets (not Excel column letters)."
     )
@@ -277,17 +290,23 @@ def write_alm_engine_sheet(
 
     R0 = ENGINE_DATA_FIRST_ROW
     WBASE = w_row0
+    n_periods = len(period_end_months_1based)
+    mon_c = int(C("mon"))
+    m0_c = int(C("m0"))
+    dt_c = int(C("dt_y"))
+    cf_i = int(C("cf"))
 
-    for i in range(n_months):
+    for i in range(n_periods):
         r = R0 + i
         rp = r - 1
-        mon = C("mon")
-        if isinstance(mon, list):
-            raise RuntimeError("bad col map")
-        ws.cell(row=r, column=int(mon), value=1 if i == 0 else f"={_L(mon)}{rp}+1")
-
-        cf_i = int(C("cf"))
-        ws.cell(row=r, column=cf_i, value=f"=INDEX(Projection!$S:$S,3+{_L(mon)}{r})")
+        ws.cell(row=r, column=mon_c, value=int(period_end_months_1based[i]))
+        ws.cell(row=r, column=m0_c, value=f"=IF(ROW()={R0},1,{_L(mon_c)}{rp}+1)")
+        ws.cell(row=r, column=dt_c, value=f"=({_L(mon_c)}{r}-{_L(m0_c)}{r}+1)/12")
+        ws.cell(
+            row=r,
+            column=cf_i,
+            value=f'=SUM(INDIRECT("Projection!S"&(3+{_L(m0_c)}{r})&":S"&(3+{_L(mon_c)}{r})))',
+        )
 
         d_acc = int(C("d_acc"))
         de_c = int(C("de_e"))
@@ -309,10 +328,10 @@ def write_alm_engine_sheet(
         ]
         trem_p = [f"$E${WBASE + k}" if i == 0 else f"{_L(te[k])}{rp}" for k in range(nb)]
 
-        ws.cell(row=r, column=d_acc, value=f"=({debt_p})*EXP($B$13*$B$6)")
+        ws.cell(row=r, column=d_acc, value=f"=({debt_p})*EXP($B$13*{_L(dt_c)}{r})")
 
         for k in range(nb):
-            ws.cell(row=r, column=t_pm[k], value=f"=MAX(0,{trem_p[k]}-$B$6)")
+            ws.cell(row=r, column=t_pm[k], value=f"=MAX(0,{trem_p[k]}-{_L(dt_c)}{r})")
 
         m_parts = []
         for k in range(nb):
@@ -532,7 +551,7 @@ def write_alm_engine_sheet(
                 value=f"={_L(fe[k])}{r}*({_excel_df_flat(t_cell=f'{_L(te[k])}{r}', y_last_row=y_last_row)})",
             )
 
-    last_r = R0 + n_months - 1
+    last_r = R0 + n_periods - 1
     mvb_l = C("mvb")
     if not isinstance(mvb_l, list):
         raise RuntimeError("mvb")

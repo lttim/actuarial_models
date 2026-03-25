@@ -12,12 +12,21 @@ import spia_projection as sp
 from alm_excel_ladder import ALM_ENGINE_SHEET
 
 from build_spia_excel_workbook import (
+    ALM_ENGINE_STEP_MONTHS,
     ALM_SHEET_NAME,
     ExcelPythonSnapshot,
+    alm_excel_downsample_snapshot,
+    alm_excel_period_end_indices,
     alm_excel_snapshot_from_result,
     build_workbook_from_spec,
     excel_spec_from_launcher,
 )
+
+
+def test_alm_excel_period_end_indices():
+    assert alm_excel_period_end_indices(10, 3) == [2, 5, 8, 9]
+    assert alm_excel_period_end_indices(1, 3) == [0]
+    assert alm_excel_period_end_indices(6, 1) == [0, 1, 2, 3, 4, 5]
 
 
 def test_model_check_sheet_embeds_python_snapshot():
@@ -106,6 +115,7 @@ def test_alm_projection_sheet_and_dashboard_links():
     alm_snap = alm_excel_snapshot_from_result(
         alm, asm, initial_asset_market_value=float(res.single_premium)
     )
+    alm_snap_ds = alm_excel_downsample_snapshot(alm_snap, ALM_ENGINE_STEP_MONTHS)
     n_m = int(res.months.size)
     for m in (0, min(5, n_m - 1), n_m - 1):
         L_alt = sp.liability_pv_after_paid_months(res, yc, 0.0, m)
@@ -150,6 +160,7 @@ def test_alm_projection_sheet_and_dashboard_links():
     assert ALM_ENGINE_SHEET in wb.sheetnames
     ws_alm = wb[ALM_SHEET_NAME]
     dr = 13
+    assert int(ws_alm[f"A{dr}"].value) == int(alm_snap_ds.month_index[0]) + 1
     assert isinstance(ws_alm[f"C{dr}"].value, str) and str(ws_alm[f"C{dr}"].value).startswith("=SUM(")
     assert isinstance(ws_alm[f"H{dr}"].value, str) and str(ws_alm[f"H{dr}"].value).startswith(f"={ALM_ENGINE_SHEET}!")
     assert isinstance(ws_alm[f"D{dr}"].value, str) and str(ws_alm[f"D{dr}"].value).startswith("=")
@@ -161,6 +172,6 @@ def test_alm_projection_sheet_and_dashboard_links():
     mc = wb["ModelCheck"]
     assert mc["A10"].value == "ALM checks (ALM_Projection sheet)"
     assert mc["B11"].value == pytest.approx(float(alm_snap.initial_asset_market_value), rel=1e-9)
-    assert mc["B12"].value == pytest.approx(float(alm_snap.asset_market_value[0]), rel=1e-9)
+    assert mc["B12"].value == pytest.approx(float(alm_snap_ds.asset_market_value[0]), rel=1e-9)
     assert mc["C12"].value == f"={ALM_SHEET_NAME}!C13"
     assert mc["D12"].value == "=C12-B12"

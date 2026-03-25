@@ -78,6 +78,42 @@ class ALMDashboardLayout(NamedTuple):
 ALM_SHEET_NAME = "ALM_Projection"
 # First month of ALM path data on ALM_Projection (below header row 12). Keep in sync with _write_alm_projection_sheet.
 ALM_PROJECTION_FIRST_DATA_ROW = 13
+# ALM_Engine / ALM_Projection use this many underlying projection months per row (3 = calendar quarters).
+ALM_ENGINE_STEP_MONTHS = 3
+
+
+def alm_excel_period_end_indices(n_months: int, step: int) -> list[int]:
+    """0-based indices into the monthly ALM path at each coarser period end (inclusive)."""
+    if step < 1:
+        raise ValueError("step must be >= 1")
+    ix: list[int] = []
+    cur = 0
+    while cur < n_months:
+        hi = min(cur + step, n_months)
+        ix.append(hi - 1)
+        cur = hi
+    return ix
+
+
+def alm_excel_downsample_snapshot(snap: ALMExcelSnapshot, step: int) -> ALMExcelSnapshot:
+    """Slice monthly ALM snapshot to period ends (quarter-end when step=3) for Excel rows."""
+    n = int(snap.asset_market_value.shape[0])
+    ix = np.array(alm_excel_period_end_indices(n, step), dtype=int)
+    bmv = np.asarray(snap.bucket_asset_mv, dtype=float)[:, ix]
+    return ALMExcelSnapshot(
+        initial_asset_market_value=snap.initial_asset_market_value,
+        bucket_names=snap.bucket_names,
+        weights=snap.weights,
+        duration_gap=snap.duration_gap,
+        duration_assets_mac=snap.duration_assets_mac,
+        duration_liabilities_mac=snap.duration_liabilities_mac,
+        pv01_net=snap.pv01_net,
+        month_index=np.asarray(snap.month_index[ix], dtype=int),
+        asset_market_value=np.asarray(snap.asset_market_value[ix], dtype=float),
+        liability_pv=np.asarray(snap.liability_pv[ix], dtype=float),
+        borrowing_balance=np.asarray(snap.borrowing_balance[ix], dtype=float),
+        bucket_asset_mv=bmv,
+    )
 
 
 def alm_excel_snapshot_from_result(
@@ -532,10 +568,16 @@ def _write_alm_projection_sheet(
     n = int(snap.asset_market_value.shape[0])
     n_b = len(snap.bucket_names)
     ylr = 3 + len(spec.yield_curve_df)
+    period_end_m = [int(snap.month_index[i]) + 1 for i in range(n)]
+    if period_end_m[-1] != spec.n_months:
+        raise ValueError(
+            f"ALM snapshot period end month {period_end_m[-1]} != spec.n_months {spec.n_months}"
+        )
     ws_eng = wb.create_sheet(ALM_ENGINE_SHEET)
     layout = write_alm_engine_sheet(
         ws_eng,
-        n_months=n,
+        period_end_months_1based=period_end_m,
+        n_projection_months=int(spec.n_months),
         y_last_row=ylr,
         asm=asm,
         initial_aum=float(snap.initial_asset_market_value),
@@ -545,15 +587,15 @@ def _write_alm_projection_sheet(
     mvb0 = layout.col_mv_bond_start
     debt_letter = get_column_letter(layout.col_debt_eom)
     ws = wb.create_sheet(ALM_SHEET_NAME)
-    ws["A1"] = "ALM monthly path (liability PV + ladder simulated in ALM_Engine)"
+    ws["A1"] = "ALM path — quarterly steps on engine (monthly Projection + liability PV)"
     ws["A1"].font = Font(bold=True, size=12)
-    proj_last = 3 + n
+    proj_last = 3 + spec.n_months
     ws["A2"] = (
-        f"Liability PV (D) follows Projection (rows 4–{proj_last}). "
+        f"Liability PV (D) uses full monthly Projection (rows 4–{proj_last}) at each period-end month in col A. "
         f"**Asset buckets (H onward)** and **borrowing (E)** link to **{ALM_ENGINE_SHEET}**, which rolls the Treasury "
-        "ladder month-by-month (YieldCurve DF, Projection column S cashflows). "
-        "**Desktop Excel** (2013+); ladder uses INDEX/MATCH/IF only (no LET). Rebalance policy must be liquidity_only in ALM settings for parity with this "
-        "sheet. Surplus F = C−D−E; funding G = C/(D+E)."
+        "ladder in **quarterly** steps: each period aggregates Projection column **S** cashflows and uses that period’s "
+        "length (years) for accrual and tenor roll. **Desktop Excel** (2013+); "
+        "rebalance policy must be liquidity_only. Surplus F = C−D−E; funding G = C/(D+E)."
     )
     last_hdr_col = get_column_letter(7 + n_b)
     ws.merge_cells(f"A2:{last_hdr_col}2")
@@ -586,7 +628,7 @@ def _write_alm_projection_sheet(
     for i in range(n):
         r = first_data + i
         r_eng = ENGINE_DATA_FIRST_ROW + i
-        ws.cell(row=r, column=1, value=int(snap.month_index[i] + 1))
+        ws.cell(row=r, column=1, value=int(snap.month_index[i]) + 1)
         ws.cell(row=r, column=2, value=f'=IFERROR(INDEX(Projection!$C:$C,MATCH(A{r},Projection!$A:$A,0)),"")')
         ws.cell(row=r, column=3, value=f"=SUM({first_bkt}{r}:{last_bkt}{r})")
         ws.cell(row=r, column=4, value=_alm_liability_pv_cell_formula(excel_row=r, proj_last_row=proj_last))
@@ -925,12 +967,12 @@ def _write_model_check_sheet(
         min_rng = f"=MIN({sh}!F{dr}:F{lr})"
         alm_rows: list[tuple[str, float, str, str]] = [
             ("ALM initial AUM (meta)", float(alm_snapshot.initial_asset_market_value), f"={sh}!B3", "money"),
-            ("ALM asset MV (month 1)", a0, f"={sh}!C{dr}", "money"),
-            ("ALM liability PV (month 1)", l0, f"={sh}!D{dr}", "money"),
-            ("ALM surplus (month 1)", s0, f"={sh}!F{dr}", "money"),
+            ("ALM asset MV (1st period end)", a0, f"={sh}!C{dr}", "money"),
+            ("ALM liability PV (1st period end)", l0, f"={sh}!D{dr}", "money"),
+            ("ALM surplus (1st period end)", s0, f"={sh}!F{dr}", "money"),
         ]
         if math.isfinite(f0):
-            alm_rows.append(("ALM funding ratio (month 1)", f0, f"={sh}!G{dr}", "fr"))
+            alm_rows.append(("ALM funding ratio (1st period end)", f0, f"={sh}!G{dr}", "fr"))
         alm_rows.extend(
             [
                 ("ALM surplus (final month)", s_end, f"={sh}!F{lr}", "money"),
@@ -1046,6 +1088,7 @@ def build_workbook_from_spec(
     mc_snapshot: MCExcelSnapshot | None = None,
     alm_snapshot: ALMExcelSnapshot | None = None,
     alm_assumptions: sp.ALMAssumptions | None = None,
+    alm_engine_step_months: int = ALM_ENGINE_STEP_MONTHS,
 ) -> Path | bytes:
     """
     Write a workbook to `out_path`. If `out_path` is None, return the file as bytes (for downloads).
@@ -1053,6 +1096,8 @@ def build_workbook_from_spec(
     Optional ``python_snapshot`` embeds the launcher run on the ModelCheck sheet for formula validation.
     Optional ``alm_snapshot`` adds ``ALM_Engine`` + ``ALM_Projection`` plus Dashboard ALM summaries;
     ``alm_assumptions`` must match the snapshot's allocation/rules (same object as the ALM run).
+    ``alm_engine_step_months`` (default 3): down-sample the monthly ALM path to period ends; engine steps use
+    aggregated Projection cashflows and per-period accrual time.
     """
     yc = spec.yield_curve_df.copy()
     if "maturity_years" not in yc.columns or "zero_rate" not in yc.columns:
@@ -1098,17 +1143,19 @@ def build_workbook_from_spec(
     _write_projection(ws_proj, n_months=n_months, y_last_row=y_last_row, idx_last_row=idx_last_row)
 
     alm_layout: ALMDashboardLayout | None = None
+    alm_snap_for_book: ALMExcelSnapshot | None = None
     if alm_snapshot is not None:
         if alm_assumptions is None:
             raise ValueError("alm_assumptions is required when alm_snapshot is provided (Excel ladder paramaters).")
-        alm_layout = _write_alm_projection_sheet(wb, alm_snapshot, alm_assumptions, spec)
+        alm_snap_for_book = alm_excel_downsample_snapshot(alm_snapshot, int(alm_engine_step_months))
+        alm_layout = _write_alm_projection_sheet(wb, alm_snap_for_book, alm_assumptions, spec)
 
     if python_snapshot is not None:
         _write_model_check_sheet(
             wb,
             python_snapshot,
             alm_layout=alm_layout,
-            alm_snapshot=alm_snapshot,
+            alm_snapshot=alm_snap_for_book,
         )
 
     if mc_snapshot is not None:

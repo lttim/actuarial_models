@@ -36,11 +36,13 @@ import spia_projection as sp
 from alm_excel_ladder import ALM_ENGINE_SHEET
 
 from build_spia_excel_workbook import (
+    ALM_ENGINE_STEP_MONTHS,
     ALMExcelSnapshot,
     ALM_PROJECTION_FIRST_DATA_ROW,
     ALM_SHEET_NAME,
     ExcelPythonSnapshot,
     MCExcelSnapshot,
+    alm_excel_period_end_indices,
     alm_excel_snapshot_from_result,
     build_workbook_from_spec,
     excel_spec_from_launcher,
@@ -1825,12 +1827,24 @@ def _alm_modelcheck_key_assets_surplus_df(
     if n < 1:
         return pd.DataFrame()
 
-    if n == 1:
-        asset_specs: list[tuple[int, str]] = [(0, "ALM asset MV (month 1)")]
-        surp_specs: list[tuple[int, str]] = [(0, "ALM surplus (month 1)")]
+    period_ix = np.array(alm_excel_period_end_indices(n, ALM_ENGINE_STEP_MONTHS), dtype=int)
+    n_p = int(period_ix.size)
+    if n_p == 1:
+        asset_specs: list[tuple[int, int, str]] = [
+            (0, int(period_ix[0]), "ALM asset MV (1st period end)"),
+        ]
+        surp_specs: list[tuple[int, int, str]] = [
+            (0, int(period_ix[0]), "ALM surplus (1st period end)"),
+        ]
     else:
-        asset_specs = [(0, "ALM asset MV (month 1)"), (n - 1, "ALM asset MV (final month)")]
-        surp_specs = [(0, "ALM surplus (month 1)"), (n - 1, "ALM surplus (final month)")]
+        asset_specs = [
+            (0, int(period_ix[0]), "ALM asset MV (1st period end)"),
+            (n_p - 1, int(period_ix[-1]), "ALM asset MV (final period end)"),
+        ]
+        surp_specs = [
+            (0, int(period_ix[0]), "ALM surplus (1st period end)"),
+            (n_p - 1, int(period_ix[-1]), "ALM surplus (final period end)"),
+        ]
 
     ws = None
     if isinstance(xlsx_bytes, bytes) and xlsx_bytes:
@@ -1842,9 +1856,9 @@ def _alm_modelcheck_key_assets_surplus_df(
             ws = None
 
     rows: list[dict[str, Any]] = []
-    for idx, lab in asset_specs:
-        py = float(a_mv[idx])
-        r = dr + idx
+    for excel_off, py_idx, lab in asset_specs:
+        py = float(a_mv[py_idx])
+        r = dr + excel_off
         ex: float | None = None
         if ws is not None:
             ex = _read_workbook_cell_float(ws, f"C{r}")
@@ -1859,9 +1873,9 @@ def _alm_modelcheck_key_assets_surplus_df(
             }
         )
 
-    for idx, lab in surp_specs:
-        py = float(surp[idx])
-        r = dr + idx
+    for excel_off, py_idx, lab in surp_specs:
+        py = float(surp[py_idx])
+        r = dr + excel_off
         ex: float | None = None
         if ws is not None:
             ex_f = _read_workbook_cell_float(ws, f"F{r}")
@@ -1975,11 +1989,14 @@ def _render_excel_replicator() -> None:
                 hide_index=True,
                 column_config=_number_cols_no_decimals(alm_mc_disp),
             )
-            lr = ALM_PROJECTION_FIRST_DATA_ROW + int(np.asarray(alm_chk.asset_market_value).size) - 1
+            n_mon = int(np.asarray(alm_chk.asset_market_value).size)
+            n_per = len(alm_excel_period_end_indices(n_mon, ALM_ENGINE_STEP_MONTHS))
+            lr = ALM_PROJECTION_FIRST_DATA_ROW + n_per - 1
             st.caption(
-                f"Compares the current ALM path to **{ALM_SHEET_NAME}**: **C** = SUM of bucket columns (each bucket "
-                f"links **{ALM_ENGINE_SHEET}** ladder MVs); liability **D** from Projection; surplus **F** = "
-                "C−D−E (or cached F). Row-1 asset/surplus differences should be near zero for an unedited file."
+                f"Workbook **{ALM_SHEET_NAME}** uses **quarterly** steps ({ALM_ENGINE_STEP_MONTHS} months per row on ALM_Engine); "
+                f"Python rows above align **period-end** months with the same sheet rows (**{ALM_PROJECTION_FIRST_DATA_ROW}**–**{lr}**). "
+                f"**C** = SUM buckets (**{ALM_ENGINE_SHEET}**); **D** from monthly Projection; **F** = C−D−E. "
+                "Recalc in Excel before comparing."
             )
 
     # --- Monte Carlo distribution dashboard ---
@@ -2079,7 +2096,8 @@ def _render_excel_replicator() -> None:
             )
         if xlsx_has_alm:
             st.success(
-                "Workbook includes **ALM_Projection** (assets, liability PV, bucket MVs) and **Dashboard** ALM charts.",
+                "Workbook includes **ALM_Projection** and **ALM_Engine** (quarterly ALM steps; monthly **Projection** and liability PV), "
+                "plus **Dashboard** ALM charts.",
                 icon="✅",
             )
         else:
