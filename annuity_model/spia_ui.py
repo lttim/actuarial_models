@@ -2495,26 +2495,30 @@ def _render_alm_section() -> None:
                             "Tenor years": float(kt),
                             "Assets KRD": -((a_b - a0) / (max(1e-9, a0) * 1e-4)),
                             "Liabilities KRD": -((l_b - l0) / (max(1e-9, l0) * 1e-4)),
-                            "Net KRD": -(((a_b - l_b) - (a0 - l0)) / (net0 * 1e-4)),
+                            "Surplus KRD": -(((a_b - l_b) - (a0 - l0)) / (net0 * 1e-4)),
                         }
                     )
                 krd_df = pd.DataFrame(rows).sort_values("Tenor years")
                 krd_long = krd_df.melt(
                     id_vars=["Tenor", "Tenor years"],
-                    value_vars=["Assets KRD", "Liabilities KRD", "Net KRD"],
+                    value_vars=["Assets KRD", "Liabilities KRD", "Surplus KRD"],
                     var_name="Series",
                     value_name="Key rate duration",
                 )
-                krd_chart = (
-                    alt.Chart(krd_long)
+                krd_bars_df = krd_long[krd_long["Series"].isin(["Assets KRD", "Liabilities KRD"])].copy()
+                krd_surplus_df = krd_long[krd_long["Series"] == "Surplus KRD"].copy()
+                tenor_order = krd_df["Tenor"].tolist()
+
+                bars = (
+                    alt.Chart(krd_bars_df)
                     .mark_bar()
                     .encode(
-                        x=alt.X("Tenor:N", sort=krd_df["Tenor"].tolist(), title="Key tenor"),
-                        y=alt.Y("Key rate duration:Q", title="Duration (years)"),
+                        x=alt.X("Tenor:N", sort=tenor_order, title="Key tenor"),
+                        y=alt.Y("Key rate duration:Q", title="Assets/Liabilities KRD (years)"),
                         color=alt.Color(
                             "Series:N",
                             title="Series",
-                            sort=["Assets KRD", "Liabilities KRD", "Net KRD"],
+                            sort=["Assets KRD", "Liabilities KRD"],
                             legend=alt.Legend(orient="top", direction="horizontal"),
                         ),
                         xOffset=alt.XOffset("Series:N"),
@@ -2524,9 +2528,31 @@ def _render_alm_section() -> None:
                             alt.Tooltip("Key rate duration:Q", format=".4f"),
                         ],
                     )
-                    .properties(height=300)
                 )
-                st.altair_chart(krd_chart, use_container_width=True)
+
+                surplus_line = (
+                    alt.Chart(krd_surplus_df)
+                    .mark_line(color="#111111", strokeWidth=2, point=True)
+                    .encode(
+                        x=alt.X("Tenor:N", sort=tenor_order, title="Key tenor"),
+                        y=alt.Y("Key rate duration:Q", title="Surplus KRD (years)"),
+                        tooltip=[
+                            alt.Tooltip("Tenor:N"),
+                            alt.Tooltip("Series:N"),
+                            alt.Tooltip("Key rate duration:Q", format=".4f"),
+                        ],
+                    )
+                )
+
+                st.altair_chart(
+                    alt.layer(bars, surplus_line).resolve_scale(y="independent").properties(height=320),
+                    use_container_width=True,
+                )
+                st.caption(
+                    "Interpretation: Surplus KRD is the key-rate sensitivity of net surplus (assets minus liabilities), "
+                    "normalized by current surplus. Because the denominator is surplus rather than total assets or liabilities, "
+                    "Surplus KRD can be much larger in magnitude when surplus is small."
+                )
             else:
                 st.info("No positive tenors available for key rate duration chart.")
         except Exception as ex:
