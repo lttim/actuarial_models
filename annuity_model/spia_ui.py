@@ -36,13 +36,12 @@ import spia_projection as sp
 from alm_excel_ladder import ALM_ENGINE_SHEET
 
 from build_spia_excel_workbook import (
-    ALM_ENGINE_STEP_MONTHS,
+    ALM_EXCEL_PATH_MONTH_CAP,
     ALMExcelSnapshot,
     ALM_PROJECTION_FIRST_DATA_ROW,
     ALM_SHEET_NAME,
     ExcelPythonSnapshot,
     MCExcelSnapshot,
-    alm_excel_period_end_indices,
     alm_excel_snapshot_from_result,
     build_workbook_from_spec,
     excel_spec_from_launcher,
@@ -1827,23 +1826,22 @@ def _alm_modelcheck_key_assets_surplus_df(
     if n < 1:
         return pd.DataFrame()
 
-    period_ix = np.array(alm_excel_period_end_indices(n, ALM_ENGINE_STEP_MONTHS), dtype=int)
-    n_p = int(period_ix.size)
-    if n_p == 1:
-        asset_specs: list[tuple[int, int, str]] = [
-            (0, int(period_ix[0]), "ALM asset MV (1st period end)"),
-        ]
-        surp_specs: list[tuple[int, int, str]] = [
-            (0, int(period_ix[0]), "ALM surplus (1st period end)"),
-        ]
+    n_rows = int(min(ALM_EXCEL_PATH_MONTH_CAP, n))
+    if n_rows < 1:
+        return pd.DataFrame()
+    last_lab = f"ALM asset MV (month {n_rows} on sheet)"
+    last_s_lab = f"ALM surplus (month {n_rows} on sheet)"
+    if n_rows == 1:
+        asset_specs: list[tuple[int, int, str]] = [(0, 0, "ALM asset MV (month 1 on sheet)")]
+        surp_specs: list[tuple[int, int, str]] = [(0, 0, "ALM surplus (month 1 on sheet)")]
     else:
         asset_specs = [
-            (0, int(period_ix[0]), "ALM asset MV (1st period end)"),
-            (n_p - 1, int(period_ix[-1]), "ALM asset MV (final period end)"),
+            (0, 0, "ALM asset MV (month 1 on sheet)"),
+            (n_rows - 1, n_rows - 1, last_lab),
         ]
         surp_specs = [
-            (0, int(period_ix[0]), "ALM surplus (1st period end)"),
-            (n_p - 1, int(period_ix[-1]), "ALM surplus (final period end)"),
+            (0, 0, "ALM surplus (month 1 on sheet)"),
+            (n_rows - 1, n_rows - 1, last_s_lab),
         ]
 
     ws = None
@@ -1990,13 +1988,12 @@ def _render_excel_replicator() -> None:
                 column_config=_number_cols_no_decimals(alm_mc_disp),
             )
             n_mon = int(np.asarray(alm_chk.asset_market_value).size)
-            n_per = len(alm_excel_period_end_indices(n_mon, ALM_ENGINE_STEP_MONTHS))
-            lr = ALM_PROJECTION_FIRST_DATA_ROW + n_per - 1
+            n_on_sheet = int(min(ALM_EXCEL_PATH_MONTH_CAP, n_mon))
+            lr = ALM_PROJECTION_FIRST_DATA_ROW + n_on_sheet - 1
             st.caption(
-                f"Workbook **{ALM_SHEET_NAME}** uses **quarterly** steps ({ALM_ENGINE_STEP_MONTHS} months per row on ALM_Engine); "
-                f"Python rows above align **period-end** months with the same sheet rows (**{ALM_PROJECTION_FIRST_DATA_ROW}**–**{lr}**). "
-                f"**C** = SUM buckets (**{ALM_ENGINE_SHEET}**); **D** from monthly Projection; **F** = C−D−E. "
-                "Recalc in Excel before comparing."
+                f"Workbook **{ALM_SHEET_NAME}** / **{ALM_ENGINE_SHEET}** show the **first {n_on_sheet}** monthly ALM steps "
+                f"(cap {ALM_EXCEL_PATH_MONTH_CAP}; Python may have more months). Rows **{ALM_PROJECTION_FIRST_DATA_ROW}**–**{lr}**. "
+                f"**C** = SUM buckets; **D** from Projection; **F** = C−D−E. Recalc in Excel before comparing."
             )
 
     # --- Monte Carlo distribution dashboard ---
@@ -2096,8 +2093,8 @@ def _render_excel_replicator() -> None:
             )
         if xlsx_has_alm:
             st.success(
-                "Workbook includes **ALM_Projection** and **ALM_Engine** (quarterly ALM steps; monthly **Projection** and liability PV), "
-                "plus **Dashboard** ALM charts.",
+                f"Workbook includes **ALM_Projection** / **ALM_Engine** (first {ALM_EXCEL_PATH_MONTH_CAP} months of the ALM path) "
+                "and **Dashboard** ALM charts.",
                 icon="✅",
             )
         else:

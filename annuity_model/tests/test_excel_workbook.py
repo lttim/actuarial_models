@@ -12,12 +12,14 @@ import spia_projection as sp
 from alm_excel_ladder import ALM_ENGINE_SHEET
 
 from build_spia_excel_workbook import (
+    ALM_EXCEL_PATH_MONTH_CAP,
     ALM_ENGINE_STEP_MONTHS,
     ALM_SHEET_NAME,
     ExcelPythonSnapshot,
     alm_excel_downsample_snapshot,
     alm_excel_period_end_indices,
     alm_excel_snapshot_from_result,
+    alm_excel_truncate_snapshot,
     build_workbook_from_spec,
     excel_spec_from_launcher,
 )
@@ -115,7 +117,10 @@ def test_alm_projection_sheet_and_dashboard_links():
     alm_snap = alm_excel_snapshot_from_result(
         alm, asm, initial_asset_market_value=float(res.single_premium)
     )
-    alm_snap_ds = alm_excel_downsample_snapshot(alm_snap, ALM_ENGINE_STEP_MONTHS)
+    alm_snap_ds = alm_excel_truncate_snapshot(
+        alm_excel_downsample_snapshot(alm_snap, ALM_ENGINE_STEP_MONTHS),
+        ALM_EXCEL_PATH_MONTH_CAP,
+    )
     n_m = int(res.months.size)
     for m in (0, min(5, n_m - 1), n_m - 1):
         L_alt = sp.liability_pv_after_paid_months(res, yc, 0.0, m)
@@ -161,6 +166,10 @@ def test_alm_projection_sheet_and_dashboard_links():
     ws_alm = wb[ALM_SHEET_NAME]
     dr = 13
     assert int(ws_alm[f"A{dr}"].value) == int(alm_snap_ds.month_index[0]) + 1
+    n_full = int(alm_snap.asset_market_value.shape[0])
+    last_row = dr + int(alm_snap_ds.asset_market_value.shape[0]) - 1
+    assert int(ws_alm[f"A{last_row}"].value) == int(alm_snap_ds.month_index[-1]) + 1
+    assert int(alm_snap_ds.asset_market_value.shape[0]) == min(ALM_EXCEL_PATH_MONTH_CAP, n_full)
     assert isinstance(ws_alm[f"C{dr}"].value, str) and str(ws_alm[f"C{dr}"].value).startswith("=SUM(")
     assert isinstance(ws_alm[f"H{dr}"].value, str) and str(ws_alm[f"H{dr}"].value).startswith(f"={ALM_ENGINE_SHEET}!")
     assert isinstance(ws_alm[f"D{dr}"].value, str) and str(ws_alm[f"D{dr}"].value).startswith("=")

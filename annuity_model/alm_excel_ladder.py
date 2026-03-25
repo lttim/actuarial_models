@@ -74,6 +74,7 @@ def write_alm_engine_sheet(
     asm: sp.ALMAssumptions,
     initial_aum: float,
     snap_bucket_names: tuple[str, ...],
+    engine_step_months: int = 1,
 ) -> ALMEngineLayout:
     if asm.rebalance_policy != "liquidity_only":
         raise ValueError(
@@ -82,11 +83,13 @@ def write_alm_engine_sheet(
         )
     if not period_end_months_1based:
         raise ValueError("period_end_months_1based must be non-empty.")
-    if period_end_months_1based[-1] != n_projection_months:
+    if period_end_months_1based[-1] > n_projection_months or period_end_months_1based[0] < 1:
         raise ValueError(
-            f"Last period end {period_end_months_1based[-1]} != n_projection_months {n_projection_months}."
+            f"period_end_months_1based out of range 1..{n_projection_months}: "
+            f"{period_end_months_1based[0]}..{period_end_months_1based[-1]}"
         )
 
+    variable_period = int(engine_step_months) > 1
     buckets = asm.allocation.buckets
     w = np.asarray(asm.allocation.weights, dtype=float)
     nb = len(buckets) - 1
@@ -99,22 +102,23 @@ def write_alm_engine_sheet(
     wsum_b = float(np.sum(w[1:]))
     wnorm = [float(w[k + 1]) / wsum_b for k in range(nb)] if wsum_b > 1e-15 else [1.0 / nb] * nb
 
-    ws["A1"] = "ALM ladder engine (first principles — YieldCurve + Projection cashflows)"
+    ws["A1"] = "ALM_Engine — Treasury ladder (YieldCurve + Projection S)"
     ws["A1"].font = Font(bold=True, size=12)
-    ws["A2"] = (
-        "Each engine row is one **period** (e.g. a calendar quarter). Column **dt_y** is that period’s length in years; "
-        "tenor roll and debt accrual use **dt_y** (not a fixed 1/12). "
-        "Column **cf** sums Projection **S** over all months in the period. "
-        "Discount factors use YieldCurve + Inputs spread (INDEX/MATCH only). Grid starts row "
-        f"{ENGINE_DATA_FIRST_ROW}. Rebalance policy liquidity_only."
-    )
+    if variable_period:
+        ws["A2"] = (
+            "Multi-month rows: **dt_y** = period length (yr); **cf** = SUM(Projection S) in period. "
+            f"Grid row {ENGINE_DATA_FIRST_ROW}+. liquidity_only."
+        )
+        ws["A6"], ws["B6"] = ("Δt note", "(use dt_y col; B6 unused)")
+    else:
+        ws["A2"] = (
+            f"Monthly rows; **B6** = Δt (yr); **cf** = Projection S for that month. "
+            f"Collapse column groups for detail. Row {ENGINE_DATA_FIRST_ROW}+. liquidity_only."
+        )
+        ws["A6"], ws["B6"] = "Δt (years)", 1.0 / 12.0
     ws.merge_cells("A2:J2")
 
     ws["A5"], ws["B5"] = "Initial AUM ($)", float(initial_aum)
-    ws["A6"], ws["B6"] = (
-        "Δt per row",
-        "(see dt_y; B6 unused)",
-    )
     ws["A7"], ws["B7"] = "Borrow: 1=scenario-linked rate, 0=fixed annual", int(
         1 if asm.borrowing_rate_mode == "scenario_linked" else 0
     )
@@ -175,89 +179,70 @@ def write_alm_engine_sheet(
         c += n
         return cols
 
-    take1("mon", "Month at period end (matches Projection col A)")
-    take1("m0", "First month in period (1-based)")
-    take1("dt_y", "Period length (years) for accrual & tenor roll")
-    take1("cf", "Sum of Projection col S over months in period")
-    take1("d_acc", "Debt balance after accrual (period start)")
-    t_pm = taken(
-        "t_pm", nb, lambda i: f"Bond {i + 1}: years to maturity (pre-paydown)"
-    )
-    mat = taken("mat", nb, lambda i: f"Bond {i + 1}: principal maturing this month")
-    f_pm = taken("f_pm", nb, lambda i: f"Bond {i + 1}: face after maturity event")
-    take1("cash_m", "Cash after maturities pay in")
-    take1("rep1", "Debt repayment to cash (1st pass)")
-    take1("cash_r1", "Cash after 1st repayment")
-    take1("debt_r1", "Debt after 1st repayment")
-    df_pm = taken(
-        "df_pm", nb, lambda i: f"Bond {i + 1}: discount factor @ pre-paydown tenor"
-    )
-    mv_pm = taken(
-        "mv_pm", nb, lambda i: f"Bond {i + 1}: market value (pre-rebalance)"
-    )
-    take1("aum_re", "Total assets (cash + bonds, pre-rebalance)")
-    take1("xsr", "Cash surplus vs target weight × AUM")
-    defc = taken(
-        "defc", nb, lambda i: f"Bond {i + 1}: MV gap to target allocation"
-    )
-    take1("dsum", "Sum of bond MV gaps (reinvest depth)")
-    split = taken(
-        "split", nb, lambda i: f"Bond {i + 1}: share of reinvestment"
-    )
-    dmv = taken(
-        "dmv", nb, lambda i: f"Bond {i + 1}: $ bought (reinvest maturities)"
-    )
-    take1("cash_re", "Cash after reinvestment / deployment")
-    f_re = taken("f_re", nb, lambda i: f"Bond {i + 1}: face after reinvest")
-    t_re = taken("t_re", nb, lambda i: f"Bond {i + 1}: tenor after reinvest (y)")
-    take1("cash_cf", "Cash net of liability CF")
-    take1("need_raw", "Shortfall before funding policy")
-    take1("cash_bb", "Cash if borrow-before-selling")
-    take1("debt_bb", "Debt if borrow-before-selling")
-    take1("need_dis", "Residual cash need (sell bonds)")
+    take1("mon", "Month # (→ Projection col A)")
+    if variable_period:
+        take1("m0", "Period start month")
+        take1("dt_y", "Period length (yr)")
+        take1("cf", "Σ Projection S (period)")
+    else:
+        take1("cf", "Liability CF (Proj S)")
+    take1("d_acc", "Debt after accrual")
+    t_pm = taken("t_pm", nb, lambda i: f"B{i + 1} tenor (y)")
+    mat = taken("mat", nb, lambda i: f"B{i + 1} mat $")
+    f_pm = taken("f_pm", nb, lambda i: f"B{i + 1} face post-mat")
+    take1("cash_m", "Cash + maturities")
+    take1("rep1", "Repay debt (1)")
+    take1("cash_r1", "Cash post-repay1")
+    take1("debt_r1", "Debt post-repay1")
+    df_pm = taken("df_pm", nb, lambda i: f"B{i + 1} DF")
+    mv_pm = taken("mv_pm", nb, lambda i: f"B{i + 1} MV")
+    take1("aum_re", "AUM pre-rebal")
+    take1("xsr", "Cash vs target")
+    defc = taken("defc", nb, lambda i: f"B{i + 1} MV gap")
+    take1("dsum", "Σ MV gaps")
+    split = taken("split", nb, lambda i: f"B{i + 1} reinvest %")
+    dmv = taken("dmv", nb, lambda i: f"B{i + 1} reinvest $")
+    take1("cash_re", "Cash post-reinvest")
+    f_re = taken("f_re", nb, lambda i: f"B{i + 1} face reinvest")
+    t_re = taken("t_re", nb, lambda i: f"B{i + 1} tenor reinvest")
+    take1("cash_cf", "Cash − CF")
+    take1("need_raw", "Need (raw)")
+    take1("cash_bb", "Cash (borrow 1st)")
+    take1("debt_bb", "Debt (borrow 1st)")
+    take1("need_dis", "Need (sell)")
     # One DF @ post-reinvest tenor per bond; disinvest block references these cells
     # (inlining DF formulas hits Excel's 8192-char limit).
-    dfd = taken(
-        "dfd",
-        nb,
-        lambda i: f"Bond {i + 1}: DF for disinvest pricing (post-reinvest tenor)",
-    )
+    dfd = taken("dfd", nb, lambda i: f"B{i + 1} DF (dis)")
 
     n_dis = nb + 2  # pro_rata disinvest may need > nb peels
     dis_need: list[int] = []
     dis_cash: list[int] = []
     dis_face: list[list[int]] = []
     for di in range(n_dis):
-        dis_need.append(
-            take1(f"nd{di}", f"Disinvest round {di + 1}: remaining liquidity need")
-        )
-        dis_cash.append(
-            take1(f"cd{di}", f"Disinvest round {di + 1}: cash after bond sales")
-        )
+        dis_need.append(take1(f"nd{di}", f"D{di + 1} need"))
+        dis_cash.append(take1(f"cd{di}", f"D{di + 1} cash"))
         dis_face.append(
             taken(
                 f"fd{di}",
                 nb,
-                lambda i, d=di: f"Disinvest r{d + 1}: bond {i + 1} face remaining",
+                lambda i, d=di: f"D{d + 1}b{i + 1} face",
             )
         )
 
-    take1("cash_pd", "Cash after all disinvest rounds")
-    take1("debt_pb", "Debt after borrow/sell policy")
-    take1("need_b2", "Extra borrow need (sell-first path)")
-    take1("cash_br2", "Cash before final repayment")
-    take1("debt_br2", "Debt before final repayment")
-    take1("rep2", "Final debt repayment")
-    take1("cash_af2", "Cash end of month (before carry)")
-    take1("debt_af2", "Debt end of month (before carry)")
-    de = take1("de_e", "Debt EOM (carried to next month)")
-    ce = take1("ca_e", "Cash EOM (carried)")
-    fe = taken("fe", nb, lambda i: f"Bond {i + 1}: face EOM (carried)")
-    te = taken("te", nb, lambda i: f"Bond {i + 1}: tenor EOM (y, carried)")
-    mv0 = take1("mv0", "EOM cash (for ALM_Projection bucket 0)")
-    mvb = taken(
-        "mvb", nb, lambda i: f"Bond {i + 1}: EOM MV (for ALM_Projection)"
-    )
+    take1("cash_pd", "Cash post-D")
+    take1("debt_pb", "Debt post-policy")
+    take1("need_b2", "Borrow need (2)")
+    take1("cash_br2", "Cash pre-repay2")
+    take1("debt_br2", "Debt pre-repay2")
+    take1("rep2", "Repay (2)")
+    take1("cash_af2", "Cash pre-carry")
+    take1("debt_af2", "Debt pre-carry")
+    de = take1("de_e", "Debt EOM")
+    ce = take1("ca_e", "Cash EOM")
+    fe = taken("fe", nb, lambda i: f"B{i + 1} face EOM")
+    te = taken("te", nb, lambda i: f"B{i + 1} tenor EOM")
+    mv0 = take1("mv0", "MV cash → ALM_Proj")
+    mvb = taken("mvb", nb, lambda i: f"B{i + 1} MV EOM")
     last_col = c - 1
 
     def C(name: str) -> int | list[int]:
@@ -271,9 +256,8 @@ def write_alm_engine_sheet(
     )
     sec = ws.cell(row=ENGINE_SECTION_ROW, column=1)
     sec.value = (
-        "Engine grid — each row is one multi-month **period** (e.g. quarter); read stages left → right "
-        "(maturity → rebalance/reinvest → funding → disinvest ladder → EOM). "
-        "Bond 1…n are Treasury ladder buckets (not Excel column letters)."
+        "Data grid: left→right = accrue → maturities → rebalance/reinvest → fund CF → disinvest → EOM. "
+        "B1…Bn = bond buckets. Use Excel outline (collapse ▶) to hide ladder detail."
     )
     sec.font = Font(bold=True, size=11)
     sec.alignment = Alignment(wrap_text=True, vertical="center")
@@ -283,30 +267,47 @@ def write_alm_engine_sheet(
         hcell = ws.cell(row=ENGINE_HDR_ROW, column=cc, value=hdr_by_col.get(cc, ""))
         hcell.font = Font(bold=True, size=9)
         hcell.alignment = Alignment(wrap_text=True, vertical="top")
-    ws.row_dimensions[ENGINE_HDR_ROW].height = 54
+    ws.row_dimensions[ENGINE_HDR_ROW].height = 44
     for cc in range(1, last_col + 1):
-        ws.column_dimensions[get_column_letter(cc)].width = 16
+        ws.column_dimensions[get_column_letter(cc)].width = 10.5
+    tpm_cols = C("t_pm")
+    if not isinstance(tpm_cols, list):
+        raise RuntimeError("t_pm")
+    last_fd = col[f"fd{n_dis - 1}"]
+    if not isinstance(last_fd, list):
+        raise RuntimeError("fd")
+    o_lo, o_hi = int(tpm_cols[0]), int(last_fd[-1])
+    for cc in range(o_lo, o_hi + 1):
+        ws.column_dimensions[get_column_letter(cc)].outline_level = 1
     ws.freeze_panes = f"B{ENGINE_DATA_FIRST_ROW}"
 
     R0 = ENGINE_DATA_FIRST_ROW
     WBASE = w_row0
     n_periods = len(period_end_months_1based)
     mon_c = int(C("mon"))
-    m0_c = int(C("m0"))
-    dt_c = int(C("dt_y"))
     cf_i = int(C("cf"))
+    if variable_period:
+        m0_c = int(C("m0"))
+        dt_c = int(C("dt_y"))
 
     for i in range(n_periods):
         r = R0 + i
         rp = r - 1
         ws.cell(row=r, column=mon_c, value=int(period_end_months_1based[i]))
-        ws.cell(row=r, column=m0_c, value=f"=IF(ROW()={R0},1,{_L(mon_c)}{rp}+1)")
-        ws.cell(row=r, column=dt_c, value=f"=({_L(mon_c)}{r}-{_L(m0_c)}{r}+1)/12")
-        ws.cell(
-            row=r,
-            column=cf_i,
-            value=f'=SUM(INDIRECT("Projection!S"&(3+{_L(m0_c)}{r})&":S"&(3+{_L(mon_c)}{r})))',
-        )
+        if variable_period:
+            ws.cell(row=r, column=m0_c, value=f"=IF(ROW()={R0},1,{_L(mon_c)}{rp}+1)")
+            ws.cell(row=r, column=dt_c, value=f"=({_L(mon_c)}{r}-{_L(m0_c)}{r}+1)/12")
+            ws.cell(
+                row=r,
+                column=cf_i,
+                value=f'=SUM(INDIRECT("Projection!S"&(3+{_L(m0_c)}{r})&":S"&(3+{_L(mon_c)}{r})))',
+            )
+        else:
+            ws.cell(
+                row=r,
+                column=cf_i,
+                value=f"=INDEX(Projection!$S:$S,3+{_L(mon_c)}{r})",
+            )
 
         d_acc = int(C("d_acc"))
         de_c = int(C("de_e"))
@@ -328,10 +329,11 @@ def write_alm_engine_sheet(
         ]
         trem_p = [f"$E${WBASE + k}" if i == 0 else f"{_L(te[k])}{rp}" for k in range(nb)]
 
-        ws.cell(row=r, column=d_acc, value=f"=({debt_p})*EXP($B$13*{_L(dt_c)}{r})")
+        dt_cell = f"{_L(dt_c)}{r}" if variable_period else "$B$6"
+        ws.cell(row=r, column=d_acc, value=f"=({debt_p})*EXP($B$13*{dt_cell})")
 
         for k in range(nb):
-            ws.cell(row=r, column=t_pm[k], value=f"=MAX(0,{trem_p[k]}-{_L(dt_c)}{r})")
+            ws.cell(row=r, column=t_pm[k], value=f"=MAX(0,{trem_p[k]}-{dt_cell})")
 
         m_parts = []
         for k in range(nb):
