@@ -2381,7 +2381,7 @@ def _render_alm_section() -> None:
                     sort=ordered_names,
                     legend=alt.Legend(orient="top", direction="horizontal", columns=len(ordered_names)),
                 ),
-                order=alt.Order("Asset type:N", sort=ordered_names),
+                order=alt.Order("Asset type:N", sort="ascending"),
             )
             .properties(height=320)
         )
@@ -2423,7 +2423,7 @@ def _render_alm_section() -> None:
                     sort=ordered_names,
                     legend=alt.Legend(orient="top", direction="horizontal", columns=len(ordered_names)),
                 ),
-                order=alt.Order("Asset type:N", sort=ordered_names),
+                order=alt.Order("Asset type:N", sort="ascending"),
             )
         )
         yld_total = (
