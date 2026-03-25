@@ -37,6 +37,7 @@ from typing import Literal, Optional, Sequence, Tuple
 
 ALMReinvestRule = Literal["hold_cash", "pro_rata"]
 ALMDisinvestRule = Literal["shortest_first", "pro_rata"]
+ALMRebalancePolicy = Literal["full_target", "liquidity_only"]
 
 import math
 
@@ -1252,6 +1253,9 @@ class ALMAssumptions:
     rebalance_frequency_months: int
     reinvest_rule: ALMReinvestRule
     disinvest_rule: ALMDisinvestRule
+    # "full_target": periodic drift-band rebalance back to target weights.
+    # "liquidity_only": do not sell bonds to rebalance drift; only disinvest for cash shortfall.
+    rebalance_policy: ALMRebalancePolicy = "full_target"
     # Liquidity buffer: cash + bond MV with residual maturity <= this (years) counts as "near-liquid".
     liquidity_near_liquid_years: float = 0.25
 
@@ -1261,6 +1265,8 @@ class ALMAssumptions:
             raise ValueError("rebalance_band must be finite and in [0, 1].")
         if int(self.rebalance_frequency_months) < 1:
             raise ValueError("rebalance_frequency_months must be >= 1.")
+        if self.rebalance_policy not in ("full_target", "liquidity_only"):
+            raise ValueError("rebalance_policy must be 'full_target' or 'liquidity_only'.")
         liq = float(self.liquidity_near_liquid_years)
         if not math.isfinite(liq) or liq < 0.0:
             raise ValueError("liquidity_near_liquid_years must be finite and non-negative.")
@@ -1634,20 +1640,21 @@ def run_alm_projection(
             df = _df_rem(yc_a, spread, t_rem)
             mv = faces * df
 
-        cash, faces = _alm_maybe_rebalance(
-            cash=cash,
-            faces=faces,
-            t_rem=t_rem,
-            w=w,
-            yield_curve=yc_a,
-            spread=spread,
-            band=band,
-            month=m,
-            freq=freq,
-            nominal_tenors=nominal_tenors,
-        )
-        df = _df_rem(yc_a, spread, t_rem)
-        mv = faces * df
+        if assumptions.rebalance_policy == "full_target":
+            cash, faces = _alm_maybe_rebalance(
+                cash=cash,
+                faces=faces,
+                t_rem=t_rem,
+                w=w,
+                yield_curve=yc_a,
+                spread=spread,
+                band=band,
+                month=m,
+                freq=freq,
+                nominal_tenors=nominal_tenors,
+            )
+            df = _df_rem(yc_a, spread, t_rem)
+            mv = faces * df
         aum_end = float(cash + np.sum(mv))
 
         L = liability_pv_after_paid_months(pricing, yc_l, spread, m, cashflows=cf)

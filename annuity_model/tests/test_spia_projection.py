@@ -874,3 +874,16 @@ def test_alm_assumptions_validates_rebalance_band():
             disinvest_rule="shortest_first",
         )
 
+
+def test_alm_assumptions_validates_rebalance_policy():
+    alloc = sp.alm_default_allocation_spec()
+    with pytest.raises(ValueError, match="rebalance_policy"):
+        sp.ALMAssumptions(
+            allocation=alloc,
+            rebalance_band=0.05,
+            rebalance_frequency_months=1,
+            reinvest_rule="hold_cash",
+            disinvest_rule="shortest_first",
+            rebalance_policy="bad_policy",  # type: ignore[arg-type]
+        )
+

@@ -206,6 +206,7 @@ def _alm_assumptions_to_dict(asm: sp.ALMAssumptions) -> dict[str, Any]:
         "rebalance_frequency_months": int(asm.rebalance_frequency_months),
         "reinvest_rule": str(asm.reinvest_rule),
         "disinvest_rule": str(asm.disinvest_rule),
+        "rebalance_policy": str(asm.rebalance_policy),
         "liquidity_near_liquid_years": float(asm.liquidity_near_liquid_years),
         "allocation": {
             "buckets": [{"name": b.name, "tenor_years": float(b.tenor_years)} for b in asm.allocation.buckets],
@@ -887,6 +888,7 @@ def _render_what_if_studio() -> None:
                     rebalance_frequency_months=1,
                     reinvest_rule="pro_rata",
                     disinvest_rule="shortest_first",
+                    rebalance_policy="liquidity_only",
                     liquidity_near_liquid_years=0.25,
                 )
             asm_whatif_used = asm_wf
@@ -1760,6 +1762,15 @@ def _render_alm_section() -> None:
                 help="Liquidity buffer counts cash plus bond market value in buckets with residual maturity here or below.",
             )
         with c2:
+            rebalance_policy = st.selectbox(
+                "Rebalance policy",
+                options=["liquidity_only", "full_target"],
+                index=0,
+                format_func=lambda x: {
+                    "liquidity_only": "Hold to maturity bias (sell only for liquidity shortfall)",
+                    "full_target": "Full target rebalance (trade back to weights when drift breaches band)",
+                }[x],
+            )
             reinvest = st.selectbox(
                 "Reinvest matured principal",
                 options=["hold_cash", "pro_rata"],
@@ -1800,6 +1811,7 @@ def _render_alm_section() -> None:
             rebalance_frequency_months=int(freq_m),
             reinvest_rule=reinvest,  # type: ignore[arg-type]
             disinvest_rule=disinvest,  # type: ignore[arg-type]
+            rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
             liquidity_near_liquid_years=float(near_liq_y),
         )
         st.session_state["alm_current_assumptions"] = asm_current
@@ -1827,6 +1839,7 @@ def _render_alm_section() -> None:
                     rebalance_frequency_months=int(freq_m),
                     reinvest_rule=reinvest,  # type: ignore[arg-type]
                     disinvest_rule=disinvest,  # type: ignore[arg-type]
+                    rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
                     liquidity_near_liquid_years=float(near_liq_y),
                 )
                 pricing_for_alm = res
@@ -1926,6 +1939,30 @@ def _render_alm_section() -> None:
         bucket_df = pd.DataFrame(last.bucket_asset_mv.T, columns=bnames, index=age_ax)
         st.markdown("**Bucket market values**")
         st.line_chart(_round_for_visuals(bucket_df))
+
+        # Yield decomposition: portfolio weighted yield plus per-asset-class contributions.
+        # Contributions are weight * bucket annualized zero yield (incl. spread), shown in percentage points.
+        if isinstance(asm_vis, sp.ALMAssumptions):
+            bucket_specs = list(asm_vis.allocation.buckets)
+        else:
+            bucket_specs = list(base_spec.buckets)
+        tenors = np.array([float(b.tenor_years) for b in bucket_specs], dtype=float)
+        bucket_yield = np.zeros_like(tenors, dtype=float)
+        for i, T in enumerate(tenors):
+            if T <= 1e-12:
+                bucket_yield[i] = 0.0
+            else:
+                dff = float(yc.discount_factors(np.array([T], dtype=float), spread=spr)[0])
+                bucket_yield[i] = -np.log(max(dff, 1e-15)) / T
+
+        aum_series = pd.Series(last.asset_market_value, index=age_ax, dtype=float).replace(0.0, np.nan)
+        weight_df = bucket_df.div(aum_series, axis=0).fillna(0.0)
+        contrib_pp_df = weight_df.mul(bucket_yield, axis=1) * 100.0
+        contrib_pp_df.columns = [f"{c} contribution (pp)" for c in contrib_pp_df.columns]
+        total_yield_pct = contrib_pp_df.sum(axis=1).rename("Total portfolio yield (%)")
+        yld_chart_df = pd.concat([total_yield_pct, contrib_pp_df], axis=1)
+        st.markdown("##### Portfolio yield and asset-class contributions")
+        st.line_chart(yld_chart_df.round(4))
 
         kpi_tbl = pd.DataFrame(
             {
