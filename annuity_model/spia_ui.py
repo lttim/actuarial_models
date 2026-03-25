@@ -1010,11 +1010,15 @@ def _render_what_if_studio() -> None:
     with c1:
         counts_b, edges_b = np.histogram(baseline_mc.single_premium, bins=35)
         mids_b = 0.5 * (edges_b[:-1] + edges_b[1:])
-        st.bar_chart(_round_for_visuals(pd.DataFrame({"bin": mids_b, "count_before": counts_b}).set_index("bin")))
+        mids_b_disp = np.rint(mids_b).astype(int)
+        df_b = pd.DataFrame({"bin": mids_b_disp, "count_before": counts_b.astype(int)}).set_index("bin")
+        st.bar_chart(_round_for_visuals(df_b))
     with c2:
         counts_a, edges_a = np.histogram(shocked_mc.single_premium, bins=35)
         mids_a = 0.5 * (edges_a[:-1] + edges_a[1:])
-        st.bar_chart(_round_for_visuals(pd.DataFrame({"bin": mids_a, "count_after": counts_a}).set_index("bin")))
+        mids_a_disp = np.rint(mids_a).astype(int)
+        df_a = pd.DataFrame({"bin": mids_a_disp, "count_after": counts_a.astype(int)}).set_index("bin")
+        st.bar_chart(_round_for_visuals(df_a))
 
     if alm_whatif_base is not None and alm_whatif_after is not None:
         _alm_b = alm_whatif_base
