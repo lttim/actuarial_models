@@ -3,6 +3,9 @@ Excel-native Treasury ladder (ALM_Engine). Mirrors ``run_alm_projection`` for
 ``rebalance_policy == liquidity_only``. Uses only common worksheet functions
 (INDEX/MATCH/IF/EXP) so desktop Excel recognizes formulas — no LET/LAMBDA.
 
+Pro-rata reinvestment matches Python: it runs only in months with bond maturities and
+no outstanding borrowing after the first repayment leg — not whenever cash exceeds target.
+
 See ``write_alm_engine_sheet`` for supported reinvest / disinvest / borrowing modes.
 """
 
@@ -599,6 +602,10 @@ def write_alm_engine_sheet(
         ws.cell(row=r, column=cash_r1, value=f"={_L(cash_m)}{r}-{_L(rep1)}{r}")
         ws.cell(row=r, column=debt_r1, value=f"={_L(d_acc)}{r}-{_L(rep1)}{r}")
 
+        # Align with Python ``run_alm_projection``: pro-rata reinvestment runs only when at least
+        # one bond matures this month and borrowing is repaid — not every month excess cash > target.
+        mtot = "+".join(f"{_L(mat[k])}{r}" for k in range(nb))
+
         for k in range(nb):
             ws.cell(
                 row=r,
@@ -641,7 +648,7 @@ def write_alm_engine_sheet(
                 row=r,
                 column=dmv[k],
                 value=(
-                    f"=IF(OR($B$11=0,{_L(xsr)}{r}<=1E-6),0,"
+                    f"=IF(OR($B$11=0,({mtot})<=1E-9,{_L(debt_r1)}{r}>1E-9,{_L(xsr)}{r}<=1E-6),0,"
                     f"({_L(xsr)}{r}*IF({_L(dsum_i)}{r}>1E-9,{_L(defc[k])}{r}/{_L(dsum_i)}{r},{wnk}))/"
                     f"MAX(({denom}),1E-15))"
                 ),
@@ -649,7 +656,14 @@ def write_alm_engine_sheet(
 
         cash_re = int(C("cash_re"))
         dmv_sum = "+".join(f"{_L(dmv[j])}{r}" for j in range(nb))
-        ws.cell(row=r, column=cash_re, value=f"=IF($B$11=0,{_L(cash_r1)}{r},{_L(cash_r1)}{r}-({dmv_sum}))")
+        ws.cell(
+            row=r,
+            column=cash_re,
+            value=(
+                f"=IF(AND($B$11=1,({mtot})>1E-9,{_L(debt_r1)}{r}<=1E-9),"
+                f"{_L(cash_r1)}{r}-({dmv_sum}),{_L(cash_r1)}{r})"
+            ),
+        )
 
         for k in range(nb):
             t_use = f"IF({_L(t_pm[k])}{r}>1E-9,{_L(t_pm[k])}{r},$E${WBASE + k})"
@@ -658,9 +672,9 @@ def write_alm_engine_sheet(
                 row=r,
                 column=f_re[k],
                 value=(
-                    f"=IF($B$11=0,{_L(f_pm[k])}{r},"
+                    f"=IF(AND($B$11=1,({mtot})>1E-9,{_L(debt_r1)}{r}<=1E-9),"
                     f"{_L(f_pm[k])}{r}+IF({_L(dmv[k])}{r}<=0,0,{_L(dmv[k])}{r}/"
-                    f"MAX(({denom}),1E-15)))"
+                    f"MAX(({denom}),1E-15)),{_L(f_pm[k])}{r})"
                 ),
             )
         for k in range(nb):
@@ -668,8 +682,9 @@ def write_alm_engine_sheet(
                 row=r,
                 column=t_re[k],
                 value=(
-                    f"=IF($B$11=0,{_L(t_pm[k])}{r},"
-                    f"IF(AND({_L(f_pm[k])}{r}<=1E-9,{_L(t_pm[k])}{r}<=1E-9),$E${WBASE + k},{_L(t_pm[k])}{r}))"
+                    f"=IF(AND($B$11=1,({mtot})>1E-9,{_L(debt_r1)}{r}<=1E-9),"
+                    f"IF(AND({_L(f_pm[k])}{r}<=1E-9,{_L(t_pm[k])}{r}<=1E-9),$E${WBASE + k},{_L(t_pm[k])}{r}),"
+                    f"{_L(t_pm[k])}{r})"
                 ),
             )
 
