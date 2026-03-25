@@ -39,6 +39,7 @@ ALMReinvestRule = Literal["hold_cash", "pro_rata"]
 ALMDisinvestRule = Literal["shortest_first", "pro_rata"]
 ALMRebalancePolicy = Literal["full_target", "liquidity_only"]
 ALMBorrowingPolicy = Literal["borrow_before_selling", "borrow_after_assets_insufficient"]
+ALMBorrowingRateMode = Literal["scenario_linked", "fixed"]
 
 import math
 
@@ -1261,7 +1262,15 @@ class ALMAssumptions:
     # - borrow_before_selling: always borrow first when cash is short.
     # - borrow_after_assets_insufficient: sell assets first, borrow only residual need.
     borrowing_policy: ALMBorrowingPolicy = "borrow_after_assets_insufficient"
-    # Continuous annual borrowing rate used for monthly compounding of outstanding debt.
+    # Borrowing rate mode:
+    # - scenario_linked: derive annual borrowing rate from the scenario short rate + borrowing_spread_annual.
+    # - fixed: use borrowing_rate_annual directly.
+    borrowing_rate_mode: ALMBorrowingRateMode = "scenario_linked"
+    # Tenor used for scenario-linked borrowing rate extraction from the scenario curve (years).
+    borrowing_rate_tenor_years: float = 1.0
+    # Spread added to scenario short rate when borrowing_rate_mode == "scenario_linked".
+    borrowing_spread_annual: float = 0.01
+    # Continuous annual borrowing rate used only when borrowing_rate_mode == "fixed".
     borrowing_rate_annual: float = 0.05
     # Liquidity buffer: cash + bond MV with residual maturity <= this (years) counts as "near-liquid".
     liquidity_near_liquid_years: float = 0.25
@@ -1278,6 +1287,14 @@ class ALMAssumptions:
             raise ValueError(
                 "borrowing_policy must be 'borrow_before_selling' or 'borrow_after_assets_insufficient'."
             )
+        if self.borrowing_rate_mode not in ("scenario_linked", "fixed"):
+            raise ValueError("borrowing_rate_mode must be 'scenario_linked' or 'fixed'.")
+        t_b = float(self.borrowing_rate_tenor_years)
+        if not math.isfinite(t_b) or t_b <= 0.0:
+            raise ValueError("borrowing_rate_tenor_years must be finite and > 0.")
+        spd_b = float(self.borrowing_spread_annual)
+        if not math.isfinite(spd_b) or spd_b < 0.0:
+            raise ValueError("borrowing_spread_annual must be finite and >= 0.")
         r_b = float(self.borrowing_rate_annual)
         if not math.isfinite(r_b) or r_b < 0.0:
             raise ValueError("borrowing_rate_annual must be finite and >= 0.")
@@ -1605,7 +1622,15 @@ def run_alm_projection(
     freq = max(1, int(assumptions.rebalance_frequency_months))
     near_liq = float(assumptions.liquidity_near_liquid_years)
     borrowing_policy = assumptions.borrowing_policy
-    borrow_rate = float(assumptions.borrowing_rate_annual)
+    if assumptions.borrowing_rate_mode == "fixed":
+        borrow_rate = float(assumptions.borrowing_rate_annual)
+    else:
+        # Scenario-consistent borrowing base rate from selected curve tenor (including spread),
+        # plus borrowing spread.
+        t_b = float(assumptions.borrowing_rate_tenor_years)
+        df_t = float(yc_a.discount_factors(np.array([t_b], dtype=float), spread=spread)[0])
+        base_rate = -math.log(max(df_t, 1e-15)) / t_b
+        borrow_rate = max(0.0, float(base_rate + assumptions.borrowing_spread_annual))
     nominal_tenors = np.array([float(buckets[k + 1].tenor_years) for k in range(n_b)], dtype=float)
 
     asset_mv = np.zeros(n, dtype=float)

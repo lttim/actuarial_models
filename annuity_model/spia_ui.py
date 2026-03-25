@@ -209,6 +209,9 @@ def _alm_assumptions_to_dict(asm: sp.ALMAssumptions) -> dict[str, Any]:
         "disinvest_rule": str(asm.disinvest_rule),
         "rebalance_policy": str(asm.rebalance_policy),
         "borrowing_policy": str(asm.borrowing_policy),
+        "borrowing_rate_mode": str(asm.borrowing_rate_mode),
+        "borrowing_rate_tenor_years": float(asm.borrowing_rate_tenor_years),
+        "borrowing_spread_annual": float(asm.borrowing_spread_annual),
         "borrowing_rate_annual": float(asm.borrowing_rate_annual),
         "liquidity_near_liquid_years": float(asm.liquidity_near_liquid_years),
         "allocation": {
@@ -893,6 +896,9 @@ def _render_what_if_studio() -> None:
                     disinvest_rule="shortest_first",
                     rebalance_policy="liquidity_only",
                     borrowing_policy="borrow_after_assets_insufficient",
+                    borrowing_rate_mode="scenario_linked",
+                    borrowing_rate_tenor_years=1.0,
+                    borrowing_spread_annual=0.01,
                     borrowing_rate_annual=0.05,
                     liquidity_near_liquid_years=0.25,
                 )
@@ -1777,17 +1783,41 @@ def _render_alm_section() -> None:
                     "borrow_after_assets_insufficient": "Borrow only when asset portfolio is insufficient",
                 }[x],
             )
+            borrow_rate_mode = st.selectbox(
+                "Borrowing rate basis",
+                options=["scenario_linked", "fixed"],
+                index=0,
+                format_func=lambda x: {
+                    "scenario_linked": "Scenario-linked (selected tenor rate + spread)",
+                    "fixed": "Fixed annual borrowing rate",
+                }[x],
+            )
+            borrow_rate_tenor = st.selectbox(
+                "Scenario-linked borrowing tenor",
+                options=[0.25, 0.5, 1.0, 2.0, 3.0, 5.0],
+                index=2,
+                format_func=lambda x: f"{x:g}Y",
+                help="Curve tenor used to derive borrowing base rate in scenario-linked mode.",
+            )
             # Logical default: 1Y curve+spread plus 100 bps floor at 3%.
-            df1 = float(yc.discount_factors(np.array([1.0], dtype=float), spread=spr)[0])
-            base_1y = -np.log(max(df1, 1e-15))
-            borrow_rate_default_pct = float(max(0.03, base_1y + 0.01) * 100.0)
+            df_t = float(yc.discount_factors(np.array([float(borrow_rate_tenor)], dtype=float), spread=spr)[0])
+            base_t = -np.log(max(df_t, 1e-15)) / float(borrow_rate_tenor)
+            borrow_rate_default_pct = float(max(0.03, base_t + 0.01) * 100.0)
+            borrow_spread_bps = st.number_input(
+                "Borrowing spread over selected tenor scenario rate (bps)",
+                min_value=0.0,
+                max_value=2000.0,
+                value=100.0,
+                step=5.0,
+                help="Used when borrowing rate basis is scenario-linked.",
+            )
             borrow_rate_pct = st.number_input(
-                "Borrowing rate (annual, %)",
+                "Fixed borrowing rate (annual, %)",
                 min_value=0.0,
                 max_value=50.0,
                 value=round(borrow_rate_default_pct, 2),
                 step=0.1,
-                help="Applied continuously and accrued monthly on outstanding borrowing balance.",
+                help="Used only when borrowing rate basis is fixed.",
             )
         with c2:
             rebalance_policy = st.selectbox(
@@ -1841,6 +1871,9 @@ def _render_alm_section() -> None:
             disinvest_rule=disinvest,  # type: ignore[arg-type]
             rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
             borrowing_policy=borrow_policy,  # type: ignore[arg-type]
+            borrowing_rate_mode=borrow_rate_mode,  # type: ignore[arg-type]
+            borrowing_rate_tenor_years=float(borrow_rate_tenor),
+            borrowing_spread_annual=float(borrow_spread_bps) / 10000.0,
             borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
             liquidity_near_liquid_years=float(near_liq_y),
         )
@@ -1927,6 +1960,9 @@ def _render_alm_section() -> None:
                     disinvest_rule=disinvest,  # type: ignore[arg-type]
                     rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
                     borrowing_policy=borrow_policy,  # type: ignore[arg-type]
+                    borrowing_rate_mode=borrow_rate_mode,  # type: ignore[arg-type]
+                    borrowing_rate_tenor_years=float(borrow_rate_tenor),
+                    borrowing_spread_annual=float(borrow_spread_bps) / 10000.0,
                     borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
                     liquidity_near_liquid_years=float(near_liq_y),
                 )
@@ -1981,6 +2017,9 @@ def _render_alm_section() -> None:
                         disinvest_rule=disinvest,  # type: ignore[arg-type]
                         rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
                         borrowing_policy=borrow_policy,  # type: ignore[arg-type]
+                        borrowing_rate_mode=borrow_rate_mode,  # type: ignore[arg-type]
+                        borrowing_rate_tenor_years=float(borrow_rate_tenor),
+                        borrowing_spread_annual=float(borrow_spread_bps) / 10000.0,
                         borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
                         liquidity_near_liquid_years=float(near_liq_y),
                     )
@@ -2019,6 +2058,9 @@ def _render_alm_section() -> None:
                         disinvest_rule=disinvest,  # type: ignore[arg-type]
                         rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
                         borrowing_policy=borrow_policy,  # type: ignore[arg-type]
+                        borrowing_rate_mode=borrow_rate_mode,  # type: ignore[arg-type]
+                        borrowing_rate_tenor_years=float(borrow_rate_tenor),
+                        borrowing_spread_annual=float(borrow_spread_bps) / 10000.0,
                         borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
                         liquidity_near_liquid_years=float(near_liq_y),
                     )

@@ -908,6 +908,33 @@ def test_alm_assumptions_validates_borrowing_inputs():
             disinvest_rule="shortest_first",
             borrowing_rate_annual=-0.01,
         )
+    with pytest.raises(ValueError, match="borrowing_rate_mode"):
+        sp.ALMAssumptions(
+            allocation=alloc,
+            rebalance_band=0.05,
+            rebalance_frequency_months=1,
+            reinvest_rule="hold_cash",
+            disinvest_rule="shortest_first",
+            borrowing_rate_mode="bad_mode",  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="borrowing_spread_annual"):
+        sp.ALMAssumptions(
+            allocation=alloc,
+            rebalance_band=0.05,
+            rebalance_frequency_months=1,
+            reinvest_rule="hold_cash",
+            disinvest_rule="shortest_first",
+            borrowing_spread_annual=-0.01,
+        )
+    with pytest.raises(ValueError, match="borrowing_rate_tenor_years"):
+        sp.ALMAssumptions(
+            allocation=alloc,
+            rebalance_band=0.05,
+            rebalance_frequency_months=1,
+            reinvest_rule="hold_cash",
+            disinvest_rule="shortest_first",
+            borrowing_rate_tenor_years=0.0,
+        )
 
 
 def test_alm_borrowing_policy_changes_sales_behavior():
@@ -932,6 +959,7 @@ def test_alm_borrowing_policy_changes_sales_behavior():
         reinvest_rule="hold_cash",
         disinvest_rule="shortest_first",
         rebalance_policy="liquidity_only",
+        borrowing_rate_mode="fixed",
         borrowing_rate_annual=0.05,
         liquidity_near_liquid_years=0.25,
     )
@@ -960,4 +988,100 @@ def test_alm_borrowing_policy_changes_sales_behavior():
     # Borrow-first should preserve bond MV better in early month and show positive borrowing balance.
     assert float(np.sum(out_borrow_first.bucket_asset_mv[1:, 0])) >= float(np.sum(out_sell_first.bucket_asset_mv[1:, 0]))
     assert float(out_borrow_first.borrowing_balance[0]) >= 0.0
+
+
+def test_alm_scenario_linked_borrow_rate_tracks_curve_level():
+    contract, yc, mort, ex = _mc_contract_and_setup()
+    res = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=75,
+        spread=0.0,
+        expenses=ex,
+        expense_annual_inflation=0.0,
+    )
+    cf = np.asarray(res.expected_total_cashflows, dtype=float).copy()
+    cf[0] = float(res.single_premium) * 0.30
+    alloc = sp.alm_default_allocation_spec()
+    asm = sp.ALMAssumptions(
+        allocation=alloc,
+        rebalance_band=0.10,
+        rebalance_frequency_months=1,
+        reinvest_rule="hold_cash",
+        disinvest_rule="shortest_first",
+        rebalance_policy="liquidity_only",
+        borrowing_policy="borrow_before_selling",
+        borrowing_rate_mode="scenario_linked",
+        borrowing_spread_annual=0.0,
+        liquidity_near_liquid_years=0.25,
+    )
+    yc_low = sp.YieldCurve.from_flat_rate(0.01)
+    yc_high = sp.YieldCurve.from_flat_rate(0.08)
+    out_low = sp.run_alm_projection(
+        pricing=res,
+        yield_curve=yc_low,
+        spread=0.0,
+        assumptions=asm,
+        liability_cashflows=cf,
+    )
+    out_high = sp.run_alm_projection(
+        pricing=res,
+        yield_curve=yc_high,
+        spread=0.0,
+        assumptions=asm,
+        liability_cashflows=cf,
+    )
+    # With scenario-linked borrowing and same initial debt, higher curve => higher debt accrual by month 2.
+    assert float(out_high.borrowing_balance[1]) > float(out_low.borrowing_balance[1])
+
+
+def test_alm_scenario_linked_borrow_rate_respects_selected_tenor():
+    contract, yc, mort, ex = _mc_contract_and_setup()
+    res = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=75,
+        spread=0.0,
+        expenses=ex,
+        expense_annual_inflation=0.0,
+    )
+    cf = np.asarray(res.expected_total_cashflows, dtype=float).copy()
+    cf[0] = float(res.single_premium) * 0.30
+
+    # Upward-sloping curve: longer tenor should imply higher borrowing base rate.
+    yc_up = sp.YieldCurve(
+        maturities_years=np.array([0.0, 0.25, 1.0, 3.0, 5.0], dtype=float),
+        zero_rates=np.array([0.01, 0.02, 0.03, 0.045, 0.05], dtype=float),
+    )
+    common = dict(
+        allocation=sp.alm_default_allocation_spec(),
+        rebalance_band=0.10,
+        rebalance_frequency_months=1,
+        reinvest_rule="hold_cash",
+        disinvest_rule="shortest_first",
+        rebalance_policy="liquidity_only",
+        borrowing_policy="borrow_before_selling",
+        borrowing_rate_mode="scenario_linked",
+        borrowing_spread_annual=0.0,
+        liquidity_near_liquid_years=0.25,
+    )
+    asm_short = sp.ALMAssumptions(**common, borrowing_rate_tenor_years=0.25)
+    asm_long = sp.ALMAssumptions(**common, borrowing_rate_tenor_years=3.0)
+    out_short = sp.run_alm_projection(
+        pricing=res,
+        yield_curve=yc_up,
+        spread=0.0,
+        assumptions=asm_short,
+        liability_cashflows=cf,
+    )
+    out_long = sp.run_alm_projection(
+        pricing=res,
+        yield_curve=yc_up,
+        spread=0.0,
+        assumptions=asm_long,
+        liability_cashflows=cf,
+    )
+    assert float(out_long.borrowing_balance[1]) > float(out_short.borrowing_balance[1])
 
