@@ -840,6 +840,37 @@ def test_alm_pro_rata_refills_matured_slots_cash_near_target():
     assert float(np.min(share)) >= w0 - 0.002
 
 
+def test_alm_pro_rata_reinvest_prioritizes_underweights():
+    """Excess cash from maturities should buy underweight buckets before overweight ones."""
+    yc = sp.YieldCurve.from_flat_rate(0.0)
+    alloc = sp.alm_default_allocation_spec()
+    w = np.asarray(alloc.weights, dtype=float)
+
+    faces = np.array([600.0, 100.0, 100.0, 100.0, 100.0], dtype=float)
+    t_rem = np.array([1.0, 3.0, 5.0, 10.0, 20.0], dtype=float)
+    cash = 200.0
+    nominal_tenors = np.array([1.0, 3.0, 5.0, 10.0, 20.0], dtype=float)
+
+    cash2, faces2 = sp._alm_micro_reinvest_pro_rata(
+        cash=cash,
+        faces=faces,
+        t_rem=t_rem.copy(),
+        w=w,
+        yield_curve=yc,
+        spread=0.0,
+        nominal_tenors=nominal_tenors,
+    )
+
+    delta_faces = faces2 - faces
+    # Bucket 0 starts overweight vs target and should not receive new buys.
+    assert delta_faces[0] <= 1e-9
+    # Underweight buckets should receive purchases.
+    assert np.all(delta_faces[1:] > 0.0)
+    # Reinvestment should keep cash near target cash weight.
+    aum2 = float(cash2 + np.sum(faces2))
+    assert abs(cash2 - float(w[0] * aum2)) <= 1e-6
+
+
 def test_liability_pv_cashflows_length_guard():
     """Mismatched cashflows array must raise."""
     contract, yc, mort, ex = _mc_contract_and_setup()

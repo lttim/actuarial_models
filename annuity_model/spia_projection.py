@@ -1408,7 +1408,11 @@ def _alm_micro_reinvest_pro_rata(
     spread: float,
     nominal_tenors: np.ndarray,
 ) -> tuple[float, np.ndarray]:
-    """After maturity credits: move cash above target into bonds pro-rata to bond weights.
+    """After maturity credits, deploy excess cash into underweight bond buckets first.
+
+    The purchase split is drift-aware relative to the current composition: excess cash is directed
+    to buckets with the largest deficits versus target market values. If no deficits exist, fallback
+    to the target bond-weight split.
 
     Empty ladder slots (matured to cash) redeploy at each bucket's **nominal** tenor; otherwise
     principal would remain in cash with no working bond slot.
@@ -1420,15 +1424,25 @@ def _alm_micro_reinvest_pro_rata(
     aum = float(cash + np.sum(mv))
     if aum <= 0.0:
         return cash, faces
-    w_b = np.asarray(w[1:], dtype=float)
+    w_full = np.asarray(w, dtype=float)
+    w_b = np.asarray(w_full[1:], dtype=float)
     s = float(np.sum(w_b))
     if s <= 1e-15:
         return cash, faces
     w_b = w_b / s
-    cash_tgt = float(w[0] * aum)
+    cash_tgt = float(w_full[0] * aum)
     excess = float(cash - cash_tgt)
     if excess <= 1e-6:
         return cash, faces
+
+    tgt_mv_b = np.asarray(w_full[1:], dtype=float) * aum
+    deficits = np.maximum(tgt_mv_b - mv, 0.0)
+    dsum = float(np.sum(deficits))
+    if dsum > 1e-9:
+        buy_split = deficits / dsum
+    else:
+        buy_split = w_b
+
     faces = np.asarray(faces, dtype=float).copy()
     cash = float(cash)
     for k in range(nb):
@@ -1438,7 +1452,7 @@ def _alm_micro_reinvest_pro_rata(
         dff = float(_df_rem(yield_curve, spread, np.array([t_use], dtype=float))[0])
         if dff <= 1e-15:
             continue
-        d_mv = excess * float(w_b[k])
+        d_mv = excess * float(buy_split[k])
         faces[k] += d_mv / dff
         cash -= d_mv
         if float(t_rem[k]) <= 1e-14:
