@@ -1613,11 +1613,26 @@ def run_alm_projection(
     )
     if cf.shape != (pricing.expected_total_cashflows.shape[0],):
         raise ValueError("liability_cashflows must match pricing horizon length.")
+    n = cf.shape[0]
     ty_full = np.asarray(pricing.times_years, dtype=float)
+    # Precompute liability PV path in O(n) from issue-time discount factors:
+    # PV_{m} (at end of month m) = sum_{j>m} cf_j * DF(t_j) / DF(t_m).
+    df_l_full = yc_l.discount_factors(ty_full, spread=spread)
+    pv_issue_remaining = np.zeros(n + 1, dtype=float)
+    for i in range(n - 1, -1, -1):
+        pv_issue_remaining[i] = float(cf[i] * df_l_full[i] + pv_issue_remaining[i + 1])
+    liab_pv_path = np.zeros(n, dtype=float)
+    for m in range(n):
+        if m + 1 >= n:
+            liab_pv_path[m] = 0.0
+        elif df_l_full[m] <= 1e-15:
+            liab_pv_path[m] = float("nan")
+        else:
+            liab_pv_path[m] = float(pv_issue_remaining[m + 1] / df_l_full[m])
+
     init_cash = float(cash)
     init_faces = np.asarray(faces, dtype=float).copy()
     init_t_rem = np.asarray(t_rem, dtype=float).copy()
-    n = cf.shape[0]
     band = float(assumptions.rebalance_band)
     freq = max(1, int(assumptions.rebalance_frequency_months))
     near_liq = float(assumptions.liquidity_near_liquid_years)
@@ -1722,7 +1737,7 @@ def run_alm_projection(
             mv = faces * df
         aum_end = float(cash + np.sum(mv))
 
-        L = liability_pv_after_paid_months(pricing, yc_l, spread, m, cashflows=cf)
+        L = float(liab_pv_path[m])
         L_total = float(L + debt)
         asset_mv[m] = aum_end
         liab_pv[m] = L
@@ -1747,8 +1762,9 @@ def run_alm_projection(
 
     yc_a_b = yield_curve_parallel_bps(yc_a, 1.0)
     yc_l_b = yield_curve_parallel_bps(yc_l, 1.0)
-    L0 = liability_pv_after_paid_months(pricing, yc_l, spread, -1, cashflows=cf)
-    L0b = liability_pv_after_paid_months(pricing, yc_l_b, spread, -1, cashflows=cf)
+    L0 = float(pv_issue_remaining[0])
+    df_l_b = yc_l_b.discount_factors(ty_full, spread=spread)
+    L0b = float(np.sum(cf * df_l_b))
     pv01_liab = float(L0b - L0)
 
     Ab = float(init_cash + np.sum(init_faces * _df_rem(yc_a_b, spread, init_t_rem)))

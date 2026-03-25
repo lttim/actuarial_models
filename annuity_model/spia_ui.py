@@ -17,6 +17,7 @@ from typing import Any, Literal
 import dataclasses
 import datetime as _dt
 import json
+import time
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
@@ -1904,7 +1905,7 @@ def _render_alm_section() -> None:
             max_value=5000,
             value=1200,
             step=100,
-            help="Random candidate allocations evaluated for feasibility/objective.",
+            help="Requested random candidates; runtime controls may cap evaluated candidates for responsiveness.",
         )
     run_alm_opt = st.button("Optimize allocation and run ALM")
 
@@ -2002,16 +2003,39 @@ def _render_alm_section() -> None:
                 rem = 0.80 / max(1, n_assets - 1)
                 w_cons[1:] = rem
                 candidates.append(w_cons)
-                # Random simplex samples.
+                # Structured tenor-tilt candidates (fast path to feasible long-duration mixes).
+                tenors = np.array([float(b.tenor_years) for b in base_spec.buckets], dtype=float)
+                bond_ten = np.clip(tenors[1:], 1e-9, None)
+                for cash_w in [0.0, 0.05, 0.10, 0.20]:
+                    for tilt in [0.0, 0.5, 1.0, 2.0, 3.0]:
+                        wb = bond_ten ** tilt
+                        wb = wb / float(np.sum(wb))
+                        w_try = np.concatenate(([cash_w], (1.0 - cash_w) * wb))
+                        candidates.append(w_try)
+
+                # Runtime guardrails to avoid very long runs on large horizons.
+                max_eval = min(400, max(60, int(opt_samples)))
+                time_budget_sec = 12.0
+                max_random = max(0, max_eval - len(candidates))
+                # Random simplex samples (bounded by max_eval).
                 alpha = np.ones(n_assets, dtype=float)
-                for _ in range(int(opt_samples)):
+                for _ in range(min(int(opt_samples), max_random)):
                     candidates.append(rng.dirichlet(alpha))
 
                 best_obj = -float("inf")
                 best_w: np.ndarray | None = None
                 best_out: sp.ALMResult | None = None
+                best_min_surplus = -float("inf")
+                best_fallback_w: np.ndarray | None = None
+                best_fallback_out: sp.ALMResult | None = None
 
+                start_t = time.perf_counter()
+                eval_count = 0
                 for w_try in candidates:
+                    if eval_count >= max_eval:
+                        break
+                    if (time.perf_counter() - start_t) >= time_budget_sec:
+                        break
                     alloc_try = sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=np.asarray(w_try, dtype=float))
                     asm_try = sp.ALMAssumptions(
                         allocation=alloc_try,
@@ -2034,6 +2058,13 @@ def _render_alm_section() -> None:
                         assumptions=asm_try,
                         initial_asset_market_value=float(aum0),
                     )
+                    eval_count += 1
+
+                    min_surp = float(np.min(np.asarray(out_try.surplus, dtype=float)))
+                    if min_surp > best_min_surplus:
+                        best_min_surplus = min_surp
+                        best_fallback_w = np.asarray(w_try, dtype=float)
+                        best_fallback_out = out_try
 
                     if opt_surplus_constraint == "Path never negative":
                         feasible = bool(np.all(np.asarray(out_try.surplus, dtype=float) >= -1e-6))
@@ -2050,7 +2081,30 @@ def _render_alm_section() -> None:
                         best_out = out_try
 
                 if best_w is None or best_out is None:
-                    st.warning("No feasible allocation found under the selected surplus constraint.")
+                    if best_fallback_w is None or best_fallback_out is None:
+                        st.warning("No feasible allocation found under the selected surplus constraint.")
+                    else:
+                        for i, wi in enumerate(best_fallback_w):
+                            st.session_state[f"alm_alloc_{i}"] = float(wi * 100.0)
+                        asm_best = sp.ALMAssumptions(
+                            allocation=sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=best_fallback_w),
+                            rebalance_band=float(band_pct) / 100.0,
+                            rebalance_frequency_months=int(freq_m),
+                            reinvest_rule=reinvest,  # type: ignore[arg-type]
+                            disinvest_rule=disinvest,  # type: ignore[arg-type]
+                            rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
+                            borrowing_policy=borrow_policy,  # type: ignore[arg-type]
+                            borrowing_rate_mode=borrow_rate_mode,  # type: ignore[arg-type]
+                            borrowing_rate_tenor_years=float(borrow_rate_tenor),
+                            borrowing_spread_annual=float(borrow_spread_bps) / 10000.0,
+                            borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
+                            liquidity_near_liquid_years=float(near_liq_y),
+                        )
+                        st.session_state["alm_last"] = best_fallback_out
+                        st.session_state["alm_last_assumptions"] = asm_best
+                        st.warning(
+                            "No feasible allocation found within runtime limits; showing nearest candidate (highest minimum surplus)."
+                        )
                 else:
                     for i, wi in enumerate(best_w):
                         st.session_state[f"alm_alloc_{i}"] = float(wi * 100.0)
@@ -2075,6 +2129,10 @@ def _render_alm_section() -> None:
                         "Optimized ending surplus: "
                         + f"${float(best_out.surplus[-1]):,.0f}"
                     )
+                st.caption(
+                    f"Optimization evaluated {eval_count} candidates "
+                    f"(cap {max_eval}, time budget {time_budget_sec:.0f}s)."
+                )
             except Exception as ex:
                 st.error(f"ALM optimization failed: {ex!r}")
 
