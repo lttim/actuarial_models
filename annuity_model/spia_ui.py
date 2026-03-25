@@ -12,7 +12,11 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
+
+import dataclasses
+import datetime as _dt
+import json
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
@@ -91,6 +95,171 @@ def _alm_surplus_chart(ages: np.ndarray | pd.Series, surplus: np.ndarray | pd.Se
 def _number_cols_no_decimals(df: pd.DataFrame) -> dict[str, st.column_config.NumberColumn]:
     numeric_cols = list(df.select_dtypes(include=[np.number]).columns)
     return {c: st.column_config.NumberColumn(format="%,.0f") for c in numeric_cols}
+
+
+def _serialize_array(arr: Any, *, include_full: bool, max_points: int = 250) -> Any:
+    """Serialize numpy-like arrays for JSON with optional truncation."""
+    if arr is None:
+        return None
+    a = np.asarray(arr)
+    if include_full or a.size <= max_points:
+        return a.tolist()
+    # Keep file sizes manageable while still giving a shape + endpoints.
+    head_n = min(10, a.size)
+    tail_n = min(10, a.size)
+    return {
+        "truncated": True,
+        "len": int(a.size),
+        "shape": list(a.shape),
+        "head": a[:head_n].tolist(),
+        "tail": a[-tail_n:].tolist(),
+    }
+
+
+def _contract_to_dict(contract: sp.SPIAContract) -> dict[str, Any]:
+    return {
+        "issue_age": int(contract.issue_age),
+        "sex": str(contract.sex),
+        "benefit_annual": float(contract.benefit_annual),
+        "benefit_timing": str(getattr(contract, "benefit_timing", "")),
+        "payment_freq_per_year": int(getattr(contract, "payment_freq_per_year", 1)),
+        "payment_cessation": str(getattr(contract, "payment_cessation", "")),
+    }
+
+
+def _yield_curve_to_dict(yc: sp.YieldCurve) -> dict[str, Any]:
+    return {
+        "maturities_years": _serialize_array(yc.maturities_years, include_full=True),
+        "zero_rates": _serialize_array(yc.zero_rates, include_full=True),
+    }
+
+
+def _mortality_to_dict(mort: Any) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if hasattr(mort, "ages"):
+        out["ages"] = _serialize_array(getattr(mort, "ages"), include_full=True)
+    if hasattr(mort, "qx"):
+        out["qx"] = _serialize_array(getattr(mort, "qx"), include_full=True)
+    if hasattr(mort, "qx_at_int_age"):
+        out["qx_at_int_age"] = _serialize_array(getattr(mort, "qx_at_int_age"), include_full=True)
+    out["type"] = type(mort).__name__
+    return out
+
+
+def _pricing_result_to_dict(
+    res: sp.SPIAProjectionResult,
+    contract_state: sp.SPIAContract,
+    *,
+    include_full: bool,
+) -> dict[str, Any]:
+    return {
+        "contract": _contract_to_dict(contract_state),
+        "single_premium": float(res.single_premium),
+        "pv_benefit": float(res.pv_benefit),
+        "pv_monthly_expenses": float(res.pv_monthly_expenses),
+        "annuity_factor": float(res.annuity_factor),
+        "times_years": _serialize_array(res.times_years, include_full=include_full),
+        "months": _serialize_array(res.months, include_full=include_full),
+        "expected_total_cashflows": _serialize_array(res.expected_total_cashflows, include_full=include_full),
+        "economic_reserve": _serialize_array(res.economic_reserve, include_full=include_full),
+        "survival_to_payment": _serialize_array(res.survival_to_payment, include_full=include_full),
+    }
+
+
+def _alm_result_to_dict(alm: sp.ALMResult, asm: sp.ALMAssumptions | None, *, include_buckets: bool, include_full: bool) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "assumptions": None,
+        "month_index": _serialize_array(alm.month_index, include_full=True),
+        "times_years": _serialize_array(alm.times_years, include_full=include_full),
+        "asset_market_value": _serialize_array(alm.asset_market_value, include_full=include_full),
+        "liability_pv": _serialize_array(alm.liability_pv, include_full=include_full),
+        "surplus": _serialize_array(alm.surplus, include_full=include_full),
+        "funding_ratio": _serialize_array(alm.funding_ratio, include_full=include_full),
+        "liquidity_buffer_months": _serialize_array(alm.liquidity_buffer_months, include_full=include_full),
+        "pv01_assets": float(alm.pv01_assets),
+        "pv01_liabilities": float(alm.pv01_liabilities),
+        "pv01_net": float(alm.pv01_net),
+        "duration_assets_mac": float(alm.duration_assets_mac),
+        "duration_liabilities_mac": float(alm.duration_liabilities_mac),
+        "duration_gap": float(alm.duration_gap),
+    }
+    if asm is not None:
+        out["assumptions"] = {
+            "rebalance_band": float(asm.rebalance_band),
+            "rebalance_frequency_months": int(asm.rebalance_frequency_months),
+            "reinvest_rule": str(asm.reinvest_rule),
+            "disinvest_rule": str(asm.disinvest_rule),
+            "liquidity_near_liquid_years": float(asm.liquidity_near_liquid_years),
+            "allocation": {
+                "buckets": [{"name": b.name, "tenor_years": float(b.tenor_years)} for b in asm.allocation.buckets],
+                "weights": _serialize_array(asm.allocation.weights, include_full=True),
+            },
+        }
+    if include_buckets:
+        out["bucket_asset_mv"] = _serialize_array(alm.bucket_asset_mv, include_full=True)
+    else:
+        out["bucket_asset_mv"] = {
+            "shape": list(alm.bucket_asset_mv.shape),
+        }
+    return out
+
+
+def _whatif_result_to_dict(
+    *,
+    base_res: sp.SPIAProjectionResult,
+    shocked_res: sp.SPIAProjectionResult,
+    baseline_mc: Any,
+    shocked_mc: Any,
+    whatif_params: dict[str, Any],
+    alm_base: sp.ALMResult | None,
+    alm_after: sp.ALMResult | None,
+    asm: sp.ALMAssumptions | None,
+    include_full: bool,
+) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "whatif_params": whatif_params,
+        "base": {
+            "single_premium": float(base_res.single_premium),
+            "pv_benefit": float(base_res.pv_benefit),
+            "pv_monthly_expenses": float(base_res.pv_monthly_expenses),
+            "economic_reserve_issue": float(base_res.economic_reserve[0]) if base_res.economic_reserve.size else None,
+            "times_years": _serialize_array(base_res.times_years, include_full=include_full),
+            "economic_reserve": _serialize_array(base_res.economic_reserve, include_full=include_full),
+        },
+        "after": {
+            "single_premium": float(shocked_res.single_premium),
+            "pv_benefit": float(shocked_res.pv_benefit),
+            "pv_monthly_expenses": float(shocked_res.pv_monthly_expenses),
+            "economic_reserve_issue": float(shocked_res.economic_reserve[0]) if shocked_res.economic_reserve.size else None,
+            "times_years": _serialize_array(shocked_res.times_years, include_full=include_full),
+            "economic_reserve": _serialize_array(shocked_res.economic_reserve, include_full=include_full),
+        },
+        "tail_risk_mc": {
+            "baseline": {
+                "n_sims": int(getattr(baseline_mc, "n_sims", 0)),
+                "premium_mean": float(getattr(baseline_mc, "premium_mean", float("nan"))),
+                "premium_median": float(getattr(baseline_mc, "premium_median", float("nan"))),
+                "premium_p05": float(getattr(baseline_mc, "premium_p05", float("nan"))),
+                "premium_p95": float(getattr(baseline_mc, "premium_p95", float("nan"))),
+            },
+            "after": {
+                "n_sims": int(getattr(shocked_mc, "n_sims", 0)),
+                "premium_mean": float(getattr(shocked_mc, "premium_mean", float("nan"))),
+                "premium_median": float(getattr(shocked_mc, "premium_median", float("nan"))),
+                "premium_p05": float(getattr(shocked_mc, "premium_p05", float("nan"))),
+                "premium_p95": float(getattr(shocked_mc, "premium_p95", float("nan"))),
+            },
+        },
+    }
+    if alm_base is not None:
+        out["alm_base"] = _alm_result_to_dict(alm_base, asm, include_buckets=False, include_full=include_full)
+    else:
+        out["alm_base"] = None
+    if alm_after is not None:
+        out["alm_after"] = _alm_result_to_dict(alm_after, asm, include_buckets=False, include_full=include_full)
+    else:
+        out["alm_after"] = None
+    return out
 
 
 MortalityMode = Literal["synthetic", "qx_csv", "rp2014_mp2016"]
@@ -544,6 +713,7 @@ def _render_what_if_studio() -> None:
 
     alm_whatif_base: sp.ALMResult | None = None
     alm_whatif_after: sp.ALMResult | None = None
+    asm_whatif_used: sp.ALMAssumptions | None = None
     try:
         horizon_age = int(ctx.get("horizon_age", 110))
         base_spread = float(ctx.get("spread", 0.0))
@@ -654,6 +824,7 @@ def _render_what_if_studio() -> None:
                     disinvest_rule="shortest_first",
                     liquidity_near_liquid_years=0.25,
                 )
+            asm_whatif_used = asm_wf
             alm_whatif_base = sp.run_alm_projection(
                 pricing=base_res,
                 yield_curve=base_curve,
@@ -679,10 +850,34 @@ def _render_what_if_studio() -> None:
         except Exception as alm_ex:
             alm_whatif_base = None
             alm_whatif_after = None
+            asm_whatif_used = None
             st.warning(f"ALM what-if layer skipped: {alm_ex!r}")
     except Exception as ex:
         st.error(f"What-if scenario failed: {ex!r}")
         return
+
+    st.session_state["whatif_last_params"] = {
+        "rates_shift_bps": float(rate_shift_bps),
+        "spread_shift_bps": float(spread_shift_bps),
+        "inflation_shift_pct": float(inflation_shift_pct),
+        "longevity_improvement_pct": float(longevity_improvement_pct),
+        "expense_ratio_mult": float(expense_ratio_mult),
+        "equity_regime": str(equity_regime),
+        "mc_sims": int(mc_sims),
+        "alm_asset_parallel_bps": float(alm_asset_parallel_bps),
+        "alm_twist_short_bps": float(alm_twist_short_bps),
+        "alm_twist_long_bps": float(alm_twist_long_bps),
+        "alm_liability_cf_pct": float(alm_liability_cf_pct),
+    }
+    st.session_state["whatif_last_base_res"] = base_res
+    st.session_state["whatif_last_shocked_res"] = shocked_res
+    st.session_state["whatif_last_baseline_mc"] = baseline_mc
+    st.session_state["whatif_last_shocked_mc"] = shocked_mc
+    st.session_state["whatif_last_shocked_curve"] = shocked_curve
+    st.session_state["whatif_last_shocked_mortality"] = shocked_mort
+    st.session_state["whatif_last_alm_base"] = alm_whatif_base
+    st.session_state["whatif_last_alm_after"] = alm_whatif_after
+    st.session_state["whatif_last_alm_assumptions"] = asm_whatif_used
 
     st.subheader("Before vs after vs impact")
     m1, m2, m3, m4 = st.columns(4)
@@ -1566,6 +1761,114 @@ def main() -> None:
         )
         st.divider()
         st.caption(f"Project root: `{ROOT}`")
+
+        st.subheader("Diagnostics export")
+        include_full_paths = st.checkbox("Include full monthly paths (larger file)", value=True)
+        include_alm_buckets = st.checkbox("Include ALM bucket MV time series", value=False)
+        if st.button("Prepare diagnostics JSON", type="secondary"):
+            pricing_res = st.session_state.get("pricing_res")
+            pricing_contract = st.session_state.get("pricing_contract")
+            pricing_excel_context = st.session_state.get("pricing_excel_context") or {}
+            alm_last = st.session_state.get("alm_last")
+            alm_last_assumptions = st.session_state.get("alm_last_assumptions")
+
+            if pricing_res is None or pricing_contract is None:
+                st.warning("Run Pricing Run first to populate diagnostics.")
+            else:
+                ctx_yc = pricing_excel_context.get("yield_curve")
+                ctx_mort = pricing_excel_context.get("mortality")
+                ctx_exp = pricing_excel_context.get("expenses")
+                payload: dict[str, Any] = {
+                    "exported_at_utc": _dt.datetime.utcnow().isoformat() + "Z",
+                    "pricing_meta": st.session_state.get("pricing_meta") or {},
+                    "pricing": _pricing_result_to_dict(
+                        pricing_res,
+                        pricing_contract,
+                        include_full=include_full_paths,
+                    ),
+                    "pricing_inputs": {
+                        "horizon_age": pricing_excel_context.get("horizon_age"),
+                        "valuation_year": pricing_excel_context.get("valuation_year"),
+                        "spread": pricing_excel_context.get("spread"),
+                        "yield_curve": _yield_curve_to_dict(ctx_yc) if isinstance(ctx_yc, sp.YieldCurve) else None,
+                        "mortality": _mortality_to_dict(ctx_mort) if ctx_mort is not None else None,
+                        "expenses": (
+                            {
+                                "policy_expense_dollars": float(getattr(ctx_exp, "policy_expense_dollars", float("nan"))),
+                                "premium_expense_rate": float(getattr(ctx_exp, "premium_expense_rate", float("nan"))),
+                                "monthly_expense_dollars": float(getattr(ctx_exp, "monthly_expense_dollars", float("nan"))),
+                            }
+                            if isinstance(ctx_exp, sp.ExpenseAssumptions)
+                            else None
+                        ),
+                        "yield_mode": pricing_excel_context.get("yield_mode"),
+                        "mortality_mode": pricing_excel_context.get("mortality_mode"),
+                        "expense_mode": pricing_excel_context.get("expense_mode"),
+                        "expense_annual_inflation": pricing_excel_context.get("expense_annual_inflation"),
+                    },
+                    "alm": None,
+                    "what_if": None,
+                }
+
+                if isinstance(alm_last, sp.ALMResult):
+                    payload["alm"] = _alm_result_to_dict(
+                        alm_last,
+                        alm_last_assumptions if isinstance(alm_last_assumptions, sp.ALMAssumptions) else None,
+                        include_buckets=include_alm_buckets,
+                        include_full=include_full_paths,
+                    )
+
+                what_if_shocked_res = st.session_state.get("whatif_last_shocked_res")
+                what_if_base_res = st.session_state.get("whatif_last_base_res")
+                what_if_alm_base = st.session_state.get("whatif_last_alm_base")
+                what_if_alm_after = st.session_state.get("whatif_last_alm_after")
+                what_if_baseline_mc = st.session_state.get("whatif_last_baseline_mc")
+                what_if_shocked_mc = st.session_state.get("whatif_last_shocked_mc")
+                what_if_shocked_curve = st.session_state.get("whatif_last_shocked_curve")
+                what_if_shocked_mortality = st.session_state.get("whatif_last_shocked_mortality")
+                what_if_alm_assumptions = st.session_state.get("whatif_last_alm_assumptions")
+                what_if_params = st.session_state.get("whatif_last_params") or {}
+
+                if (
+                    what_if_shocked_res is not None
+                    and what_if_base_res is not None
+                    and what_if_baseline_mc is not None
+                    and what_if_shocked_mc is not None
+                ):
+                    payload["what_if"] = _whatif_result_to_dict(
+                        base_res=what_if_base_res,
+                        shocked_res=what_if_shocked_res,
+                        baseline_mc=what_if_baseline_mc,
+                        shocked_mc=what_if_shocked_mc,
+                        whatif_params={
+                            **what_if_params,
+                            "shocked_curve": _yield_curve_to_dict(what_if_shocked_curve)
+                            if isinstance(what_if_shocked_curve, sp.YieldCurve)
+                            else None,
+                            "shocked_mortality": _mortality_to_dict(what_if_shocked_mortality)
+                            if what_if_shocked_mortality is not None
+                            else None,
+                        },
+                        alm_base=what_if_alm_base,
+                        alm_after=what_if_alm_after,
+                        asm=what_if_alm_assumptions if isinstance(what_if_alm_assumptions, sp.ALMAssumptions) else None,
+                        include_full=include_full_paths,
+                    )
+
+                st.session_state["diagnostics_json_bytes"] = json.dumps(payload, default=str, ensure_ascii=False, indent=2).encode("utf-8")
+                st.session_state["diagnostics_json_filename"] = f"spia_diagnostics_{_dt.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+                st.success("Diagnostics JSON prepared. Use Download below.")
+
+        diag_bytes = st.session_state.get("diagnostics_json_bytes")
+        diag_name = st.session_state.get("diagnostics_json_filename") or "spia_diagnostics.json"
+        if isinstance(diag_bytes, (bytes, bytearray)) and diag_bytes:
+            st.download_button(
+                "Download diagnostics JSON",
+                data=diag_bytes,
+                file_name=diag_name,
+                mime="application/json",
+                type="primary",
+            )
 
     if page == "overview":
         _render_overview()
