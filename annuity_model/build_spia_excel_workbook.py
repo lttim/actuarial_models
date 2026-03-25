@@ -552,7 +552,7 @@ def _write_alm_projection_sheet(
         f"Liability PV (D) follows Projection (rows 4–{proj_last}). "
         f"**Asset buckets (H onward)** and **borrowing (E)** link to **{ALM_ENGINE_SHEET}**, which rolls the Treasury "
         "ladder month-by-month (YieldCurve DF, Projection column S cashflows). "
-        "**Requires Excel 365** (LET). Rebalance policy must be liquidity_only in ALM settings for parity with this "
+        "**Desktop Excel** (2013+); ladder uses INDEX/MATCH/IF only (no LET). Rebalance policy must be liquidity_only in ALM settings for parity with this "
         "sheet. Surplus F = C−D−E; funding G = C/(D+E)."
     )
     last_hdr_col = get_column_letter(7 + n_b)
