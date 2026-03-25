@@ -1742,6 +1742,16 @@ def _render_alm_section() -> None:
                 st.session_state[f"alm_alloc_{i}"] = float(wi * 100.0)
         except Exception:
             pass
+    opt_notice = st.session_state.pop("alm_opt_notice", None)
+    if isinstance(opt_notice, dict):
+        msg = str(opt_notice.get("message", ""))
+        level = str(opt_notice.get("level", "info"))
+        if level == "success":
+            st.success(msg)
+        elif level == "warning":
+            st.warning(msg)
+        else:
+            st.info(msg)
 
     with st.expander("Target allocation (% weights, must sum to 100%)", expanded=True):
         cols = st.columns(min(n_bk, 6))
@@ -2033,7 +2043,9 @@ def _render_alm_section() -> None:
                 for _ in range(min(int(opt_samples), max_random)):
                     candidates.append(rng.dirichlet(alpha))
 
-                best_obj = -float("inf")
+                tenor_axis = np.array([float(b.tenor_years) for b in base_spec.buckets], dtype=float)
+                best_tenor = float("inf")
+                best_end_surplus = -float("inf")
                 best_w: np.ndarray | None = None
                 best_out: sp.ALMResult | None = None
                 best_min_surplus = -float("inf")
@@ -2084,10 +2096,15 @@ def _render_alm_section() -> None:
                     if not feasible:
                         continue
 
-                    # Objective: maximize ending surplus.
-                    obj = float(out_try.surplus[-1])
-                    if obj > best_obj:
-                        best_obj = obj
+                    # Objective: shortest feasible tenor mix first; ending surplus as tie-breaker.
+                    tenor_score = float(np.dot(np.asarray(w_try, dtype=float), tenor_axis))
+                    end_surplus = float(out_try.surplus[-1])
+                    if (
+                        tenor_score < best_tenor - 1e-12
+                        or (abs(tenor_score - best_tenor) <= 1e-12 and end_surplus > best_end_surplus)
+                    ):
+                        best_tenor = tenor_score
+                        best_end_surplus = end_surplus
                         best_w = np.asarray(w_try, dtype=float)
                         best_out = out_try
 
@@ -2116,9 +2133,14 @@ def _render_alm_section() -> None:
                         )
                         st.session_state["alm_last"] = best_fallback_out
                         st.session_state["alm_last_assumptions"] = asm_best
-                        st.warning(
-                            "No feasible allocation found within runtime limits; showing nearest candidate (highest minimum surplus)."
-                        )
+                        st.session_state["alm_opt_notice"] = {
+                            "level": "warning",
+                            "message": (
+                                "No feasible allocation found within runtime limits; showing nearest candidate "
+                                "(highest minimum surplus). Target allocation inputs updated."
+                            ),
+                        }
+                        st.rerun()
                 else:
                     st.session_state["alm_alloc_pending"] = np.asarray(best_w, dtype=float).tolist()
                     asm_best = sp.ALMAssumptions(
@@ -2137,11 +2159,15 @@ def _render_alm_section() -> None:
                     )
                     st.session_state["alm_last"] = best_out
                     st.session_state["alm_last_assumptions"] = asm_best
-                    st.success("Optimized allocation found and ALM projection completed.")
-                    st.caption(
-                        "Optimized ending surplus: "
-                        + f"${float(best_out.surplus[-1]):,.0f}"
-                    )
+                    st.session_state["alm_opt_notice"] = {
+                        "level": "success",
+                        "message": (
+                            "Optimized allocation found (shortest feasible tenor mix) and ALM projection completed. "
+                            f"Weighted tenor: {best_tenor:.2f}Y; ending surplus: ${float(best_out.surplus[-1]):,.0f}. "
+                            "Target allocation inputs updated."
+                        ),
+                    }
+                    st.rerun()
                 st.caption(
                     f"Optimization evaluated {eval_count} candidates "
                     f"(cap {max_eval}, time budget {time_budget_sec:.0f}s)."
