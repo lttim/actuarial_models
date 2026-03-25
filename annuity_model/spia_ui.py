@@ -33,9 +33,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import spia_projection as sp
+from alm_excel_ladder import ALM_ENGINE_SHEET
+
 from build_spia_excel_workbook import (
     ALMExcelSnapshot,
-    ALM_BUCKET_MV_SHEET,
     ALM_PROJECTION_FIRST_DATA_ROW,
     ALM_SHEET_NAME,
     ExcelPythonSnapshot,
@@ -93,6 +94,7 @@ def _refresh_pricing_excel_workbook_in_session() -> None:
             s0=float(mc_params.get("s0", 100.0)),
         )
     alm_snap = _maybe_alm_excel_snapshot_for_workbook()
+    alm_asm = st.session_state.get("alm_last_assumptions")
     try:
         spec = excel_spec_from_launcher(
             contract=contract,
@@ -121,6 +123,7 @@ def _refresh_pricing_excel_workbook_in_session() -> None:
             ),
             mc_snapshot=mc_snap,
             alm_snapshot=alm_snap,
+            alm_assumptions=alm_asm if isinstance(alm_asm, sp.ALMAssumptions) else None,
         )
         st.session_state["pricing_xlsx_has_mc"] = mc_snap is not None
         st.session_state["pricing_xlsx_has_alm"] = alm_snap is not None
@@ -1975,7 +1978,7 @@ def _render_excel_replicator() -> None:
             lr = ALM_PROJECTION_FIRST_DATA_ROW + int(np.asarray(alm_chk.asset_market_value).size) - 1
             st.caption(
                 f"Compares the current ALM path to **{ALM_SHEET_NAME}**: **C** = SUM of bucket columns (each bucket "
-                f"pulls **{ALM_BUCKET_MV_SHEET}** via INDEX/MATCH); liability **D** from Projection; surplus **F** = "
+                f"links **{ALM_ENGINE_SHEET}** ladder MVs); liability **D** from Projection; surplus **F** = "
                 "C−D−E (or cached F). Row-1 asset/surplus differences should be near zero for an unedited file."
             )
 
