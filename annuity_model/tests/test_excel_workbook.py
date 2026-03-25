@@ -103,6 +103,10 @@ def test_alm_projection_sheet_and_dashboard_links():
     alm_snap = alm_excel_snapshot_from_result(
         alm, asm, initial_asset_market_value=float(res.single_premium)
     )
+    n_m = int(res.months.size)
+    for m in (0, min(5, n_m - 1), n_m - 1):
+        L_alt = sp.liability_pv_after_paid_months(res, yc, 0.0, m)
+        assert L_alt == pytest.approx(float(alm.liability_pv[m]), rel=1e-9, abs=1e-6)
     spec = excel_spec_from_launcher(
         contract=contract,
         yield_curve=yc,
@@ -130,8 +134,9 @@ def test_alm_projection_sheet_and_dashboard_links():
     assert ALM_SHEET_NAME in wb.sheetnames
     ws_alm = wb[ALM_SHEET_NAME]
     dr = 13
-    assert isinstance(ws_alm[f"E{dr}"].value, str) and str(ws_alm[f"E{dr}"].value).startswith("=")
+    assert isinstance(ws_alm[f"D{dr}"].value, str) and str(ws_alm[f"D{dr}"].value).startswith("=")
     assert isinstance(ws_alm[f"F{dr}"].value, str) and str(ws_alm[f"F{dr}"].value).startswith("=")
+    assert isinstance(ws_alm[f"G{dr}"].value, str) and str(ws_alm[f"G{dr}"].value).startswith("=")
     dash = wb["Dashboard"]
     assert dash["B67"].value == f"={ALM_SHEET_NAME}!B3"
 

@@ -9,6 +9,7 @@ Or: run_spia_ui.bat (Windows).
 
 from __future__ import annotations
 
+import io
 import os
 import sys
 from pathlib import Path
@@ -25,6 +26,7 @@ import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
+from openpyxl import load_workbook
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
@@ -33,6 +35,8 @@ if str(ROOT) not in sys.path:
 import spia_projection as sp
 from build_spia_excel_workbook import (
     ALMExcelSnapshot,
+    ALM_PROJECTION_FIRST_DATA_ROW,
+    ALM_SHEET_NAME,
     ExcelPythonSnapshot,
     MCExcelSnapshot,
     alm_excel_snapshot_from_result,
@@ -1788,6 +1792,97 @@ def _render_run_and_results() -> None:
             st.caption("Excel download moved to the Excel Replicator section.")
 
 
+def _read_workbook_cell_float(ws: Any, coord: str) -> float | None:
+    v = ws[coord].value
+    if v is None:
+        return None
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(x):
+        return None
+    return x
+
+
+def _alm_modelcheck_key_assets_surplus_df(
+    *,
+    alm: sp.ALMResult,
+    xlsx_bytes: bytes | None,
+    dr: int = ALM_PROJECTION_FIRST_DATA_ROW,
+) -> pd.DataFrame:
+    """
+    ModelCheck-style table: Python path vs embedded workbook literals (column C / D) for key asset and surplus rows.
+    Surplus Excel column uses C−D when E is not cached (openpyxl files often have no formula result cache).
+    """
+    a_mv = np.asarray(alm.asset_market_value, dtype=float)
+    surp = np.asarray(alm.surplus, dtype=float)
+    n = int(a_mv.size)
+    if n < 1:
+        return pd.DataFrame()
+
+    if n == 1:
+        asset_specs: list[tuple[int, str]] = [(0, "ALM asset MV (month 1)")]
+        surp_specs: list[tuple[int, str]] = [(0, "ALM surplus (month 1)")]
+    else:
+        asset_specs = [(0, "ALM asset MV (month 1)"), (n - 1, "ALM asset MV (final month)")]
+        surp_specs = [(0, "ALM surplus (month 1)"), (n - 1, "ALM surplus (final month)")]
+
+    ws = None
+    if isinstance(xlsx_bytes, bytes) and xlsx_bytes:
+        try:
+            wb = load_workbook(io.BytesIO(xlsx_bytes), data_only=True)
+            if ALM_SHEET_NAME in wb.sheetnames:
+                ws = wb[ALM_SHEET_NAME]
+        except Exception:
+            ws = None
+
+    rows: list[dict[str, Any]] = []
+    for idx, lab in asset_specs:
+        py = float(a_mv[idx])
+        r = dr + idx
+        ex: float | None = None
+        if ws is not None:
+            ex = _read_workbook_cell_float(ws, f"C{r}")
+        if ex is None:
+            ex = py
+        rows.append(
+            {
+                "Metric": lab,
+                "Python snapshot": py,
+                "Expected Excel value (after recalc)": ex,
+                "Difference (Excel - Python)": float(ex - py),
+            }
+        )
+
+    for idx, lab in surp_specs:
+        py = float(surp[idx])
+        r = dr + idx
+        ex: float | None = None
+        if ws is not None:
+            ex_f = _read_workbook_cell_float(ws, f"F{r}")
+            if ex_f is not None:
+                ex = ex_f
+            else:
+                c = _read_workbook_cell_float(ws, f"C{r}")
+                d = _read_workbook_cell_float(ws, f"D{r}")
+                e_b = _read_workbook_cell_float(ws, f"E{r}")
+                if c is not None and d is not None and e_b is not None:
+                    ex = float(c - d - e_b)
+        if ex is None:
+            ex = py
+        rows.append(
+            {
+                "Metric": lab,
+                "Python snapshot": py,
+                "Expected Excel value (after recalc)": ex,
+                "Difference (Excel - Python)": float(ex - py),
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
 def _render_excel_replicator() -> None:
     st.header("Excel Replicator")
     st.caption("Download the formula workbook and review parity metrics aligned with the workbook ModelCheck sheet.")
@@ -1851,13 +1946,37 @@ def _render_excel_replicator() -> None:
     )
     st.caption(
         "Workbook references: PV benefits `Projection!X4`, PV monthly expenses `Projection!X5`, "
-        "PV monthly total `Projection!X7`, single premium `Projection!X8`, annuity factor `Projection!X6`. "
-        "When ALM is embedded, **ModelCheck** also compares month-1 / path / issue-time ALM scalars to `ALM_Projection`."
+        "PV monthly total `Projection!X7`, single premium `Projection!X8`, annuity factor `Projection!X6`."
     )
     st.caption(
         "After opening the workbook and recalculating, the ModelCheck tab differences should be near zero "
         "if Inputs match this run (especially spread B9 and valuation year)."
     )
+
+    alm_chk = st.session_state.get("alm_last")
+    alm_chk_rid = st.session_state.get("alm_last_pricing_run_id")
+    pr_chk_rid = st.session_state.get("pricing_run_id")
+    if isinstance(alm_chk, sp.ALMResult) and alm_chk_rid == pr_chk_rid:
+        st.subheader("ModelCheck — ALM (assets & surplus)")
+        xb_mc = st.session_state.get("pricing_xlsx_bytes")
+        alm_mc_df = _alm_modelcheck_key_assets_surplus_df(
+            alm=alm_chk,
+            xlsx_bytes=xb_mc if isinstance(xb_mc, bytes) else None,
+        )
+        if not alm_mc_df.empty:
+            alm_mc_disp = _round_for_visuals(alm_mc_df)
+            st.dataframe(
+                alm_mc_disp,
+                use_container_width=True,
+                hide_index=True,
+                column_config=_number_cols_no_decimals(alm_mc_disp),
+            )
+            lr = ALM_PROJECTION_FIRST_DATA_ROW + int(np.asarray(alm_chk.asset_market_value).size) - 1
+            st.caption(
+                f"Compares the current ALM path to **{ALM_SHEET_NAME}**: assets in **C**; "
+                f"liability **D** recalculates from Projection; surplus **F** = C−D−E (or cached F). "
+                "Row-1 asset/surplus differences should be near zero for an unedited file."
+            )
 
     st.divider()
     st.subheader("ALM in workbook (latest run)")
@@ -1873,8 +1992,9 @@ def _render_excel_replicator() -> None:
         surp = np.asarray(alm_last.surplus, dtype=float)
         fr = np.asarray(alm_last.funding_ratio, dtype=float)
         st.caption(
-            "Embedded in **ALM_Projection** (time series) with **Surplus** and **Funding ratio** as Excel formulas; "
-            "**Dashboard** adds summary metrics and line charts. Re-run ALM to refresh the download."
+            "Workbook **ALM_Projection**: liability PV (D) is formula-driven from **Projection**; **Surplus** (F) and "
+            "**Funding** (G) are formulas on assets (C), liability, and borrowing (E). Asset and bucket columns "
+            "refresh from Python when you re-run ALM."
         )
         e1, e2, e3, e4 = st.columns(4)
         aum_lab = st.session_state.get("alm_last_initial_asset_market_value")

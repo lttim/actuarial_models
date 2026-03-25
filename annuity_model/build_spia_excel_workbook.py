@@ -61,6 +61,7 @@ class ALMExcelSnapshot:
     month_index: np.ndarray  # 0..n-1 paid months
     asset_market_value: np.ndarray
     liability_pv: np.ndarray
+    borrowing_balance: np.ndarray  # shape (n_months,)
     bucket_asset_mv: np.ndarray  # shape (n_buckets, n_months)
 
 
@@ -73,6 +74,8 @@ class ALMDashboardLayout(NamedTuple):
 
 
 ALM_SHEET_NAME = "ALM_Projection"
+# First month of ALM path data on ALM_Projection (below header row 12). Keep in sync with _write_alm_projection_sheet.
+ALM_PROJECTION_FIRST_DATA_ROW = 13
 
 
 def alm_excel_snapshot_from_result(
@@ -105,6 +108,7 @@ def alm_excel_snapshot_from_result(
         month_index=np.asarray(alm.month_index, dtype=int),
         asset_market_value=np.asarray(alm.asset_market_value, dtype=float),
         liability_pv=np.asarray(alm.liability_pv, dtype=float),
+        borrowing_balance=np.asarray(alm.borrowing_balance, dtype=float),
         bucket_asset_mv=bmv,
     )
 
@@ -501,16 +505,38 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
     ws["V2"] = "=X9"
 
 
+def _alm_liability_pv_cell_formula(*, excel_row: int, proj_last_row: int) -> str:
+    """
+    Liability PV at end of month A{excel_row} (month numbering matches Projection column A).
+    Mirrors Python ``liab_pv_path``: sum_{j>M} S_j O_j / O_M with S=Projection!S, O=Projection!O.
+    """
+    pl = int(proj_last_row)
+    r = int(excel_row)
+    return (
+        f'=IF(INDEX(Projection!$O:$O,3+A{r})<=0,NA(),'
+        f'IF(4+A{r}>{pl},0,'
+        f'SUMPRODUCT(INDIRECT("Projection!S" & (4+A{r}) & ":S{pl}"),'
+        f'INDIRECT("Projection!O" & (4+A{r}) & ":O{pl}"))'
+        f'/INDEX(Projection!$O:$O,3+A{r})))'
+    )
+
+
 def _write_alm_projection_sheet(wb: Workbook, snap: ALMExcelSnapshot) -> ALMDashboardLayout:
     ws = wb.create_sheet(ALM_SHEET_NAME)
-    ws["A1"] = "ALM monthly path (values from latest Python run at export)"
+    ws["A1"] = "ALM monthly path (mixed: liability from Projection formulas; assets from Python ladder)"
     ws["A1"].font = Font(bold=True, size=12)
+    n = int(snap.asset_market_value.shape[0])
+    n_b = len(snap.bucket_names)
+    proj_last = 3 + n
     ws["A2"] = (
-        "Asset MV and liability PV are embedded from the Streamlit ALM engine. Surplus = assets minus liabilities "
-        "and funding ratio = assets / liabilities are Excel formulas. Attained age links to Projection. "
-        "Re-run ALM in the app and re-download to refresh this sheet."
+        f"Liability PV (column D) is calculated as SUMPRODUCT(Projection!S×O for months after row A) ÷ Projection!O, "
+        f"matching the Python ALM liability measure (rows 4–{proj_last} on Projection). "
+        "Asset MV (C) and bucket columns still use the Python Treasury-ladder path (reinvest / rebalance / "
+        "disinvest / borrowing rules are not rebuilt as native formulas). Borrowing (E) is from that Python path. "
+        "Surplus F = C−D−E; funding G = C/(D+E). Re-run ALM in the app to refresh embedded asset columns."
     )
-    ws.merge_cells("A2:J2")
+    last_hdr_col = get_column_letter(7 + n_b)
+    ws.merge_cells(f"A2:{last_hdr_col}2")
 
     ws["A3"], ws["B3"] = "Initial AUM ($)", float(snap.initial_asset_market_value)
     ws["A4"], ws["B4"] = "Duration gap (y) (issue-time Macaulay)", float(snap.duration_gap)
@@ -521,24 +547,34 @@ def _write_alm_projection_sheet(wb: Workbook, snap: ALMExcelSnapshot) -> ALMDash
     alloc_txt = "; ".join(f"{snap.bucket_names[i]} {snap.weights[i]:.2%}" for i in range(len(snap.bucket_names)))
     ws["B9"] = alloc_txt
 
-    header_row = 12
-    headers = ["Month", "Attained age", "Asset MV", "Liability PV", "Surplus", "Funding ratio"] + list(snap.bucket_names)
+    header_row = ALM_PROJECTION_FIRST_DATA_ROW - 1
+    headers = [
+        "Month",
+        "Attained age",
+        "Asset MV",
+        "Liability PV",
+        "Borrowing",
+        "Surplus",
+        "Funding ratio",
+    ] + list(snap.bucket_names)
     for c, h in enumerate(headers, start=1):
         ws.cell(row=header_row, column=c, value=h).font = Font(bold=True)
 
-    n = int(snap.asset_market_value.shape[0])
-    n_b = len(snap.bucket_names)
-    first_data = header_row + 1
+    first_data = ALM_PROJECTION_FIRST_DATA_ROW
+    debt = np.asarray(snap.borrowing_balance, dtype=float).reshape(-1)
+    if debt.shape[0] != n:
+        raise ValueError("borrowing_balance length must match asset path.")
     for i in range(n):
         r = first_data + i
         ws.cell(row=r, column=1, value=int(snap.month_index[i] + 1))
         ws.cell(row=r, column=2, value=f'=IFERROR(INDEX(Projection!$C:$C,MATCH(A{r},Projection!$A:$A,0)),"")')
         ws.cell(row=r, column=3, value=float(snap.asset_market_value[i]))
-        ws.cell(row=r, column=4, value=float(snap.liability_pv[i]))
-        ws.cell(row=r, column=5, value=f"=C{r}-D{r}")
-        ws.cell(row=r, column=6, value=f'=IF(D{r}>0,C{r}/D{r},"")')
+        ws.cell(row=r, column=4, value=_alm_liability_pv_cell_formula(excel_row=r, proj_last_row=proj_last))
+        ws.cell(row=r, column=5, value=float(debt[i]))
+        ws.cell(row=r, column=6, value=f"=C{r}-D{r}-E{r}")
+        ws.cell(row=r, column=7, value=f'=IF((D{r}+E{r})>0,C{r}/(D{r}+E{r}),"")')
         for b in range(n_b):
-            ws.cell(row=r, column=7 + b, value=float(snap.bucket_asset_mv[b, i]))
+            ws.cell(row=r, column=8 + b, value=float(snap.bucket_asset_mv[b, i]))
 
     last_data = first_data + n - 1
     ws["B3"].number_format = "#,##0.00"
@@ -546,18 +582,16 @@ def _write_alm_projection_sheet(wb: Workbook, snap: ALMExcelSnapshot) -> ALMDash
         ws[addr].number_format = "0.00"
     ws["B7"].number_format = "#,##0.00"
     for r in range(first_data, last_data + 1):
-        for col in range(3, 7 + n_b):
+        for col in range(3, 8 + n_b):
             cell = ws.cell(row=r, column=col)
-            if col in (3, 4) or col >= 7:
+            if col in (3, 4, 5, 6) or col >= 8:
                 cell.number_format = "#,##0.00"
-            elif col == 5:
-                cell.number_format = "#,##0.00"
-            elif col == 6:
+            elif col == 7:
                 cell.number_format = "0.000"
 
     ws.column_dimensions["A"].width = 10
     ws.column_dimensions["B"].width = 12
-    for c in range(3, 7 + n_b + 1):
+    for c in range(3, 8 + n_b + 1):
         ws.column_dimensions[get_column_letter(c)].width = 14
 
     return ALMDashboardLayout(header_row=header_row, first_data_row=first_data, last_data_row=last_data)
@@ -753,10 +787,10 @@ def _write_dashboard(wb: Workbook, n_months: int, *, alm_layout: ALMDashboardLay
         ws.cell(row=base, column=1, value="ALM summary (latest run — detail on ALM_Projection)").font = Font(bold=True)
         rows_meta = [
             ("Initial AUM ($)", f"={ALM_SHEET_NAME}!B3"),
-            ("Funding ratio (month 1)", f"={ALM_SHEET_NAME}!F{dr}"),
-            ("Min surplus ($)", f"=MIN({ALM_SHEET_NAME}!E{dr}:E{lr})"),
-            ("Ending surplus ($)", f"={ALM_SHEET_NAME}!E{lr}"),
-            ("Ending funding ratio", f"={ALM_SHEET_NAME}!F{lr}"),
+            ("Funding ratio (month 1)", f"={ALM_SHEET_NAME}!G{dr}"),
+            ("Min surplus ($)", f"=MIN({ALM_SHEET_NAME}!F{dr}:F{lr})"),
+            ("Ending surplus ($)", f"={ALM_SHEET_NAME}!F{lr}"),
+            ("Ending funding ratio", f"={ALM_SHEET_NAME}!G{lr}"),
             ("Duration gap (y)", f"={ALM_SHEET_NAME}!B4"),
             ("PV01 net ($/bp)", f"={ALM_SHEET_NAME}!B7"),
         ]
@@ -786,7 +820,7 @@ def _write_dashboard(wb: Workbook, n_months: int, *, alm_layout: ALMDashboardLay
         chart_s.title = "ALM — Surplus"
         chart_s.y_axis.title = "Surplus ($)"
         chart_s.x_axis.title = "Attained age"
-        chart_s.add_data(Reference(wsa, min_col=5, min_row=hr, max_row=lr), titles_from_data=True)
+        chart_s.add_data(Reference(wsa, min_col=6, min_row=hr, max_row=lr), titles_from_data=True)
         chart_s.set_categories(Reference(wsa, min_col=2, min_row=dr, max_row=lr))
         chart_s.height = 6
         chart_s.width = 10
@@ -807,7 +841,8 @@ def _write_model_check_sheet(
     ws["A2"] = (
         "Column B is the Python snapshot at export. Column C points at workbook formulas or embedded ALM cells; "
         "column D should be ~0 after recalc if Inputs match the launcher. "
-        "ALM asset/liability columns are frozen Python values; surplus and funding ratio on ALM_Projection are formulas."
+        "ALM: liability PV on ALM_Projection is formula-linked to Projection; surplus and funding use sheet formulas; "
+        "asset column remains the Python ladder snapshot."
     )
     ws.merge_cells("A2:D2")
 
@@ -849,29 +884,32 @@ def _write_model_check_sheet(
             raise ValueError("ALM ModelCheck layout rows do not match snapshot length.")
         a_mv = np.asarray(alm_snapshot.asset_market_value, dtype=float)
         l_pv = np.asarray(alm_snapshot.liability_pv, dtype=float)
-        path_surp = a_mv - l_pv
+        debt_v = np.asarray(alm_snapshot.borrowing_balance, dtype=float)
+        path_surp = a_mv - l_pv - debt_v
         a0, l0 = float(a_mv[0]), float(l_pv[0])
+        d0 = float(debt_v[0])
         s0 = float(path_surp[0])
         s_end = float(path_surp[-1])
         s_min = float(np.min(path_surp))
-        f0 = float(a0 / l0) if l0 > 1e-12 else float("nan")
+        denom0 = l0 + d0
+        f0 = float(a0 / denom0) if denom0 > 1e-12 else float("nan")
 
         ws.merge_cells(f"A{row_idx}:D{row_idx}")
         ws.cell(row=row_idx, column=1, value="ALM checks (ALM_Projection sheet)").font = Font(bold=True)
         row_idx += 1
 
-        min_rng = f"=MIN({sh}!E{dr}:E{lr})"
+        min_rng = f"=MIN({sh}!F{dr}:F{lr})"
         alm_rows: list[tuple[str, float, str, str]] = [
             ("ALM initial AUM (meta)", float(alm_snapshot.initial_asset_market_value), f"={sh}!B3", "money"),
             ("ALM asset MV (month 1)", a0, f"={sh}!C{dr}", "money"),
             ("ALM liability PV (month 1)", l0, f"={sh}!D{dr}", "money"),
-            ("ALM surplus (month 1)", s0, f"={sh}!E{dr}", "money"),
+            ("ALM surplus (month 1)", s0, f"={sh}!F{dr}", "money"),
         ]
         if math.isfinite(f0):
-            alm_rows.append(("ALM funding ratio (month 1)", f0, f"={sh}!F{dr}", "fr"))
+            alm_rows.append(("ALM funding ratio (month 1)", f0, f"={sh}!G{dr}", "fr"))
         alm_rows.extend(
             [
-                ("ALM surplus (final month)", s_end, f"={sh}!E{lr}", "money"),
+                ("ALM surplus (final month)", s_end, f"={sh}!F{lr}", "money"),
                 ("ALM min surplus (path)", s_min, min_rng, "money"),
                 ("ALM duration gap (y)", float(alm_snapshot.duration_gap), f"={sh}!B4", "dur"),
                 ("ALM PV01 net ($/bp)", float(alm_snapshot.pv01_net), f"={sh}!B7", "money"),
