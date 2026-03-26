@@ -1,0 +1,42 @@
+---
+description: Actuarial model parity governance — Python vs Excel cross-engine reconciliation rules
+alwaysApply: true
+---
+
+# Actuarial Model Parity Rules
+
+All work in this repo must maintain exact parity between the Python calculation engine
+and the generated Excel workbook. See `docs/model_parity_contract.md` for the full contract.
+
+## Before declaring any task "done"
+
+1. Run `pytest tests/parity/ -v` — all parity tests must pass (0.00 discrepancy).
+2. Run `pytest tests/ -v` — all unit tests must pass.
+3. If you changed any formula-generating code, regenerate the workbook and verify the
+   reconciliation sheet shows 0.00 difference between Python and Excel outputs.
+
+## Critical invariants — never break these
+
+- **Tie-break policy**: When buckets/items have equal or near-equal sort keys, the
+  lower-indexed item is always processed first. Use `index * epsilon` tie-breaking in both
+  Python and Excel. See `docs/model_parity_contract.md` for exact epsilon and threshold values.
+- **Tolerance policy**: Use only the tolerances defined in the parity contract. Never add
+  ad-hoc tolerances without updating the contract and adding a regression test.
+- **Epsilon policy**: Any change to epsilon or comparison threshold requires a regression
+  test proving no double-trigger behavior across all golden scenarios.
+- **Step-level parity**: Validate intermediate state (monthly or step-level), not only
+  the final output. Matching final values can mask offsetting errors.
+
+## Floating-point accumulation — known failure mode
+
+Values computed by repeated addition/subtraction WILL diverge from values that were reset
+to an exact reference value, even when both should represent the same quantity. The error
+is typically ~1e-16 but CAN flip comparison order. Always use epsilon tie-breaking;
+never rely on raw floating-point comparison for ordering.
+
+## When changing disinvestment / selection logic
+
+- Add a test in `tests/parity/` that covers the new edge case.
+- Simulate the Excel formula logic in Python (see `tests/parity/excel_formula_sim.py`)
+  and assert agreement at every step.
+- Every bug gets a `@pytest.mark.regression` test with the exact scenario.
