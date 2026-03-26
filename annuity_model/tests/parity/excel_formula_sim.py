@@ -14,6 +14,9 @@ from __future__ import annotations
 
 import numpy as np
 
+EXCEL_DISINVEST_EPSILON = 1e-9
+EXCEL_DISINVEST_THRESHOLD = 5e-10
+
 
 # ---------------------------------------------------------------------------
 # Disinvestment — simulates ALM_Engine shortest-first disinvestment passes
@@ -60,23 +63,20 @@ def excel_disinvest_shortest_first(
     c0 = float(cash)
     f0 = faces.copy()
 
-    EPSILON = 1e-9          # per-bucket epsilon increment (matches (k+1)*1E-9 with k 0-based)
-    THRESHOLD = 5e-10       # must be < EPSILON/2 to prevent double-select
-
     for _ in range(n_passes):
         if n0 <= 1e-9:
             break
 
         # Epsilon-adjusted tenor for each bucket; depleted buckets get sentinel 999
         trnk = np.array([
-            t_rem[k] + (k + 1) * EPSILON if f0[k] > 1e-9 else 999.0
+            t_rem[k] + (k + 1) * EXCEL_DISINVEST_EPSILON if f0[k] > 1e-9 else 999.0
             for k in range(nb)
         ])
         tmin = float(np.min(trnk))
 
         sells = np.zeros(nb)
         for k in range(nb):
-            if f0[k] > 1e-9 and abs(trnk[k] - tmin) < THRESHOLD:
+            if f0[k] > 1e-9 and abs(trnk[k] - tmin) < EXCEL_DISINVEST_THRESHOLD:
                 sells[k] = min(f0[k], n0 / max(df[k], 1e-15))
 
         pay = float(np.sum(sells * df))

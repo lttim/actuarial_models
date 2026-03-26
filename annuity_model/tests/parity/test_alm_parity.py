@@ -27,7 +27,11 @@ ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 import spia_projection as sp
-from tests.parity.excel_formula_sim import excel_disinvest_shortest_first
+from tests.parity.excel_formula_sim import (
+    EXCEL_DISINVEST_EPSILON,
+    EXCEL_DISINVEST_THRESHOLD,
+    excel_disinvest_shortest_first,
+)
 
 # ---------------------------------------------------------------------------
 # Tolerances (from docs/model_parity_contract.md)
@@ -281,6 +285,52 @@ def test_disinvest_genuinely_different_tenors_sells_shortest():
     assert faces_py[1] < faces[1], "Bond 1 (shortest) must be sold first in Python"
     assert faces_xl[1] < faces[1], "Bond 1 (shortest) must be sold first in Excel sim"
     np.testing.assert_allclose(faces_py, faces_xl, atol=TOL_DOLLAR)
+
+
+def test_excel_disinvest_threshold_is_safely_below_half_epsilon():
+    """Guardrail: Excel threshold must not exceed half the epsilon interval.
+
+    If this relationship is broken, adjacent buckets can both trigger when t_rem
+    differs only by floating-point noise, recreating the double-sell bug.
+    """
+    assert EXCEL_DISINVEST_THRESHOLD <= (EXCEL_DISINVEST_EPSILON / 2.0)
+
+
+@pytest.mark.parametrize("delta", [-4e-10, -1e-10, 0.0, 1e-10, 4e-10])
+def test_near_tie_perturbations_still_pick_lowest_index(delta: float):
+    """Near-tie fuzz: small perturbations around threshold never violate tie-break.
+
+    For two near-equal buckets, both engines must pick bucket 0 first as long as
+    the perturbation stays within the no-double-trigger safety envelope.
+    """
+    base = 1.0 / 12.0
+    t_rem = np.array([base, base + delta, 2.0, 7.0, 17.0])
+    faces = np.array([200_000.0, 200_000.0, 300_000.0, 400_000.0, 500_000.0])
+    yc = _flat_yc(0.035)
+    df = _df_rem(yc, t_rem)
+    need = 10_000.0
+
+    _, faces_py = sp._alm_disinvest(
+        cash=-need,
+        faces=faces.copy(),
+        t_rem=t_rem,
+        yield_curve=yc,
+        spread=0.0,
+        need=need,
+        rule="shortest_first",
+    )
+    _, faces_xl = excel_disinvest_shortest_first(-need, faces.copy(), t_rem, df, need)
+
+    assert faces_py[0] < faces[0], "Python should disinvest from lowest-index near-tie bucket"
+    np.testing.assert_allclose(
+        faces_py[1], faces[1], atol=TOL_DOLLAR,
+        err_msg="Python should not touch higher-index near-tie bucket",
+    )
+    assert faces_xl[0] < faces[0], "Excel sim should disinvest from lowest-index near-tie bucket"
+    np.testing.assert_allclose(
+        faces_xl[1], faces[1], atol=TOL_DOLLAR,
+        err_msg="Excel sim should not touch higher-index near-tie bucket",
+    )
 
 
 # ---------------------------------------------------------------------------
