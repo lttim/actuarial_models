@@ -2,6 +2,7 @@
 __pycache__/
 .pytest_cache/
 reports/
+streamlit output/
 
 # Local scratch extracts (regenerate from SOA workbooks / scripts)
 tmp_*.csv
