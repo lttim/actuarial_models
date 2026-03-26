@@ -1852,7 +1852,8 @@ def _alm_modelcheck_key_assets_surplus_df(
     Surplus from Excel is read as **C−D−E** when cached values exist (then **F** is not used). If the
     workbook has no cached results for those cells (typical before a full Excel recalc), the expected
     Excel column is **NaN** — do not treat that as a match. New downloads embed snapshot caches on
-    **ALM_Projection** C–F so ``data_only`` reads align with ModelCheck column B until Excel recalculates.
+    **ALM_Projection** C–F and per-bucket columns **H+** so ``=SUM(bucket…)`` matches **C** under
+    ``data_only`` until Excel recalculates (recalc may still refresh values from **ALM_Engine** formulas).
     """
     if mirror_snap is not None:
         a_mv = np.asarray(mirror_snap.asset_market_value, dtype=float)

@@ -169,6 +169,12 @@ def test_alm_projection_sheet_and_dashboard_links():
     assert wac["D13"].value is not None
     assert wac["E13"].value is not None
     assert wac["F13"].value is not None
+    assert wac["H13"].value is not None
+    assert float(wac["C13"].value) == pytest.approx(
+        sum(float(wac[f"{chr(ord('H')+k)}13"].value) for k in range(6)),
+        rel=1e-9,
+        abs=1e-2,
+    )
     assert float(wac["F13"].value) == pytest.approx(
         float(alm_snap_ds.asset_market_value[0])
         - float(alm_snap_ds.liability_pv[0])

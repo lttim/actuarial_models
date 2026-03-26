@@ -1189,11 +1189,21 @@ def inject_alm_projection_formula_cached_values(
     returns None for those cells. Inject last-known-good numeric caches for **ALM_Projection** columns
     C–F (asset MV, liability PV, borrowing, surplus) from the embedded snapshot so Streamlit parity
     reads match ModelCheck column B until the user performs a full Excel recalc (which may refresh ``<v>``).
+
+    Also inject **H onward** (per-bucket market values linked to ``ALM_Engine``) from
+    ``snap.bucket_asset_mv`` so ``=SUM(H…:… )`` cached totals match column **C** in the saved file.
+    Without this, **C** carried a Python snapshot while bucket columns had no caches — after a full
+    recalc, Excel recomputed **C** from the engine and could diverge from column **B** even when
+    formulas were already maturity-gated to match Python.
     """
     n = int(snap.asset_market_value.shape[0])
     a_mv = np.asarray(snap.asset_market_value, dtype=float)
     l_pv = np.asarray(snap.liability_pv, dtype=float)
     bd = np.asarray(snap.borrowing_balance, dtype=float)
+    bkt = np.asarray(snap.bucket_asset_mv, dtype=float)
+    if bkt.shape[1] != n:
+        raise ValueError("bucket_asset_mv month dimension must match asset_market_value length.")
+    n_bkt = int(bkt.shape[0])
     updates: dict[str, str] = {}
     for i in range(n):
         rnum = int(first_data_row + i)
@@ -1205,6 +1215,9 @@ def inject_alm_projection_formula_cached_values(
         updates[f"D{rnum}"] = f"{l_f:.15g}"
         updates[f"E{rnum}"] = f"{b_f:.15g}"
         updates[f"F{rnum}"] = f"{s_f:.15g}"
+        for b in range(n_bkt):
+            col_l = get_column_letter(8 + b)
+            updates[f"{col_l}{rnum}"] = f"{float(bkt[b, i]):.15g}"
 
     q = _ooxml_sml_tag
     marker1 = b"SUM(H"
