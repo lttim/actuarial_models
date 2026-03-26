@@ -745,7 +745,7 @@ def write_alm_engine_sheet(
             sells: list[str] = []
             for k in range(nb):
                 sf = (
-                    f"IF(AND($B$12=1,{f0[k]}>1E-9,ABS({trnk[k]}-({tmin}))<1E-9),"
+                    f"IF(AND($B$12=1,{f0[k]}>1E-9,ABS({trnk[k]}-({tmin}))<5E-10),"
                     f"MIN({f0[k]},{n0}/MAX(({df_dis[k]}),1E-15)),0)"
                 )
                 pr = (

@@ -1684,8 +1684,10 @@ def _alm_disinvest(
                 remaining -= redu * dff
         return cash, faces
 
-    # shortest_first: by remaining tenor then iterate
-    order = np.argsort(t_rem + (faces <= 1e-15) * 1e6)
+    # shortest_first: by remaining tenor then iterate; add tiny per-bucket epsilon
+    # to break ties deterministically (lower-index bucket first) matching Excel's
+    # (k+1)*1E-9 epsilon with 5E-10 threshold in the ALM_Engine formula.
+    order = np.argsort(t_rem + (faces <= 1e-15) * 1e6 + np.arange(faces.shape[0]) * 1e-9)
     for k in order:
         if remaining <= 1e-9:
             break
