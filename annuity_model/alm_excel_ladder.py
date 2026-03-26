@@ -318,8 +318,11 @@ def write_alm_engine_sheet(
     dmv = taken(
         "dmv",
         nb,
-        lambda i: f"Bond {i + 1}: buy from cash ($)",
-        lambda i: f"Dollars taken from cash to purchase new par in bucket {i + 1} when underweight.",
+        lambda i: f"Bond {i + 1}: buy from cash MV ($)",
+        lambda i: (
+            f"Market-value dollars spent from cash to purchase bucket {i + 1} when underweight. "
+            "Cash reduces by this amount; face purchased = dmv / DF (computed in f_re column)."
+        ),
     )
     take1(
         "cash_re",
@@ -641,16 +644,16 @@ def write_alm_engine_sheet(
             )
 
         for k in range(nb):
-            t_use = f"IF({_L(t_pm[k])}{r}>1E-9,{_L(t_pm[k])}{r},$E${WBASE + k})"
-            denom = _excel_df_flat(t_cell=f"({t_use})", y_last_row=y_last_row)
             wnk = wnorm[k]
+            # dmv[k] is the MV dollar amount to purchase for bucket k.
+            # cash_re subtracts sum(dmv) and f_re adds dmv/DF to convert MV→face.
+            # Do NOT divide by DF here — that conversion happens only in f_re.
             ws.cell(
                 row=r,
                 column=dmv[k],
                 value=(
                     f"=IF(OR($B$11=0,({mtot})<=1E-9,{_L(debt_r1)}{r}>1E-9,{_L(xsr)}{r}<=1E-6),0,"
-                    f"({_L(xsr)}{r}*IF({_L(dsum_i)}{r}>1E-9,{_L(defc[k])}{r}/{_L(dsum_i)}{r},{wnk}))/"
-                    f"MAX(({denom}),1E-15))"
+                    f"{_L(xsr)}{r}*IF({_L(dsum_i)}{r}>1E-9,{_L(defc[k])}{r}/{_L(dsum_i)}{r},{wnk}))"
                 ),
             )
 
