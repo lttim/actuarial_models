@@ -7,29 +7,42 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
+import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font
-from openpyxl.worksheet.worksheet import Worksheet
 
 import pricing_projection as sp
 import term_projection as tp
 
+from build_pricing_excel_workbook import (
+    ALM_ENGINE_STEP_MONTHS,
+    ALM_EXCEL_PATH_MONTH_CAP,
+    ALM_PROJECTION_FIRST_DATA_ROW,
+    ALMExcelSnapshot,
+    ExcelPythonSnapshot,
+    LIABILITY_SHEET_NAME,
+    _write_alm_projection_sheet,
+    _write_model_check_sheet,
+    alm_excel_downsample_snapshot,
+    alm_excel_truncate_snapshot,
+    inject_alm_projection_formula_cached_values,
+)
+from recalc_excel_shared import RECALC_MONTHLY_CURVE_SHEET, write_monthly_curve_logdf, write_yield_curve_sheet
+
 TERM_PROJ_MAX_ROWS = 600
 
 SHEET_INPUTS = "Inputs"
-SHEET_ZERO = "ZeroCurve"
 SHEET_QX = "QxTable"
 SHEET_MTH_QX = "MortalMonthly"
-SHEET_PROJ = "TermProjection"
-SHEET_MC = "ModelCheck"
 
-_IN_ROW_ISSUE_AGE = 4
-_IN_ROW_DEATH_BEN = 6
-_IN_ROW_PREMIUM = 7
-_IN_ROW_TERM_Y = 8
-_IN_ROW_HORIZON = 11
-_IN_ROW_SPREAD = 13
-_IN_ROW_NMONTHS = 17
+# Inputs rows (align with SPIA: B6 = payments/year, B9 = spread for MonthlyCurve + ALM_Engine).
+_IN_ROW_ISSUE_AGE = 3
+_IN_ROW_DEATH_BEN = 5
+_IN_ROW_HORIZON = 8
+_IN_ROW_SPREAD = 9
+_IN_ROW_PREMIUM = 10
+_IN_ROW_TERM_Y = 11
+_IN_ROW_NMONTHS = 18
 
 
 def _in_addr(col: str, row: int) -> str:
@@ -40,38 +53,8 @@ def _n_months_cell() -> str:
     return _in_addr("B", _IN_ROW_NMONTHS)
 
 
-def _write_zero_curve_sheet(wb: Workbook, yc: sp.YieldCurve, spread_cell: str) -> int:
-    ws = wb.create_sheet(SHEET_ZERO)
-    ws["A1"] = "maturity_years"
-    ws["B1"] = "zero_rate"
-    ws["C1"] = "ln_discount_node"
-    mats = np.asarray(yc.maturities_years, dtype=float)
-    zeros = np.asarray(yc.zero_rates, dtype=float)
-    n = int(mats.shape[0])
-    for i in range(n):
-        r = 2 + i
-        ws.cell(row=r, column=1, value=float(mats[i]))
-        ws.cell(row=r, column=2, value=float(zeros[i]))
-        ws.cell(row=r, column=3, value=f"=-(B{r}+{spread_cell})*A{r}")
-    return n
-
-
-def _write_qx_table_sheet(wb: Workbook, mort: sp.MortalityTableQx) -> int:
-    ws = wb.create_sheet(SHEET_QX)
-    ws["A1"] = "age"
-    ws["B1"] = "qx"
-    ages = np.asarray(mort.ages, dtype=int)
-    qx = np.asarray(mort.qx, dtype=float)
-    n = int(ages.shape[0])
-    for i in range(n):
-        r = 2 + i
-        ws.cell(row=r, column=1, value=int(ages[i]))
-        ws.cell(row=r, column=2, value=float(qx[i]))
-    return n
-
-
 def _fill_mortal_monthly_rpmp(
-    ws_m: Worksheet,
+    ws_m,
     *,
     mort: sp.MortalityTableRP2014MP2016,
     issue_age: int,
@@ -157,40 +140,23 @@ def _qx_lookup_expr(acell: str, mode: Literal["qx_table", "mortal_monthly"]) -> 
     return clamp_inner.format(inner=inner)
 
 
-def _survival_end_formula(r: int, acell: str, mode: Literal["qx_table", "mortal_monthly"]) -> str:
+def _survival_end_formula(
+    r: int, acell: str, mode: Literal["qx_table", "mortal_monthly"], *, first_row: int
+) -> str:
     qx_e = _qx_lookup_expr(acell, mode)
     p_m = f"EXP(-(-LN(1-{qx_e}))/12)"
-    if r == 2:
+    if r == first_row:
         return f"=IF({acell}=\"\",\"\",{p_m})"
-    prev = f"C{r-1}"
+    prev = f"D{r-1}"
     return f"=IF({acell}=\"\",\"\",{prev}*{p_m})"
-
-
-def _discount_factor_formula(r: int, n_pts: int) -> str:
-    spr = _in_addr("B", _IN_ROW_SPREAD)
-    acell = f"A{r}"
-    tcell = f"B{r}"
-    zr = f"{SHEET_ZERO}!$A$2:$A${1 + n_pts}"
-    zv = f"{SHEET_ZERO}!$B$2:$B${1 + n_pts}"
-    lndf = f"{SHEET_ZERO}!$C$2:$C${1 + n_pts}"
-    last_a = f"INDEX({zr},{n_pts})"
-    last_z = f"INDEX({zv},{n_pts})"
-    return (
-        f"=IF({acell}=\"\",\"\","
-        f"IF({tcell}<={SHEET_ZERO}!$A$2,EXP(-({SHEET_ZERO}!$B$2+{spr})*{tcell}),"
-        f"IF({tcell}>={last_a},EXP(-({last_z}+{spr})*{tcell}),"
-        f"EXP(INDEX({lndf},MATCH({tcell},{zr},1))"
-        f"+(INDEX({lndf},MATCH({tcell},{zr},1)+1)-INDEX({lndf},MATCH({tcell},{zr},1)))"
-        f"*({tcell}-INDEX({zr},MATCH({tcell},{zr},1)))"
-        f"/(INDEX({zr},MATCH({tcell},{zr},1)+1)-INDEX({zr},MATCH({tcell},{zr},1)))"
-        f"))))"
-    )
 
 
 def build_term_workbook_from_spec(
     spec: TermExcelBuildSpec,
     *,
     out_path: str | Path | None = None,
+    alm_snapshot: ALMExcelSnapshot | None = None,
+    alm_assumptions: sp.ALMAssumptions | None = None,
 ) -> bytes:
     res = tp.price_term_life_level_monthly(
         contract=spec.contract,
@@ -206,40 +172,57 @@ def build_term_workbook_from_spec(
     wb = Workbook()
     ws_in = wb.active
     ws_in.title = SHEET_INPUTS
-    ws_in["A1"] = "Term Life Inputs"
+    ws_in["A1"] = "Term Life Inputs (matches model launcher / Python)"
+    ws_in["A1"].font = Font(bold=True, size=12)
     rows = [
-        ("Product", "20Y Level Term Life"),
         ("Issue age", spec.contract.issue_age),
         ("Sex", spec.contract.sex),
         ("Death benefit", spec.contract.death_benefit),
+        ("Payment frequency (per year)", 12),
+        ("Valuation year", spec.valuation_year),
+        ("Horizon age", spec.horizon_age),
+        ("Spread (added to zero rate)", spec.spread),
         ("Monthly premium", spec.contract.monthly_premium),
         ("Term years", spec.contract.term_years),
         ("Benefit timing", spec.contract.benefit_timing),
         ("Premium mode", spec.contract.premium_mode),
-        ("Horizon age", spec.horizon_age),
-        ("Valuation year", spec.valuation_year),
-        ("Spread", spec.spread),
-        ("Yield mode", spec.yield_mode_label),
-        ("Mortality mode", spec.mortality_mode_label),
-        ("Expense mode", spec.expense_mode_label),
+        ("Yield mode (documentation)", spec.yield_mode_label),
+        ("Mortality mode (documentation)", spec.mortality_mode_label),
+        ("Expense mode (documentation)", spec.expense_mode_label),
     ]
     for i, (k, v) in enumerate(rows, start=3):
         ws_in[f"A{i}"] = k
         ws_in[f"B{i}"] = v
     nm = (
         f"=MIN(MAX(1,ROUND(({_in_addr('B', _IN_ROW_HORIZON)}"
-        f"-{_in_addr('B', _IN_ROW_ISSUE_AGE)})*12,0)),"
-        f"{_in_addr('B', _IN_ROW_TERM_Y)}*12)"
+        f"-{_in_addr('B', _IN_ROW_ISSUE_AGE)})*{_in_addr('B', 6)},0)),"
+        f"{_in_addr('B', _IN_ROW_TERM_Y)}*{_in_addr('B', 6)})"
     )
     ws_in[f"A{_IN_ROW_NMONTHS}"] = "Model months (formula)"
     ws_in[f"B{_IN_ROW_NMONTHS}"] = nm
     ws_in[f"B{_IN_ROW_NMONTHS}"].number_format = "0"
 
-    spread_cell = _in_addr("B", _IN_ROW_SPREAD)
-    n_curve = _write_zero_curve_sheet(wb, spec.yield_curve, spread_cell)
+    ycdf = pd.DataFrame(
+        {
+            "maturity_years": np.asarray(spec.yield_curve.maturities_years, dtype=float),
+            "zero_rate": np.asarray(spec.yield_curve.zero_rates, dtype=float),
+        }
+    )
+    _, y_last_row = write_yield_curve_sheet(wb, ycdf)
+
+    ws_mc_curve = wb.create_sheet(RECALC_MONTHLY_CURVE_SHEET)
+    write_monthly_curve_logdf(ws_mc_curve, n_months=TERM_PROJ_MAX_ROWS, y_last_row=y_last_row)
 
     if isinstance(spec.mortality, sp.MortalityTableQx):
-        _write_qx_table_sheet(wb, spec.mortality)
+        ws_q = wb.create_sheet(SHEET_QX)
+        ws_q["A1"] = "age"
+        ws_q["B1"] = "qx"
+        ages = np.asarray(spec.mortality.ages, dtype=int)
+        qx = np.asarray(spec.mortality.qx, dtype=float)
+        for i in range(int(ages.shape[0])):
+            r = 2 + i
+            ws_q.cell(row=r, column=1, value=int(ages[i]))
+            ws_q.cell(row=r, column=2, value=float(qx[i]))
         mort_mode: Literal["qx_table", "mortal_monthly"] = "qx_table"
     else:
         mort_mode = "mortal_monthly"
@@ -253,106 +236,156 @@ def build_term_workbook_from_spec(
             mort=spec.mortality,
             issue_age=spec.contract.issue_age,
             valuation_year=int(spec.valuation_year),
-            n_months=int(res.months.shape[0]),
+            n_months=min(int(res.months.shape[0]), TERM_PROJ_MAX_ROWS),
         )
-
-    ws_pr = wb.create_sheet(SHEET_PROJ)
-    hdr = (
-        "month",
-        "time_years",
-        "survival_end",
-        "survival_start",
-        "month_death_prob",
-        "expected_claims",
-        "expected_premiums",
-        "expected_net_outflow",
-        "discount_factor",
-        "pv_net_outflow",
-    )
-    for c, h in enumerate(hdr, start=1):
-        ws_pr.cell(row=1, column=c, value=h)
-        ws_pr.cell(row=1, column=c).font = Font(bold=True)
 
     nm_ref = _n_months_cell()
-    last_cap_row = 1 + TERM_PROJ_MAX_ROWS
+    last_cap_row = 3 + TERM_PROJ_MAX_ROWS
+    first = 4
     ben = _in_addr("B", _IN_ROW_DEATH_BEN)
     prem = _in_addr("B", _IN_ROW_PREMIUM)
-    for r in range(2, last_cap_row + 1):
+    mc_ref = f"{RECALC_MONTHLY_CURVE_SHEET}!$L:$L"
+
+    ws_pr = wb.create_sheet(LIABILITY_SHEET_NAME)
+    ws_pr["A1"] = "Term life liability cashflows & pricing (formula-driven; not asset ALM)"
+    ws_pr["A1"].font = Font(bold=True, size=12)
+    ws_pr["A2"] = "ReserveAtT0"
+    ws_pr["B2"] = 0
+    ws_pr["C2"] = f"={_in_addr('B', _IN_ROW_ISSUE_AGE)}"
+    ws_pr["V2"] = "=X9"
+
+    hdr = (
+        "Month",
+        "t_years",
+        "AttainedAge",
+        "SurvivalEnd",
+        "SurvivalStart",
+        "MonthDeathProb",
+        "ExpClaims",
+        "ExpPremiums",
+        "ExpNetOutflow",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "DiscountFactor",
+        "ImpliedZeroFromDF",
+        "ExpBenefitCF",
+        "ExpExpenseCF",
+        "ExpTotalCF",
+        "PVBenefitCF",
+        "PVExpenseCF",
+        "PVNetOutflow",
+    )
+    for c, h in enumerate(hdr, start=1):
+        cell = ws_pr.cell(row=3, column=c, value=h if h else None)
+        cell.font = Font(bold=True)
+
+    for r in range(first, last_cap_row + 1):
         a = f"A{r}"
-        ws_pr.cell(row=r, column=1, value=f"=IF(ROW()-1>{nm_ref},\"\",ROW()-1)")
-        ws_pr.cell(row=r, column=2, value=f"=IF({a}=\"\",\"\",{a}/12)")
-        ws_pr.cell(row=r, column=3, value=_survival_end_formula(r, a, mort_mode))
-        if r == 2:
+        ws_pr.cell(row=r, column=1, value=f"=IF(ROW()-3>{nm_ref},\"\",ROW()-3)")
+        ws_pr.cell(row=r, column=2, value=f"=IF({a}=\"\",\"\",{a}/Inputs!$B$6)")
+        ws_pr.cell(row=r, column=3, value=f"=IF({a}=\"\",\"\",Inputs!$B$3+({a}-1)/Inputs!$B$6)")
+        ws_pr.cell(row=r, column=4, value=_survival_end_formula(r, a, mort_mode, first_row=first))
+        if r == first:
             d_surv_start = f"=IF({a}=\"\",\"\",1)"
         else:
-            d_surv_start = f"=IF({a}=\"\",\"\",C{r-1})"
-        ws_pr.cell(row=r, column=4, value=d_surv_start)
-        ws_pr.cell(
-            row=r,
-            column=5,
-            value=f"=IF({a}=\"\",\"\",MAX(0,MIN(1,D{r}-C{r})))",
-        )
-        ws_pr.cell(
-            row=r,
-            column=6,
-            value=(
-                f"=IF({a}=\"\",0,IF(MOD({a},12)=0,{ben}*SUM(OFFSET(E{r},-11,0,12,1)),0))"
-            ),
-        )
-        ws_pr.cell(row=r, column=7, value=f"=IF({a}=\"\",0,{prem}*D{r})")
-        ws_pr.cell(row=r, column=8, value=f"=IF({a}=\"\",0,F{r}-G{r})")
-        ws_pr.cell(row=r, column=9, value=_discount_factor_formula(r, n_curve))
-        ws_pr.cell(row=r, column=10, value=f"=IF({a}=\"\",0,H{r}*I{r})")
+            d_surv_start = f"=IF({a}=\"\",\"\",D{r-1})"
+        ws_pr.cell(row=r, column=5, value=d_surv_start)
+        ws_pr.cell(row=r, column=6, value=f"=IF({a}=\"\",\"\",MAX(0,MIN(1,E{r}-D{r})))")
+        ws_pr.cell(row=r, column=7, value=(
+            f"=IF({a}=\"\",0,IF(MOD({a},12)=0,{ben}*SUM(OFFSET(F{r},-11,0,12,1)),0))"
+        ))
+        ws_pr.cell(row=r, column=8, value=f"=IF({a}=\"\",0,{prem}*E{r})")
+        ws_pr.cell(row=r, column=9, value=f"=IF({a}=\"\",0,G{r}-H{r})")
+        ws_pr.cell(row=r, column=15, value=f"=IF({a}=\"\",\"\",IFERROR(INDEX({mc_ref},MATCH({a},{RECALC_MONTHLY_CURVE_SHEET}!$A:$A,0)),\"\"))")
+        ws_pr.cell(row=r, column=16, value=f"=IF({a}=\"\",\"\",IF(B{r}>0,-LN(O{r})/B{r},\"\"))")
+        ws_pr.cell(row=r, column=17, value=f"=IF({a}=\"\",0,G{r})")
+        ws_pr.cell(row=r, column=18, value=f"=IF({a}=\"\",0,H{r})")
+        ws_pr.cell(row=r, column=19, value=f"=IF({a}=\"\",0,I{r})")
+        ws_pr.cell(row=r, column=20, value=f"=IF({a}=\"\",0,G{r}*O{r})")
+        ws_pr.cell(row=r, column=21, value=f"=IF({a}=\"\",0,H{r}*O{r})")
+        ws_pr.cell(row=r, column=22, value=f"=IF({a}=\"\",0,I{r}*O{r})")
 
-    for c in range(1, 11):
-        ws_pr.cell(row=1, column=c).number_format = "General"
-    money_cols = (6, 7, 8, 10)
-    for r in range(2, last_cap_row + 1):
+    money_cols = (7, 8, 9, 17, 18, 19, 20, 21, 22)
+    for r in range(first, last_cap_row + 1):
         for c in money_cols:
             ws_pr.cell(row=r, column=c).number_format = "#,##0.00"
-        for c in (2, 3, 4, 5, 9):
+        for c in (2, 3, 4, 5, 6, 15, 16):
             ws_pr.cell(row=r, column=c).number_format = "0.000000"
 
-    lr = last_cap_row
-    tp_ref = SHEET_PROJ
-    sum_claims = f"=SUMPRODUCT({tp_ref}!$F$2:$F${lr},{tp_ref}!$I$2:$I${lr})"
-    sum_prem = f"=SUMPRODUCT({tp_ref}!$G$2:$G${lr},{tp_ref}!$I$2:$I${lr})"
-    sum_net = f"=SUM({tp_ref}!$J$2:$J${lr})"
+    ws_pr["W3"] = "Summary"
+    ws_pr["W3"].font = Font(bold=True)
+    ws_pr["W4"] = "PV claims"
+    ws_pr["X4"] = f"=SUM(T{first}:T{last_cap_row})"
+    ws_pr["W5"] = "PV premiums"
+    ws_pr["X5"] = f"=SUM(U{first}:U{last_cap_row})"
+    ws_pr["W6"] = "Σ l_start · v (annuity-style factor)"
+    ws_pr["X6"] = f"=SUMPRODUCT(E{first}:E{last_cap_row},O{first}:O{last_cap_row})"
+    ws_pr["W7"] = "PV net (claims − premiums)"
+    ws_pr["X7"] = f"=X4-X5"
+    ws_pr["W8"] = "Actuarial present value (pricing)"
+    ws_pr["X8"] = "=X7"
+    ws_pr["W9"] = "Reserve at t=0"
+    ws_pr["X9"] = "=X7"
 
-    ws_mc = wb.create_sheet(SHEET_MC)
-    ws_mc["A1"] = "Python snapshot vs Excel (Inputs → curves → TermProjection)"
-    ws_mc["A1"].font = Font(bold=True, size=12)
-    ws_mc["A2"] = (
-        "Column B is the Python snapshot at export. Column C aggregates the TermProjection "
-        "grid (all formulas); column D should be ~0 after a full recalc. Edit Inputs, "
-        "ZeroCurve, QxTable (or MortalMonthly q_x for RP/MP runs) and recalculate."
+    alm_layout = None
+    alm_snap_for_book = None
+    if alm_snapshot is not None:
+        if alm_assumptions is None:
+            raise ValueError("alm_assumptions is required when alm_snapshot is provided.")
+        alm_snap_for_book = alm_excel_downsample_snapshot(alm_snapshot, int(ALM_ENGINE_STEP_MONTHS))
+        alm_snap_for_book = alm_excel_truncate_snapshot(alm_snap_for_book, ALM_EXCEL_PATH_MONTH_CAP)
+        alm_layout = _write_alm_projection_sheet(
+            wb,
+            alm_snap_for_book,
+            alm_assumptions,
+            n_months=int(res.months.shape[0]),
+            y_last_row=int(y_last_row),
+            engine_step_months=int(ALM_ENGINE_STEP_MONTHS),
+        )
+
+    snap_py = ExcelPythonSnapshot(
+        pv_benefit=float(res.pv_benefit),
+        pv_monthly_expenses=float(res.pv_monthly_expenses),
+        pv_monthly_total=float(res.pv_benefit + res.pv_monthly_expenses),
+        single_premium=float(res.single_premium),
+        annuity_factor=float(res.annuity_factor),
     )
-    ws_mc.merge_cells("A2:D2")
-
-    hdr_row = 4
-    headers = ("Metric", "Python snapshot", "Excel (formula)", "Difference (Excel − Python)")
-    for c, h in enumerate(headers, start=1):
-        ws_mc.cell(row=hdr_row, column=c, value=h)
-        ws_mc.cell(row=hdr_row, column=c).font = Font(bold=True)
-
-    pricing_rows: list[tuple[str, float, str]] = [
-        ("PV claims", float(res.pv_benefit), sum_claims),
-        ("PV premiums", float(-res.pv_monthly_expenses), sum_prem),
-        ("PV net (claims − premiums)", float(res.single_premium), sum_net),
+    prem_display = float(-res.pv_monthly_expenses)
+    term_rows: list[tuple[str, float, str, str]] = [
+        ("PV claims", float(res.pv_benefit), f"={LIABILITY_SHEET_NAME}!X4", "money"),
+        ("PV premiums", prem_display, f"={LIABILITY_SHEET_NAME}!X5", "money"),
+        ("PV net (claims − premiums)", float(res.single_premium), f"={LIABILITY_SHEET_NAME}!X7", "money"),
+        ("Actuarial present value (pricing)", float(res.single_premium), f"={LIABILITY_SHEET_NAME}!X8", "money"),
+        ("Σ survival start · discount (annuity-style factor)", float(res.annuity_factor), f"={LIABILITY_SHEET_NAME}!X6", "factor"),
     ]
-    row_idx = hdr_row + 1
-    for label, val, xls_formula in pricing_rows:
-        ws_mc.cell(row=row_idx, column=1, value=label)
-        ws_mc.cell(row=row_idx, column=2, value=float(val))
-        ws_mc.cell(row=row_idx, column=3, value=xls_formula)
-        ws_mc.cell(row=row_idx, column=4, value=f"=C{row_idx}-B{row_idx}")
-        for col in (2, 3, 4):
-            ws_mc.cell(row=row_idx, column=col).number_format = "#,##0.00"
-        row_idx += 1
+    _write_model_check_sheet(
+        wb,
+        snap_py,
+        alm_layout=alm_layout,
+        alm_snapshot=alm_snap_for_book,
+        pricing_rows=term_rows,
+        sheet_title=f"Python snapshot vs Excel ({LIABILITY_SHEET_NAME}; optional ALM_Projection)",
+        subtitle=(
+            "Column B is the Python snapshot at export. Column C aggregates "
+            f"{LIABILITY_SHEET_NAME} summary formulas; column D should be ~0 after a full recalc. "
+            "Edit Inputs, YieldCurve, MonthlyCurve, and mortality tabs as for SPIA exports. "
+            f"ALM sheets mirror the SPIA workbook and link {LIABILITY_SHEET_NAME} column S (ExpTotalCF) and O (discount)."
+        ),
+    )
 
     buf = BytesIO()
     wb.save(buf)
     data = buf.getvalue()
+    if alm_snap_for_book is not None:
+        data = inject_alm_projection_formula_cached_values(
+            data,
+            first_data_row=int(ALM_PROJECTION_FIRST_DATA_ROW),
+            snap=alm_snap_for_book,
+        )
+
     if out_path is not None:
         Path(out_path).write_bytes(data)
     return data

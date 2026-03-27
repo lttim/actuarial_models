@@ -11,13 +11,14 @@ from xml.etree import ElementTree as ET
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.chart import BarChart, LineChart, Reference
+from openpyxl.chart import BarChart, Reference
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
 import pricing_projection as sp
 
 from alm_excel_ladder import ALM_ENGINE_SHEET, write_alm_engine_sheet
+from recalc_excel_shared import write_monthly_curve_logdf as _write_monthly_curve_logdf_sheet
 
 BASE_DIR = Path(__file__).resolve().parent
 OUT_XLSX = BASE_DIR / "pricing_projection_model.xlsx"
@@ -70,7 +71,7 @@ class ALMExcelSnapshot:
 
 
 class ALMDashboardLayout(NamedTuple):
-    """Row references on ``ALM_Projection`` for Dashboard links and charts."""
+    """Row references on ``ALM_Projection`` (e.g. ModelCheck ALM section)."""
 
     header_row: int
     first_data_row: int
@@ -358,13 +359,6 @@ def excel_spec_from_launcher(
     )
 
 
-def _read_text(path: Path, fallback: str = "") -> str:
-    try:
-        return path.read_text(encoding="utf-8")
-    except Exception:
-        return fallback
-
-
 def _write_inputs(ws, spec: ExcelBuildSpec) -> None:
     ws.title = "Inputs"
     ws["A1"] = "SPIA Inputs (matches model launcher / Python)"
@@ -429,57 +423,8 @@ def _write_simple_table(ws, title: str, df: pd.DataFrame) -> None:
 
 
 def _write_monthly_curve_logdf(ws, n_months: int, y_last_row: int) -> None:
-    """
-    Monthly discount factors consistent with Python `YieldCurve.discount_factors`:
-    log-linear interpolation on DF between curve nodes; flat zero-rate extrapolation beyond endpoints.
-    """
-    ws.title = "MonthlyCurve"
-    ws["A1"] = "Monthly Discount Factors (log-linear on DF)"
-    ws["A1"].font = Font(bold=True, size=12)
-
-    headers = [
-        "Month",
-        "t_years",
-        "BracketIndex",
-        "LowerMat",
-        "UpperMat",
-        "LowerZero",
-        "UpperZero",
-        "InterpWeight",
-        "LogDF_lower_node",
-        "LogDF_upper_node",
-        "LogDF_t",
-        "DiscountFactor",
-    ]
-    for c, h in enumerate(headers, start=1):
-        ws.cell(row=3, column=c, value=h).font = Font(bold=True)
-
-    first = 4
-    last = first + n_months - 1
-    y_rng = f"YieldCurve!$A$4:$A${y_last_row}"
-    z_rng = f"YieldCurve!$B$4:$B${y_last_row}"
-
-    for r in range(first, last + 1):
-        ws[f"A{r}"] = r - first + 1
-        ws[f"B{r}"] = f"=A{r}/Inputs!$B$6"
-        ws[f"C{r}"] = (
-            f"=IF(B{r}<=INDEX({y_rng},1),1,"
-            f"IF(B{r}>=INDEX({y_rng},ROWS({y_rng})),ROWS({y_rng})-1,"
-            f"MATCH(B{r},{y_rng},1)))"
-        )
-        ws[f"D{r}"] = f"=INDEX({y_rng},C{r})"
-        ws[f"E{r}"] = f"=INDEX({y_rng},C{r}+1)"
-        ws[f"F{r}"] = f"=INDEX({z_rng},C{r})"
-        ws[f"G{r}"] = f"=INDEX({z_rng},C{r}+1)"
-        ws[f"H{r}"] = f"=IF(E{r}=D{r},0,(B{r}-D{r})/(E{r}-D{r}))"
-        ws[f"I{r}"] = f"=-(F{r}+Inputs!$B$9)*D{r}"
-        ws[f"J{r}"] = f"=-(G{r}+Inputs!$B$9)*E{r}"
-        ws[f"K{r}"] = (
-            f"=IF(B{r}<=INDEX({y_rng},1),-(INDEX({z_rng},1)+Inputs!$B$9)*B{r},"
-            f"IF(B{r}>=INDEX({y_rng},ROWS({y_rng})),-(INDEX({z_rng},ROWS({z_rng}))+Inputs!$B$9)*B{r},"
-            f"I{r}+H{r}*(J{r}-I{r})))"
-        )
-        ws[f"L{r}"] = f"=EXP(K{r})"
+    """Delegates to shared recalc helper (same numerics as Python YieldCurve.discount_factors)."""
+    _write_monthly_curve_logdf_sheet(ws, n_months, y_last_row)
 
 
 def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> None:
@@ -629,21 +574,23 @@ def _write_alm_projection_sheet(
     wb: Workbook,
     snap: ALMExcelSnapshot,
     asm: sp.ALMAssumptions,
-    spec: ExcelBuildSpec,
     *,
+    n_months: int,
+    y_last_row: int,
     engine_step_months: int,
 ) -> ALMDashboardLayout:
     n = int(snap.asset_market_value.shape[0])
     n_b = len(snap.bucket_names)
-    ylr = 3 + len(spec.yield_curve_df)
+    ylr = int(y_last_row)
     period_end_m = [int(snap.month_index[i]) + 1 for i in range(n)]
-    if period_end_m[-1] > spec.n_months or period_end_m[0] < 1:
+    nm = int(n_months)
+    if period_end_m[-1] > nm or period_end_m[0] < 1:
         raise ValueError(f"Invalid ALM month range in snapshot: {period_end_m[0]}..{period_end_m[-1]}")
     ws_eng = wb.create_sheet(ALM_ENGINE_SHEET)
     layout = write_alm_engine_sheet(
         ws_eng,
         period_end_months_1based=period_end_m,
-        n_projection_months=int(spec.n_months),
+        n_projection_months=nm,
         y_last_row=ylr,
         asm=asm,
         initial_aum=float(snap.initial_asset_market_value),
@@ -657,13 +604,13 @@ def _write_alm_projection_sheet(
     debt_letter = get_column_letter(layout.col_debt_eom)
     ws = wb.create_sheet(ALM_SHEET_NAME)
     cap_note = (
-        f"First {n} months only (cap {ALM_EXCEL_PATH_MONTH_CAP}); full liability horizon remains on {LIABILITY_SHEET_NAME}."
-        if n < spec.n_months
+        f"First {n} months only (cap {ALM_EXCEL_PATH_MONTH_CAP}); full horizon remains on {LIABILITY_SHEET_NAME}."
+        if n < nm
         else "Full horizon through month in col A."
     )
     ws["A1"] = "ALM path — monthly engine (truncated for workbook size)"
     ws["A1"].font = Font(bold=True, size=12)
-    proj_last = 3 + spec.n_months
+    proj_last = 3 + nm
     ws["A2"] = (
         f"{cap_note} Liability PV (D) uses monthly **{LIABILITY_SHEET_NAME}** (rows 4–{proj_last}). "
         f"Buckets (H+) and borrowing (E) link **{ALM_ENGINE_SHEET}** (monthly Δt, {LIABILITY_SHEET_NAME} col ExpTotalCF / S). "
@@ -707,7 +654,7 @@ def _write_alm_projection_sheet(
             row=r,
             column=2,
             value=(
-                f'=IFERROR(INDEX({LIABILITY_SHEET_NAME}!$C:$C,MATCH(A{r},{LIABILITY_SHEET_NAME}!$A:$A,0)),"")'
+                f"=IFERROR(INDEX({LIABILITY_SHEET_NAME}!$C:$C,MATCH(A{r},{LIABILITY_SHEET_NAME}!$A:$A,0)),"")"
             ),
         )
         ws.cell(row=r, column=3, value=f"=SUM({first_bkt}{r}:{last_bkt}{r})")
@@ -720,7 +667,7 @@ def _write_alm_projection_sheet(
         )
         ws.cell(row=r, column=5, value=f"={ALM_ENGINE_SHEET}!{debt_letter}{r_eng}")
         ws.cell(row=r, column=6, value=f"=C{r}-D{r}-E{r}")
-        ws.cell(row=r, column=7, value=f'=IF((D{r}+E{r})>0,C{r}/(D{r}+E{r}),"")')
+        ws.cell(row=r, column=7, value=f"=IF((D{r}+E{r})>0,C{r}/(D{r}+E{r}),"")")
         for b in range(n_b):
             if b == 0:
                 ref = f"{ALM_ENGINE_SHEET}!{mv0_letter}{r_eng}"
@@ -818,180 +765,21 @@ def _write_mc_summary_sheet(wb: Workbook, mc: MCExcelSnapshot) -> None:
         ws.column_dimensions[col_letter].width = 14
 
 
-def _write_dashboard(wb: Workbook, n_months: int, *, alm_layout: ALMDashboardLayout | None = None) -> None:
-    ws = wb.create_sheet("Dashboard")
-    ws["A1"] = "SPIA Policy Projection Dashboard"
-    ws["A1"].font = Font(bold=True, size=14)
-
-    ws["A3"] = "Policy Inputs"
-    ws["A3"].font = Font(bold=True)
-    ws["A4"] = "Issue Age"
-    ws["B4"] = "=Inputs!B3"
-    ws["A5"] = "Sex"
-    ws["B5"] = "=Inputs!B4"
-    ws["A6"] = "Annual Benefit"
-    ws["B6"] = "=Inputs!B5"
-    ws["A7"] = "Valuation Year (12/31)"
-    ws["B7"] = "=Inputs!B7"
-    ws["A8"] = "Horizon Age"
-    ws["B8"] = "=Inputs!B8"
-    ws["A9"] = "Spread"
-    ws["B9"] = "=Inputs!B9"
-
-    ws["D3"] = "Expense Assumptions"
-    ws["D3"].font = Font(bold=True)
-    ws["D4"] = "Policy Expense ($)"
-    ws["E4"] = "=Inputs!B10"
-    ws["D5"] = "Premium Expense Rate (decimal)"
-    ws["E5"] = "=Inputs!B11"
-    ws["D6"] = "Monthly Expense ($)"
-    ws["E6"] = "=Inputs!B12"
-
-    ws["A11"] = "Pricing & Reserve Summary"
-    ws["A11"].font = Font(bold=True)
-    ws["A12"] = "Single Premium"
-    ws["B12"] = f"={LIABILITY_SHEET_NAME}!X8"
-    ws["A13"] = "PV Benefits"
-    ws["B13"] = f"={LIABILITY_SHEET_NAME}!X4"
-    ws["A14"] = "PV Monthly Expenses"
-    ws["B14"] = f"={LIABILITY_SHEET_NAME}!X5"
-    ws["A15"] = "PV Monthly Total"
-    ws["B15"] = f"={LIABILITY_SHEET_NAME}!X7"
-    ws["A16"] = "Annuity Factor"
-    ws["B16"] = f"={LIABILITY_SHEET_NAME}!X6"
-    ws["A17"] = "Economic Reserve at t=0"
-    ws["B17"] = f"={LIABILITY_SHEET_NAME}!V2"
-
-    for cell in ("B6", "E4", "E6", "B12", "B13", "B14", "B15", "B17"):
-        ws[cell].number_format = "#,##0.00"
-    ws["E5"].number_format = "0.00%"
-    ws["B16"].number_format = "0.000000"
-
-    proj_start = 4
-    proj_end = proj_start + n_months - 1
-
-    chart_surv = LineChart()
-    chart_surv.title = "Survival to Monthly Payment"
-    chart_surv.y_axis.title = "P(alive)"
-    chart_surv.x_axis.title = "Attained Age"
-    liab = wb[LIABILITY_SHEET_NAME]
-    data_surv = Reference(liab, min_col=14, min_row=proj_start, max_row=proj_end)
-    cats_age = Reference(liab, min_col=3, min_row=proj_start, max_row=proj_end)
-    chart_surv.add_data(data_surv, titles_from_data=False)
-    chart_surv.set_categories(cats_age)
-    chart_surv.height = 6
-    chart_surv.width = 9
-    ws.add_chart(chart_surv, "A20")
-
-    chart_cf = LineChart()
-    chart_cf.title = "Expected Monthly Cashflows"
-    chart_cf.y_axis.title = "Expected Cashflow ($)"
-    chart_cf.x_axis.title = "Attained Age"
-    data_cf = Reference(liab, min_col=17, max_col=18, min_row=3, max_row=proj_end)
-    chart_cf.add_data(data_cf, titles_from_data=True)
-    chart_cf.set_categories(cats_age)
-    chart_cf.height = 6
-    chart_cf.width = 9
-    ws.add_chart(chart_cf, "J20")
-
-    chart_res = LineChart()
-    chart_res.title = "Economic Reserve"
-    chart_res.y_axis.title = "Reserve ($)"
-    chart_res.x_axis.title = "Attained Age"
-    data_res = Reference(liab, min_col=22, min_row=2, max_row=proj_end)
-    cats_res_age = Reference(liab, min_col=3, min_row=2, max_row=proj_end)
-    chart_res.add_data(data_res, titles_from_data=False)
-    chart_res.set_categories(cats_res_age)
-    chart_res.height = 6
-    chart_res.width = 18
-    ws.add_chart(chart_res, "A36")
-
-    ws["A54"] = "Checkpoint metrics (nearest monthly point on Liabilities sheet)"
-    ws["A54"].font = Font(bold=True)
-    cp_headers = ["Target Age", "Liabilities row", "Survival", "Exp Benefit ($)", "Exp Expense ($)", "Reserve ($)"]
-    for c, h in enumerate(cp_headers, start=1):
-        ws.cell(row=55, column=c, value=h).font = Font(bold=True)
-
-    checkpoint_ages = [65, 70, 75, 80, 85, 90, 100, 110]
-    for i, age in enumerate(checkpoint_ages, start=56):
-        ws[f"A{i}"] = age
-        ws[f"B{i}"] = (
-            f"=IFERROR(MATCH(A{i},{LIABILITY_SHEET_NAME}!$C$4:$C${3+n_months},0)+3,"
-            f"IF(A{i}<INDEX({LIABILITY_SHEET_NAME}!$C$4:$C${3+n_months},1),4,"
-            f"MATCH(A{i},{LIABILITY_SHEET_NAME}!$C$4:$C${3+n_months},1)+3))"
-        )
-        ws[f"C{i}"] = f"=INDEX({LIABILITY_SHEET_NAME}!$N:$N,B{i})"
-        ws[f"D{i}"] = f"=INDEX({LIABILITY_SHEET_NAME}!$Q:$Q,B{i})"
-        ws[f"E{i}"] = f"=INDEX({LIABILITY_SHEET_NAME}!$R:$R,B{i})"
-        ws[f"F{i}"] = f"=INDEX({LIABILITY_SHEET_NAME}!$V:$V,B{i})"
-
-    for r in range(56, 56 + len(checkpoint_ages)):
-        ws[f"C{r}"].number_format = "0.000000"
-        ws[f"D{r}"].number_format = "#,##0.00"
-        ws[f"E{r}"].number_format = "#,##0.00"
-        ws[f"F{r}"].number_format = "#,##0.00"
-
-    if alm_layout is not None:
-        wsa = wb[ALM_SHEET_NAME]
-        dr = alm_layout.first_data_row
-        lr = alm_layout.last_data_row
-        hr = alm_layout.header_row
-        base = 66
-        ws.cell(row=base, column=1, value="ALM summary (latest run — detail on ALM_Projection)").font = Font(bold=True)
-        rows_meta = [
-            ("Initial AUM ($)", f"={ALM_SHEET_NAME}!B3"),
-            ("Funding ratio (month 1)", f"={ALM_SHEET_NAME}!G{dr}"),
-            ("Min surplus ($)", f"=MIN({ALM_SHEET_NAME}!F{dr}:F{lr})"),
-            ("Ending surplus ($)", f"={ALM_SHEET_NAME}!F{lr}"),
-            ("Ending funding ratio", f"={ALM_SHEET_NAME}!G{lr}"),
-            ("Duration gap (y)", f"={ALM_SHEET_NAME}!B4"),
-            ("PV01 net ($/bp)", f"={ALM_SHEET_NAME}!B7"),
-        ]
-        for i, (lab, formula) in enumerate(rows_meta, start=1):
-            rr = base + i
-            ws.cell(row=rr, column=1, value=lab)
-            ws.cell(row=rr, column=2, value=formula)
-        ws[f"B{base + 1}"].number_format = "#,##0.00"
-        ws[f"B{base + 2}"].number_format = "0.000"
-        ws[f"B{base + 3}"].number_format = "#,##0.00"
-        ws[f"B{base + 4}"].number_format = "#,##0.00"
-        ws[f"B{base + 5}"].number_format = "0.000"
-        ws[f"B{base + 6}"].number_format = "0.00"
-        ws[f"B{base + 7}"].number_format = "#,##0.00"
-
-        chart_am = LineChart()
-        chart_am.title = "ALM — Asset MV and liability PV"
-        chart_am.y_axis.title = "$"
-        chart_am.x_axis.title = "Attained age"
-        chart_am.add_data(Reference(wsa, min_col=3, max_col=4, min_row=hr, max_row=lr), titles_from_data=True)
-        chart_am.set_categories(Reference(wsa, min_col=2, min_row=dr, max_row=lr))
-        chart_am.height = 6
-        chart_am.width = 10
-        ws.add_chart(chart_am, f"A{base + 9}")
-
-        chart_s = LineChart()
-        chart_s.title = "ALM — Surplus"
-        chart_s.y_axis.title = "Surplus ($)"
-        chart_s.x_axis.title = "Attained age"
-        chart_s.add_data(Reference(wsa, min_col=6, min_row=hr, max_row=lr), titles_from_data=True)
-        chart_s.set_categories(Reference(wsa, min_col=2, min_row=dr, max_row=lr))
-        chart_s.height = 6
-        chart_s.width = 10
-        ws.add_chart(chart_s, f"J{base + 9}")
-
-
 def _write_model_check_sheet(
     wb: Workbook,
     snap: ExcelPythonSnapshot,
     *,
     alm_layout: ALMDashboardLayout | None = None,
     alm_snapshot: ALMExcelSnapshot | None = None,
+    pricing_rows: list[tuple[str, float, str, str]] | None = None,
+    sheet_title: str | None = None,
+    subtitle: str | None = None,
 ) -> None:
     """Embed Python pricing outputs next to Liabilities summary formulas; optional ALM row checks vs ALM_Projection."""
     ws = wb.create_sheet("ModelCheck")
-    ws["A1"] = f"Python snapshot vs Excel ({LIABILITY_SHEET_NAME}; optional ALM_Projection)"
+    ws["A1"] = sheet_title or f"Python snapshot vs Excel ({LIABILITY_SHEET_NAME}; optional ALM_Projection)"
     ws["A1"].font = Font(bold=True, size=12)
-    ws["A2"] = (
+    ws["A2"] = subtitle or (
         "Column B is the Python snapshot at export. Column C points at workbook formulas or embedded ALM cells; "
         "column D should be ~0 after recalc if Inputs match the launcher. "
         f"ALM: liability PV on ALM_Projection links to {LIABILITY_SHEET_NAME}; surplus and funding use sheet formulas; "
@@ -1004,13 +792,14 @@ def _write_model_check_sheet(
         cell = ws.cell(row=4, column=c, value=h)
         cell.font = Font(bold=True)
 
-    pricing_rows: list[tuple[str, float, str, str]] = [
-        ("PV benefits", snap.pv_benefit, f"={LIABILITY_SHEET_NAME}!X4", "money"),
-        ("PV monthly expenses", snap.pv_monthly_expenses, f"={LIABILITY_SHEET_NAME}!X5", "money"),
-        ("PV monthly total (ben+exp)", snap.pv_monthly_total, f"={LIABILITY_SHEET_NAME}!X7", "money"),
-        ("Single premium", snap.single_premium, f"={LIABILITY_SHEET_NAME}!X8", "money"),
-        ("Annuity factor", snap.annuity_factor, f"={LIABILITY_SHEET_NAME}!X6", "factor"),
-    ]
+    if pricing_rows is None:
+        pricing_rows = [
+            ("PV benefits", snap.pv_benefit, f"={LIABILITY_SHEET_NAME}!X4", "money"),
+            ("PV monthly expenses", snap.pv_monthly_expenses, f"={LIABILITY_SHEET_NAME}!X5", "money"),
+            ("PV monthly total (ben+exp)", snap.pv_monthly_total, f"={LIABILITY_SHEET_NAME}!X7", "money"),
+            ("Single premium", snap.single_premium, f"={LIABILITY_SHEET_NAME}!X8", "money"),
+            ("Annuity factor", snap.annuity_factor, f"={LIABILITY_SHEET_NAME}!X6", "factor"),
+        ]
     row_idx = 5
     for label, val, xls_ref, kind in pricing_rows:
         ws.cell(row=row_idx, column=1, value=label)
@@ -1112,50 +901,6 @@ def _write_model_check_sheet(
     ws.column_dimensions["B"].width = 22
     ws.column_dimensions["C"].width = 28
     ws.column_dimensions["D"].width = 26
-
-
-def _write_python_tab(wb: Workbook) -> None:
-    ws = wb.create_sheet("Python_Runbook")
-    ws["A1"] = "Python / Launcher Runbook"
-    ws["A1"].font = Font(bold=True, size=14)
-
-    lines: list[tuple[str, str]] = [
-        ("Purpose", "Regenerate inputs and this workbook from the Python SPIA scaffold."),
-        ("Working folder", "annuity_model"),
-        ("Streamlit UI", "streamlit run pricing_ui.py — Run & results, then download Excel for the same assumptions."),
-        ("", ""),
-        ("Core commands", "From the annuity_model folder:"),
-        ("1", "python pricing_projection.py"),
-        ("2", "python illustrate_pricing_projection.py"),
-        ("3", "python build_pricing_excel_workbook.py"),
-        ("", ""),
-        ("Typical CSV inputs", "treasury_zero_rate_curve_latest.csv (or par curve + bootstrap in UI)"),
-        ("", "rp2014_male_healthy_annuitant_qx_2014.csv / custom q_x CSV"),
-        ("", "mp2016_male_improvement_rates.csv (long: age, year, improvement_rate)"),
-        ("", "expenses_assumptions_us_placeholders.csv"),
-        ("", "sp500_scenario_projection_monthly.csv (month, sp500_level for months 0..N)"),
-        ("", ""),
-        ("Outputs", "pricing_projection_model.xlsx, illustrations/*.png"),
-        ("", ""),
-        ("Note", "This workbook is built for a fixed row count; change issue/horizon in the launcher and re-download."),
-    ]
-
-    row = 3
-    for k, v in lines:
-        ws[f"A{row}"] = k
-        ws[f"B{row}"] = v
-        if k in {"Purpose", "Core commands", "Typical CSV inputs", "Outputs", "Note"}:
-            ws[f"A{row}"].font = Font(bold=True)
-        row += 1
-
-    ws["A28"] = "pricing_projection.py (excerpt)"
-    ws["A28"].font = Font(bold=True)
-    pricing_text = _read_text(BASE_DIR / "pricing_projection.py", fallback="pricing_projection.py not found")
-    excerpt = "\n".join(pricing_text.splitlines()[:140])
-    ws["A29"] = excerpt
-
-    ws.column_dimensions["A"].width = 28
-    ws.column_dimensions["B"].width = 120
 
 
 def _prune_blank_default_worksheets(wb: Workbook) -> None:
@@ -1267,7 +1012,7 @@ def build_workbook_from_spec(
     Write a workbook to `out_path`. If `out_path` is None, return the file as bytes (for downloads).
 
     Optional ``python_snapshot`` embeds the launcher run on the ModelCheck sheet for formula validation.
-    Optional ``alm_snapshot`` adds ``ALM_Engine`` + ``ALM_Projection`` plus Dashboard ALM summaries;
+    Optional ``alm_snapshot`` adds ``ALM_Engine`` + ``ALM_Projection``;
     ``alm_assumptions`` must match the snapshot's allocation/rules (same object as the ALM run).
     ``alm_engine_step_months``: >1 aggregates multiple calendar months per engine row (coarser time).
     ``alm_excel_path_month_cap``: truncate ALM sheets to this many months (``None`` = full path).
@@ -1326,7 +1071,8 @@ def build_workbook_from_spec(
             wb,
             alm_snap_for_book,
             alm_assumptions,
-            spec,
+            n_months=int(spec.n_months),
+            y_last_row=int(3 + len(spec.yield_curve_df)),
             engine_step_months=int(alm_engine_step_months),
         )
 
@@ -1340,9 +1086,6 @@ def build_workbook_from_spec(
 
     if mc_snapshot is not None:
         _write_mc_summary_sheet(wb, mc_snapshot)
-
-    _write_dashboard(wb, n_months=n_months, alm_layout=alm_layout)
-    _write_python_tab(wb)
 
     _prune_blank_default_worksheets(wb)
 

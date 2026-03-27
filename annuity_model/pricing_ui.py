@@ -2736,7 +2736,7 @@ def _render_excel_replicator() -> None:
         if xlsx_has_alm:
             st.success(
                 f"Workbook includes **{LIABILITY_SHEET_NAME}**, **ALM_Projection** / **ALM_Engine** / **{ALM_ENGINE_FIELD_GUIDE_SHEET}** "
-                f"(first {ALM_EXCEL_PATH_MONTH_CAP} months of the ALM path) and **Dashboard** ALM charts.",
+                f"(first {ALM_EXCEL_PATH_MONTH_CAP} months of the ALM path).",
                 icon="✅",
             )
         else:
@@ -2751,7 +2751,7 @@ def _render_excel_replicator() -> None:
         if xlsx_has_mc:
             help_bits.append("MC statistics chart")
         if xlsx_has_alm:
-            help_bits.append("ALM path sheet and dashboard charts")
+            help_bits.append("ALM path sheets")
         st.download_button(
             f"Download Excel recalculation workbook{mc_label}",
             data=xb,

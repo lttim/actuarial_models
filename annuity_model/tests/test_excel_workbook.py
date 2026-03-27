@@ -82,7 +82,7 @@ def test_model_check_sheet_embeds_python_snapshot():
     assert mc["C5"].value == f"={LIABILITY_SHEET_NAME}!X4"
 
 
-def test_alm_projection_sheet_and_dashboard_links():
+def test_alm_projection_sheet_and_modelcheck_links():
     contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=100_000.0)
     yc = sp.YieldCurve.from_flat_rate(0.04)
     ages = np.arange(0, 121, dtype=int)
@@ -186,6 +186,8 @@ def test_alm_projection_sheet_and_dashboard_links():
     assert ALM_ENGINE_SHEET in wb.sheetnames
     assert ALM_ENGINE_FIELD_GUIDE_SHEET in wb.sheetnames
     assert LIABILITY_SHEET_NAME in wb.sheetnames
+    assert "Dashboard" not in wb.sheetnames
+    assert "Python_Runbook" not in wb.sheetnames
     ws_alm = wb[ALM_SHEET_NAME]
     dr = 13
     assert int(ws_alm[f"A{dr}"].value) == int(alm_snap_ds.month_index[0]) + 1
@@ -198,9 +200,6 @@ def test_alm_projection_sheet_and_dashboard_links():
     assert isinstance(ws_alm[f"D{dr}"].value, str) and str(ws_alm[f"D{dr}"].value).startswith("=")
     assert isinstance(ws_alm[f"F{dr}"].value, str) and str(ws_alm[f"F{dr}"].value).startswith("=")
     assert isinstance(ws_alm[f"G{dr}"].value, str) and str(ws_alm[f"G{dr}"].value).startswith("=")
-    dash = wb["Dashboard"]
-    assert dash["B67"].value == f"={ALM_SHEET_NAME}!B3"
-
     mc = wb["ModelCheck"]
     assert mc["A10"].value == "ALM checks (ALM_Projection sheet)"
     assert mc["B11"].value == pytest.approx(float(alm_snap.initial_asset_market_value), rel=1e-9)

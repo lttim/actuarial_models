@@ -39,5 +39,10 @@ def build_product_workbook(
     if product_type == ProductType.TERM_LIFE:
         if not isinstance(spec, TermExcelBuildSpec):
             raise TypeError("Term workbook builder requires TermExcelBuildSpec.")
-        return build_term_workbook_from_spec(spec, out_path=out_path)
+        return build_term_workbook_from_spec(
+            spec,
+            out_path=out_path,
+            alm_snapshot=alm_snapshot,
+            alm_assumptions=alm_assumptions,
+        )
     raise NotImplementedError(f"Workbook builder is not implemented for product '{product_type.value}'.")
