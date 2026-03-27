@@ -33,6 +33,8 @@ from tests.parity.excel_formula_sim import (
     excel_disinvest_shortest_first,
 )
 
+pytestmark = [pytest.mark.parity, pytest.mark.product_spia]
+
 # ---------------------------------------------------------------------------
 # Tolerances (from docs/model_parity_contract.md)
 # ---------------------------------------------------------------------------
@@ -402,3 +404,41 @@ def test_alm_tie_break_scenario_zero_discrepancy():
         f"Python AUM={py_mv[59]:.4f}, Excel AUM={xl_mv[59]:.4f}. "
         "This may indicate the epsilon tie-breaking fix was reverted."
     )
+
+
+def test_spia_liability_adapter_path_preserves_alm_results():
+    """Selector seam guard: generic liability-path ALM must equal legacy SPIA wrapper step-by-step."""
+    contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=100_000.0)
+    yc = _flat_yc(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    mort = sp.MortalityTableQx(ages, np.full_like(ages, 0.02, dtype=float))
+    expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    pricing = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        spread=0.0,
+        valuation_year=None,
+        expenses=expenses,
+        index_scenario_csv_path=None,
+        expense_annual_inflation=0.0,
+    )
+    asm, _, _ = _build_standard_buckets()
+    legacy = sp.run_alm_projection(
+        pricing=pricing,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=asm,
+        initial_asset_market_value=float(pricing.single_premium),
+    )
+    via_path = sp.run_alm_projection_from_liability_path(
+        liability_path=sp.liability_path_from_spia_projection(pricing),
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=asm,
+        initial_asset_market_value=float(pricing.single_premium),
+    )
+    np.testing.assert_allclose(legacy.asset_market_value, via_path.asset_market_value, atol=TOL_DOLLAR)
+    np.testing.assert_allclose(legacy.liability_pv, via_path.liability_pv, atol=TOL_DOLLAR)
+    np.testing.assert_allclose(legacy.surplus, via_path.surplus, atol=TOL_DOLLAR)

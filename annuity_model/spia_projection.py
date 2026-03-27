@@ -875,6 +875,22 @@ class SPIAProjectionResult:
 
 
 @dataclass(frozen=True)
+class LiabilityPath:
+    """Generic monthly liability cashflow path for ALM engines."""
+
+    times_years: np.ndarray
+    expected_total_cashflows: np.ndarray
+
+
+def liability_path_from_spia_projection(pricing: SPIAProjectionResult) -> LiabilityPath:
+    """Adapter from SPIA pricing output to generic ALM liability path."""
+    return LiabilityPath(
+        times_years=np.asarray(pricing.times_years, dtype=float),
+        expected_total_cashflows=np.asarray(pricing.expected_total_cashflows, dtype=float),
+    )
+
+
+@dataclass(frozen=True)
 class SPIAMonteCarloResult:
     n_sims: int
     single_premium: np.ndarray
@@ -1380,6 +1396,24 @@ def _df_rem(yield_curve: YieldCurve, spread: float, t_rem_years: np.ndarray) -> 
     return out
 
 
+def _liability_mac_duration_years_from_path(
+    liability_path: LiabilityPath,
+    yield_curve: YieldCurve,
+    spread: float,
+    *,
+    cashflows: np.ndarray | None = None,
+) -> float:
+    cf = np.asarray(liability_path.expected_total_cashflows if cashflows is None else cashflows, dtype=float)
+    ty = np.asarray(liability_path.times_years, dtype=float)
+    if cf.shape != ty.shape:
+        raise ValueError("cashflows length must match liability_path.times_years.")
+    df = yield_curve.discount_factors(ty, spread=spread)
+    pv = float(np.sum(cf * df))
+    if pv <= 0.0:
+        return 0.0
+    return float(np.sum(ty * cf * df) / pv)
+
+
 def _liability_mac_duration_years(
     res: SPIAProjectionResult,
     yield_curve: YieldCurve,
@@ -1387,15 +1421,13 @@ def _liability_mac_duration_years(
     *,
     cashflows: np.ndarray | None = None,
 ) -> float:
-    cf = np.asarray(res.expected_total_cashflows if cashflows is None else cashflows, dtype=float)
-    ty = np.asarray(res.times_years, dtype=float)
-    if cf.shape != ty.shape:
-        raise ValueError("cashflows length must match pricing.times_years.")
-    df = yield_curve.discount_factors(ty, spread=spread)
-    pv = float(np.sum(cf * df))
-    if pv <= 0.0:
-        return 0.0
-    return float(np.sum(ty * cf * df) / pv)
+    """Backward-compatible SPIA helper; prefer _liability_mac_duration_years_from_path()."""
+    return _liability_mac_duration_years_from_path(
+        liability_path=liability_path_from_spia_projection(res),
+        yield_curve=yield_curve,
+        spread=spread,
+        cashflows=cashflows,
+    )
 
 
 def yield_curve_key_rate_bump(
@@ -1758,27 +1790,25 @@ def _alm_maybe_rebalance(
     return cash, faces
 
 
-def run_alm_projection(
+def run_alm_projection_from_liability_path(
     *,
-    pricing: SPIAProjectionResult,
+    liability_path: LiabilityPath,
     yield_curve: YieldCurve,
     spread: float,
     assumptions: ALMAssumptions,
-    initial_asset_market_value: float | None = None,
+    initial_asset_market_value: float,
     asset_curve: YieldCurve | None = None,
     liability_curve: YieldCurve | None = None,
     liability_cashflows: np.ndarray | None = None,
 ) -> ALMResult:
     """
-    Roll forward Treasury ladder + cash against ``expected_total_cashflows``.
+    Roll forward Treasury ladder + cash against a generic monthly liability path.
 
     Optional ``asset_curve`` / ``liability_curve`` split discounting for bonds vs liability PV
     (default: both use ``yield_curve``). Mark-to-market and liability PV include ``spread``.
 
-    ``liability_cashflows`` overrides ``pricing.expected_total_cashflows`` when provided (same length).
+    ``liability_cashflows`` overrides ``liability_path.expected_total_cashflows`` when provided.
     """
-    if initial_asset_market_value is None:
-        initial_asset_market_value = float(pricing.single_premium)
     aum0 = float(initial_asset_market_value)
     if aum0 <= 0.0:
         raise ValueError("initial_asset_market_value must be positive.")
@@ -1808,14 +1838,14 @@ def run_alm_projection(
         faces[k] = mv_t / d0
 
     cash = float(w[0] * aum0)
-    cf = np.asarray(
-        pricing.expected_total_cashflows if liability_cashflows is None else liability_cashflows,
-        dtype=float,
-    )
-    if cf.shape != (pricing.expected_total_cashflows.shape[0],):
-        raise ValueError("liability_cashflows must match pricing horizon length.")
+    base_cf = np.asarray(liability_path.expected_total_cashflows, dtype=float)
+    cf = np.asarray(base_cf if liability_cashflows is None else liability_cashflows, dtype=float)
+    if cf.shape != base_cf.shape:
+        raise ValueError("liability_cashflows must match liability_path.expected_total_cashflows.")
     n = cf.shape[0]
-    ty_full = np.asarray(pricing.times_years, dtype=float)
+    ty_full = np.asarray(liability_path.times_years, dtype=float)
+    if ty_full.shape != cf.shape:
+        raise ValueError("liability_path.times_years must match liability cashflow horizon.")
     # Precompute liability PV path in O(n) from issue-time discount factors:
     # PV_{m} (at end of month m) = sum_{j>m} cf_j * DF(t_j) / DF(t_m).
     df_l_full = yc_l.discount_factors(ty_full, spread=spread)
@@ -1973,7 +2003,7 @@ def run_alm_projection(
     pv01_assets = float(Ab - A0)
     pv01_net = float(pv01_assets - pv01_liab)
 
-    d_l = _liability_mac_duration_years(pricing, yc_l, spread, cashflows=cf)
+    d_l = _liability_mac_duration_years_from_path(liability_path, yc_l, spread, cashflows=cf)
     df_i = _df_rem(yc_a, spread, init_t_rem)
     mv_i = init_faces * df_i
     aum_i = float(init_cash + np.sum(mv_i))
@@ -1996,6 +2026,36 @@ def run_alm_projection(
         duration_assets_mac=d_a,
         duration_liabilities_mac=d_l,
         duration_gap=d_gap,
+    )
+
+
+def run_alm_projection(
+    *,
+    pricing: SPIAProjectionResult,
+    yield_curve: YieldCurve,
+    spread: float,
+    assumptions: ALMAssumptions,
+    initial_asset_market_value: float | None = None,
+    asset_curve: YieldCurve | None = None,
+    liability_curve: YieldCurve | None = None,
+    liability_cashflows: np.ndarray | None = None,
+) -> ALMResult:
+    """
+    Backward-compatible SPIA wrapper for ALM projection.
+
+    Keeps the original signature while delegating to the generic liability-path entrypoint.
+    """
+    if initial_asset_market_value is None:
+        initial_asset_market_value = float(pricing.single_premium)
+    return run_alm_projection_from_liability_path(
+        liability_path=liability_path_from_spia_projection(pricing),
+        yield_curve=yield_curve,
+        spread=spread,
+        assumptions=assumptions,
+        initial_asset_market_value=float(initial_asset_market_value),
+        asset_curve=asset_curve,
+        liability_curve=liability_curve,
+        liability_cashflows=liability_cashflows,
     )
 
 

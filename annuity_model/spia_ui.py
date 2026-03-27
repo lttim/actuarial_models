@@ -48,10 +48,10 @@ from build_spia_excel_workbook import (
     alm_excel_downsample_snapshot,
     alm_excel_snapshot_from_result,
     alm_excel_truncate_snapshot,
-    build_workbook_from_spec,
-    excel_spec_from_launcher,
     mc_excel_snapshot_from_result,
 )
+from product_excel import build_product_workbook
+from product_registry import ProductType, get_product_adapter, product_label, product_options_for_ui
 from test_dashboard import render_unit_tests_page
 
 
@@ -87,6 +87,12 @@ def _refresh_pricing_excel_workbook_in_session() -> None:
     if not isinstance(expenses, sp.ExpenseAssumptions):
         return
     meta = st.session_state.get("pricing_meta") or {}
+    product_raw = st.session_state.get("pricing_product_type", ProductType.SPIA.value)
+    try:
+        product_type = ProductType(str(product_raw))
+    except ValueError:
+        product_type = ProductType.SPIA
+    adapter = get_product_adapter(product_type)
     vy_raw = ctx.get("valuation_year")
     vy = int(vy_raw) if vy_raw is not None else 2025
     mc_snap: MCExcelSnapshot | None = None
@@ -102,7 +108,7 @@ def _refresh_pricing_excel_workbook_in_session() -> None:
     alm_snap = _maybe_alm_excel_snapshot_for_workbook()
     alm_asm = st.session_state.get("alm_last_assumptions")
     try:
-        spec = excel_spec_from_launcher(
+        spec = adapter.excel_spec_from_run(
             contract=contract,
             yield_curve=yc,
             mortality=mort,
@@ -117,8 +123,9 @@ def _refresh_pricing_excel_workbook_in_session() -> None:
             index_levels_at_payment=res.index_level_at_payment,
             expense_annual_inflation=float(res.expense_annual_inflation),
         )
-        st.session_state["pricing_xlsx_bytes"] = build_workbook_from_spec(
-            spec,
+        st.session_state["pricing_xlsx_bytes"] = build_product_workbook(
+            product_type=product_type,
+            spec=spec,
             out_path=None,
             python_snapshot=ExcelPythonSnapshot(
                 pv_benefit=float(res.pv_benefit),
@@ -1463,6 +1470,15 @@ def _render_what_if_studio() -> None:
 
 def _render_run_and_results() -> None:
     st.header("Pricing Run")
+    selected_product = st.selectbox(
+        "Product type",
+        options=product_options_for_ui(),
+        format_func=product_label,
+        index=0,
+        help="Run exactly one product per execution. SPIA is implemented in this version.",
+    )
+    if selected_product != ProductType.SPIA:
+        st.info("Selected product is scaffolded but not implemented yet. Choose SPIA to run.")
 
     with st.expander("Contract", expanded=True):
         c1, c2, c3 = st.columns(3)
@@ -1589,6 +1605,7 @@ def _render_run_and_results() -> None:
 
     if run:
         try:
+            adapter = get_product_adapter(selected_product)
             yc = _build_yield_curve(
                 y_mode,  # type: ignore[arg-type]
                 flat_rate=flat_rate,
@@ -1629,7 +1646,7 @@ def _render_run_and_results() -> None:
                 except (FileNotFoundError, ValueError, KeyError):
                     expenses_used = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
 
-            res = sp.price_spia_single_premium(
+            res = adapter.price(
                 contract=contract,
                 yield_curve=yc,
                 mortality=mort,
@@ -1644,9 +1661,11 @@ def _render_run_and_results() -> None:
             _clear_dependent_state_on_pricing_change()
             st.session_state["pricing_res"] = res
             st.session_state["pricing_contract"] = contract
+            st.session_state["pricing_product_type"] = selected_product.value
             st.session_state["pricing_run_id"] = int(st.session_state.get("pricing_run_id", 0)) + 1
             st.session_state["pricing_err"] = None
             st.session_state["pricing_meta"] = {
+                "product_type": selected_product.value,
                 "yield_mode": y_mode,
                 "mortality_mode": m_mode,
                 "expense_mode": expense_mode,
@@ -1693,7 +1712,7 @@ def _render_run_and_results() -> None:
             # --- Monte Carlo (run before Excel so MC sheet can be embedded) ---
             mc_snap_for_excel: MCExcelSnapshot | None = None
             if mc_enable:
-                mc = sp.price_spia_single_premium_monte_carlo(
+                mc = adapter.price_monte_carlo(
                     contract=contract,
                     yield_curve=yc,
                     mortality=mort,
@@ -1733,6 +1752,7 @@ def _render_run_and_results() -> None:
             _clear_dependent_state_on_pricing_change()
             st.session_state["pricing_err"] = repr(e)
             st.session_state["pricing_res"] = None
+            st.session_state.pop("pricing_product_type", None)
             st.session_state.pop("pricing_run_inputs", None)
             st.session_state.pop("pricing_excel_context", None)
             st.session_state.pop("pricing_xlsx_bytes", None)
