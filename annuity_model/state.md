@@ -1,39 +1,40 @@
 # Current Working State
 
-- Branch: `main` (published to `origin/main`; this file may trail tip by one docs commit).
+- Branch: `main` (synced to `origin/main` after publish).
 - Workspace: `annuity_model`
-- Feature reference: `e3f1a52` — Streamlit Pricing Run: `pricing_run_form_state` (seed defaults + `run_number_input` + `ensure_session_choice`) fixes min-value first-paint bugs (Term premium, SPIA valuation year / RP-2014 context, other run numerics).
-- Prior related commits: Term premium UI seed (`e87e690` area); Excel recalc parity (`acfa999`); Term/SPIA workbook alignment.
+- **Altair profit waterfall** (tip of `main`): signed walking bridge (green up / red down / blue totals from zero); SPIA left-to-right undiscounted level benefit → single premium; Term undiscounted claims → net PV. Replaces stacked `st.bar_chart` faux waterfall.
 
 # Key Logic Implemented
 
-## Streamlit Pricing Run (`pricing_ui.py` + `pricing_run_form_state.py`)
+## Profit decomposition (`pricing_ui.py`)
 
-- **Single source of truth** for initial `run_*` session keys: `build_run_form_seed_defaults` (extend when adding products/inputs).
-- **`run_number_input`**: always passes explicit `value=` so `st.number_input` does not default to `value="min"` → wrong UI before first run.
-- **`ensure_session_choice`**: before mortality / yield / expense radios when option sets are product-dependent.
-- Prior: SPIA Excel recalc strips Dashboard/Runbook; Term `Liabilities` / curves / optional ALM; shared `recalc_excel_shared.py`.
+- `_build_profit_waterfall_chart_df`: cumulative `start`/`end` per row; change rows keep **signed** `delta` matching the table.
+- `_altair_profit_waterfall_chart`: floating `mark_bar` with `y` / `y2`, zero reference rule, tooltips (Step, delta, from, to).
+- Table unchanged: all components including single premium / net PV.
+
+## Streamlit Pricing Run (unchanged from prior)
+
+- `pricing_run_form_state`: `PRICING_RUN_NUMBER_INPUT_KEYS`, `_pricing_run_numeric_seeds`, `run_number_input` session-state hygiene.
 
 ## Tests
 
-- `tests/test_pricing_run_form_state.py` — coercion, seed shape, `ensure_session_choice`.
-- Parity + workbook tests unchanged in scope.
-
-## Parity / invariants
-
-- No calculation-engine changes; parity contract unchanged.
+- `tests/test_pricing_ui_profit_decomposition.py` — waterfall walk geometry, SPIA/Term row reconciliation, labels.
 
 # Validation Completed
 
 - `python -m pytest tests/parity/ -v` — 19 passed.
-- `python -m pytest tests/ -v` — 111 passed.
+- `python -m pytest tests/ -v` — 114 passed.
+
+# Handoff Notes
+
+- **Parity**: No changes to `pricing_projection`, ALM, or Excel generators; parity contract untouched.
+- **New UI dependency**: Uses existing `altair`; chart renders via `st.altair_chart`.
+- **If regressions**: Compare tooltips “Step ($)” to table “Amount ($)” for each component; first/last blue pillars should align with anchor and modeled premium on the y-axis.
 
 # Immediate Next Steps
 
-- None required after publish.
+- None required unless product adds new decomposition rows — extend `_build_profit_decomposition_rows` and ensure new steps are ordered correctly for the waterfall.
 
 # Unresolved Bugs / Pending Calculations
 
-- No known failing tests.
-- Optional: document `run_alm_projection_from_pricing_result` in `AGENTS.md` / parity checklist.
-- Optional: apply same `run_number_input` pattern to ALM / What-if tabs if min-value display issues appear there.
+- None known from this change.

@@ -860,46 +860,105 @@ def _render_pricing_run_charts(
         _render_profit_decomposition_chart(res, contract, expenses=expenses, product_type=product_type)
 
 
-def _waterfall_stack_from_decomposition_rows(
-    rows: list[tuple[str, float, bool]],
-) -> list[dict[str, float | str | bool]]:
-    """Map profit-decomposition table rows to stacked-bar layers for ``st.bar_chart``.
+def _build_profit_waterfall_chart_df(rows: list[tuple[str, float, bool]]) -> pd.DataFrame:
+    """Walking waterfall data for Altair: each *change* bar spans cumulative *start*→*end* (signed *delta*).
 
-    Table *amounts* match actuarial deltas (negative = reduction). For ``stack=True``
-    bars, both segments must be non-negative: a decrease uses a larger *base* (lower
-    start) plus a positive *delta* so the column top equals the cumulative **before**
-    the step.
+    * First *is_total*: pillar from 0 to the starting anchor (SPIA: undiscounted level benefit; Term: undiscounted claims).
+    * *Change* rows: floating bar from running level to running + table amount (``delta`` may be negative).
+    * Last *is_total*: reconciliation pillar from 0 to modeled premium / net PV.
 
-    * First *is_total* row: full pillar ``base=0``, ``delta=value`` (starting level).
-    * Last *is_total* row: full pillar ``base=0``, ``delta=value`` (modeled premium / net PV).
-    * Intermediate *is_total* rows (if any): same full-pillar treatment.
-    * Bridge rows: ``running`` is the cumulative total after each step and matches the
-      table's running sum from the first anchor through that row.
+    Row order in *rows* is preserved left-to-right on the x-axis.
     """
-    wf_rows: list[dict[str, float | str | bool]] = []
-    n = len(rows)
+    records: list[dict[str, float | str]] = []
     running = 0.0
+    n = len(rows)
     for i, (label, val, is_total) in enumerate(rows):
         v = float(val)
         if is_total and i == 0:
-            wf_rows.append({"Step": label, "base": 0.0, "delta": v, "is_total": True})
+            records.append(
+                {
+                    "Step": label,
+                    "start": 0.0,
+                    "end": v,
+                    "delta": v,
+                    "lo": 0.0,
+                    "hi": v,
+                    "bar_color": "Total",
+                }
+            )
             running = v
         elif is_total and i == n - 1:
-            wf_rows.append({"Step": label, "base": 0.0, "delta": v, "is_total": True})
+            records.append(
+                {
+                    "Step": label,
+                    "start": 0.0,
+                    "end": v,
+                    "delta": v,
+                    "lo": 0.0,
+                    "hi": v,
+                    "bar_color": "Total",
+                }
+            )
             running = v
         elif is_total:
-            wf_rows.append({"Step": label, "base": 0.0, "delta": v, "is_total": True})
+            records.append(
+                {
+                    "Step": label,
+                    "start": 0.0,
+                    "end": v,
+                    "delta": v,
+                    "lo": min(0.0, v),
+                    "hi": max(0.0, v),
+                    "bar_color": "Total",
+                }
+            )
             running = v
         else:
-            if v >= 0.0:
-                base_l = running
-                delta_vis = v
-            else:
-                base_l = running + v
-                delta_vis = -v
-            wf_rows.append({"Step": label, "base": base_l, "delta": delta_vis, "is_total": False})
-            running += v
-    return wf_rows
+            s = running
+            e = running + v
+            records.append(
+                {
+                    "Step": label,
+                    "start": s,
+                    "end": e,
+                    "delta": v,
+                    "lo": min(s, e),
+                    "hi": max(s, e),
+                    "bar_color": "Increase" if v >= 0.0 else "Decrease",
+                }
+            )
+            running = e
+    return pd.DataFrame(records)
+
+
+def _altair_profit_waterfall_chart(df: pd.DataFrame) -> alt.Chart:
+    color_scale = alt.Scale(domain=["Total", "Increase", "Decrease"], range=["#1f77b4", "#2ca02c", "#d62728"])
+    bars = (
+        alt.Chart(df)
+        .mark_bar(size=36)
+        .encode(
+            x=alt.X("Step:N", sort=None, axis=alt.Axis(labelAngle=-30, labelLimit=280, title=None)),
+            y=alt.Y("hi:Q", title="Amount ($)"),
+            y2="lo:Q",
+            color=alt.Color(
+                "bar_color:N",
+                scale=color_scale,
+                legend=alt.Legend(orient="top", title=None, labelFontSize=11),
+            ),
+            tooltip=[
+                alt.Tooltip("Step:N", title="Component"),
+                alt.Tooltip("delta:Q", format=",.2f", title="Step ($)"),
+                alt.Tooltip("start:Q", format=",.2f", title="From ($)"),
+                alt.Tooltip("end:Q", format=",.2f", title="To ($)"),
+            ],
+        )
+    )
+    rule = (
+        alt.Chart(pd.DataFrame({"y": [0.0]}))
+        .mark_rule(color="#888888", strokeDash=[4, 3])
+        .encode(y=alt.Y("y:Q"))
+    )
+    return (bars + rule).properties(height=440)
 
 
 def _render_profit_decomposition_chart(
@@ -916,12 +975,9 @@ def _render_profit_decomposition_chart(
         product_type=product_type,
     )
 
-    wf = pd.DataFrame(_waterfall_stack_from_decomposition_rows(rows))
-    st.bar_chart(
-        _round_for_visuals(wf.set_index("Step")[["base", "delta"]]),
-        stack=True,
-        color=["rgba(0,0,0,0)", "#1f77b4"],
-    )
+    wf_df = _build_profit_waterfall_chart_df(rows)
+    st.altair_chart(_altair_profit_waterfall_chart(wf_df), use_container_width=True)
+    st.caption("Blue = subtotal / reconciliation pillars from zero; green = upward step; red = downward step (table amount).")
 
     table = pd.DataFrame([{"Component": label, "Amount ($)": val} for label, val, _ in rows])
     table_display = _round_for_visuals(table)

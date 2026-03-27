@@ -6,7 +6,7 @@ import numpy as np
 
 import pricing_projection as sp
 import term_projection as tp
-from pricing_ui import _build_profit_decomposition_rows, _waterfall_stack_from_decomposition_rows
+from pricing_ui import _build_profit_decomposition_rows, _build_profit_waterfall_chart_df
 from product_registry import ProductType
 
 
@@ -72,31 +72,31 @@ def test_spia_profit_decomposition_uses_product_design_effect_label() -> None:
     assert "Benefit design effect (e.g., indexation)" in labels
 
 
-def test_waterfall_stack_start_and_end_are_full_pillars() -> None:
+def test_waterfall_walk_term_like_decreases_and_reconciliation() -> None:
     rows = [
         ("Undiscounted expected claims", 200.0, True),
         ("Discounting effect", -30.0, False),
         ("Policyholder premium PV (funding)", -60.0, False),
         ("Net PV (claims - premiums)", 110.0, True),
     ]
-    wf = _waterfall_stack_from_decomposition_rows(rows)
-    assert wf[0]["base"] == 0.0 and wf[0]["delta"] == 200.0
-    assert wf[1]["base"] == 170.0 and wf[1]["delta"] == 30.0
-    assert wf[1]["base"] + wf[1]["delta"] == 200.0
-    assert wf[2]["base"] == 110.0 and wf[2]["delta"] == 60.0
-    assert wf[2]["base"] + wf[2]["delta"] == 170.0
-    assert wf[3]["base"] == 0.0 and wf[3]["delta"] == 110.0
+    df = _build_profit_waterfall_chart_df(rows)
+    assert df.iloc[0]["lo"] == 0.0 and df.iloc[0]["hi"] == 200.0 and df.iloc[0]["bar_color"] == "Total"
+    assert df.iloc[1]["delta"] == -30.0
+    assert df.iloc[1]["start"] == 200.0 and df.iloc[1]["end"] == 170.0 and df.iloc[1]["bar_color"] == "Decrease"
+    assert df.iloc[2]["start"] == 170.0 and df.iloc[2]["end"] == 110.0 and df.iloc[2]["bar_color"] == "Decrease"
+    assert df.iloc[3]["lo"] == 0.0 and df.iloc[3]["hi"] == 110.0 and df.iloc[3]["bar_color"] == "Total"
 
 
-def test_waterfall_stack_positive_step_grows_bar() -> None:
+def test_waterfall_walk_increase_step_and_signed_delta() -> None:
     rows = [
         ("Start", 100.0, True),
         ("Gain", 25.0, False),
         ("End", 125.0, True),
     ]
-    wf = _waterfall_stack_from_decomposition_rows(rows)
-    assert wf[1]["base"] == 100.0 and wf[1]["delta"] == 25.0
-    assert wf[1]["base"] + wf[1]["delta"] == 125.0
+    df = _build_profit_waterfall_chart_df(rows)
+    assert df.iloc[1]["delta"] == 25.0
+    assert df.iloc[1]["start"] == 100.0 and df.iloc[1]["end"] == 125.0
+    assert df.iloc[1]["bar_color"] == "Increase"
 
 
 def test_spia_profit_decomposition_rows_reconcile_to_single_premium() -> None:
