@@ -2,7 +2,7 @@
 
 - Branch: `main` (synced with `origin/main` after publish; verify with `git status`).
 - Workspace: `annuity_model`
-- Latest completed commit (code): see `git log -1 --oneline` — Streamlit Pricing Run: `pricing_run_form_state` (seed defaults + `run_number_input` + `ensure_session_choice`) fixes min-value first-paint bugs (Term premium, SPIA valuation year / RP-2014 context, other run numerics).
+- Latest completed commit (code): `e3f1a52` — Streamlit Pricing Run: `pricing_run_form_state` (seed defaults + `run_number_input` + `ensure_session_choice`) fixes min-value first-paint bugs (Term premium, SPIA valuation year / RP-2014 context, other run numerics).
 - Prior related commits: Term premium UI seed (`e87e690` area); Excel recalc parity (`acfa999`); Term/SPIA workbook alignment.
 
 # Key Logic Implemented
