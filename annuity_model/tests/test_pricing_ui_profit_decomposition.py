@@ -6,7 +6,7 @@ import numpy as np
 
 import pricing_projection as sp
 import term_projection as tp
-from pricing_ui import _build_profit_decomposition_rows
+from pricing_ui import _build_profit_decomposition_rows, _waterfall_stack_from_decomposition_rows
 from product_registry import ProductType
 
 
@@ -70,3 +70,54 @@ def test_spia_profit_decomposition_uses_product_design_effect_label() -> None:
     )
     labels = [label for label, _, _ in rows]
     assert "Benefit design effect (e.g., indexation)" in labels
+
+
+def test_waterfall_stack_start_and_end_are_full_pillars() -> None:
+    rows = [
+        ("Undiscounted expected claims", 200.0, True),
+        ("Discounting effect", -30.0, False),
+        ("Policyholder premium PV (funding)", -60.0, False),
+        ("Net PV (claims - premiums)", 110.0, True),
+    ]
+    wf = _waterfall_stack_from_decomposition_rows(rows)
+    assert wf[0]["base"] == 0.0 and wf[0]["delta"] == 200.0
+    assert wf[1]["base"] == 170.0 and wf[1]["delta"] == 30.0
+    assert wf[1]["base"] + wf[1]["delta"] == 200.0
+    assert wf[2]["base"] == 110.0 and wf[2]["delta"] == 60.0
+    assert wf[2]["base"] + wf[2]["delta"] == 170.0
+    assert wf[3]["base"] == 0.0 and wf[3]["delta"] == 110.0
+
+
+def test_waterfall_stack_positive_step_grows_bar() -> None:
+    rows = [
+        ("Start", 100.0, True),
+        ("Gain", 25.0, False),
+        ("End", 125.0, True),
+    ]
+    wf = _waterfall_stack_from_decomposition_rows(rows)
+    assert wf[1]["base"] == 100.0 and wf[1]["delta"] == 25.0
+    assert wf[1]["base"] + wf[1]["delta"] == 125.0
+
+
+def test_spia_profit_decomposition_rows_reconcile_to_single_premium() -> None:
+    result = SimpleNamespace(
+        months=np.arange(1, 4, dtype=int),
+        survival_to_payment=np.array([0.99, 0.98, 0.97], dtype=float),
+        discount_factors=np.array([0.995, 0.99, 0.985], dtype=float),
+        pv_benefit=240.0,
+        pv_monthly_expenses=12.0,
+        single_premium=260.0,
+    )
+    contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=1200.0)
+    expenses = sp.ExpenseAssumptions(policy_expense_dollars=5.0, premium_expense_rate=0.03, monthly_expense_dollars=1.0)
+
+    rows, _ = _build_profit_decomposition_rows(
+        res=result,
+        contract=contract,
+        expenses=expenses,
+        product_type=ProductType.SPIA,
+    )
+    anchor = float(rows[0][1])
+    bridge = sum(float(v) for _, v, is_total in rows if not is_total)
+    final = float(rows[-1][1])
+    assert np.isclose(anchor + bridge, final)

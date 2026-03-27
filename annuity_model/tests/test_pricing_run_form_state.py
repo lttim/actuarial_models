@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pricing_run_form_state import (
+    PRICING_RUN_NUMBER_INPUT_KEYS,
     build_run_form_seed_defaults,
     coerce_numeric_widget_value,
     ensure_session_choice,
@@ -33,6 +34,8 @@ def test_build_run_form_seed_defaults_matches_expected_keys() -> None:
     assert d["run_spia_benefit_annual"] == 100_000.0
     assert "run_flat_rate" in d
     assert "run_term_monthly_premium" in d
+    for k in PRICING_RUN_NUMBER_INPUT_KEYS:
+        assert k in d, f"run_number_input key {k!r} missing from seed defaults"
 
 
 def test_ensure_session_choice_fixes_invalid_option() -> None:

@@ -14,6 +14,10 @@ Mitigation
    ``run_*`` keys for the Pricing Run page (add new keys here when adding inputs).
 2. Use :func:`run_number_input` for every keyed Pricing Run ``st.number_input`` so
    ``value=`` always matches coerced session state.
+3. Keys in :data:`PRICING_RUN_NUMBER_INPUT_KEYS` must not be ``setdefault``'d into
+   ``st.session_state`` before the widget — that duplicates binding with ``value=``
+   and triggers Streamlit warnings. The Pricing Run page stores coerced defaults in
+   ``_pricing_run_numeric_seeds`` for first-paint seeding instead.
 """
 
 from __future__ import annotations
@@ -27,6 +31,32 @@ from product_registry import (
     ProductType,
     get_product_default_mortality_mode,
     get_term_contract_ui_config,
+)
+
+# Keys managed by :func:`run_number_input`. Do not ``setdefault`` these on the Pricing Run page
+# — doing so puts them in ``_new_session_state`` before the widget runs, and passing ``value=``
+# to ``st.number_input`` triggers Streamlit's "default value + Session State API" warning.
+PRICING_RUN_NUMBER_INPUT_KEYS: frozenset[str] = frozenset(
+    {
+        "run_issue_age",
+        "run_spia_benefit_annual",
+        "run_term_benefit_annual",
+        "run_term_monthly_premium",
+        "run_flat_rate",
+        "run_coupon_freq",
+        "run_policy_expense",
+        "run_premium_expense_pct",
+        "run_monthly_expense",
+        "run_valuation_year",
+        "run_horizon_age",
+        "run_spread",
+        "run_expense_inflation_pct",
+        "run_mc_n_sims",
+        "run_mc_seed",
+        "run_mc_drift_pct",
+        "run_mc_vol_pct",
+        "run_mc_s0",
+    }
 )
 
 
@@ -77,6 +107,10 @@ def run_number_input(
     min_v = kwargs.get("min_value")
     max_v = kwargs.get("max_value")
     raw = st.session_state.get(key)
+    if raw is None:
+        seeds = st.session_state.get("_pricing_run_numeric_seeds") or {}
+        if key in seeds:
+            raw = seeds[key]
     coerced = coerce_numeric_widget_value(
         raw,
         default,
@@ -84,7 +118,6 @@ def run_number_input(
         max_value=max_v,
         replace_non_positive=replace_non_positive,
     )
-    st.session_state[key] = coerced
     return st.number_input(label, value=coerced, key=key, **kwargs)
 
 

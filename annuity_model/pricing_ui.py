@@ -72,7 +72,12 @@ from product_registry import (
 )
 from test_dashboard import render_unit_tests_page
 
-from pricing_run_form_state import build_run_form_seed_defaults, ensure_session_choice, run_number_input
+from pricing_run_form_state import (
+    PRICING_RUN_NUMBER_INPUT_KEYS,
+    build_run_form_seed_defaults,
+    ensure_session_choice,
+    run_number_input,
+)
 
 
 def _maybe_alm_excel_snapshot_for_workbook() -> ALMExcelSnapshot | None:
@@ -651,7 +656,12 @@ def _seed_run_form_state_from_last_inputs() -> None:
         meta=meta,
         default_product_type=default_product_type,
     )
+    st.session_state["_pricing_run_numeric_seeds"] = {
+        k: defaults[k] for k in PRICING_RUN_NUMBER_INPUT_KEYS if k in defaults
+    }
     for k, v in defaults.items():
+        if k in PRICING_RUN_NUMBER_INPUT_KEYS:
+            continue
         st.session_state.setdefault(k, v)
 
 
@@ -850,6 +860,48 @@ def _render_pricing_run_charts(
         _render_profit_decomposition_chart(res, contract, expenses=expenses, product_type=product_type)
 
 
+def _waterfall_stack_from_decomposition_rows(
+    rows: list[tuple[str, float, bool]],
+) -> list[dict[str, float | str | bool]]:
+    """Map profit-decomposition table rows to stacked-bar layers for ``st.bar_chart``.
+
+    Table *amounts* match actuarial deltas (negative = reduction). For ``stack=True``
+    bars, both segments must be non-negative: a decrease uses a larger *base* (lower
+    start) plus a positive *delta* so the column top equals the cumulative **before**
+    the step.
+
+    * First *is_total* row: full pillar ``base=0``, ``delta=value`` (starting level).
+    * Last *is_total* row: full pillar ``base=0``, ``delta=value`` (modeled premium / net PV).
+    * Intermediate *is_total* rows (if any): same full-pillar treatment.
+    * Bridge rows: ``running`` is the cumulative total after each step and matches the
+      table's running sum from the first anchor through that row.
+    """
+    wf_rows: list[dict[str, float | str | bool]] = []
+    n = len(rows)
+    running = 0.0
+    for i, (label, val, is_total) in enumerate(rows):
+        v = float(val)
+        if is_total and i == 0:
+            wf_rows.append({"Step": label, "base": 0.0, "delta": v, "is_total": True})
+            running = v
+        elif is_total and i == n - 1:
+            wf_rows.append({"Step": label, "base": 0.0, "delta": v, "is_total": True})
+            running = v
+        elif is_total:
+            wf_rows.append({"Step": label, "base": 0.0, "delta": v, "is_total": True})
+            running = v
+        else:
+            if v >= 0.0:
+                base_l = running
+                delta_vis = v
+            else:
+                base_l = running + v
+                delta_vis = -v
+            wf_rows.append({"Step": label, "base": base_l, "delta": delta_vis, "is_total": False})
+            running += v
+    return wf_rows
+
+
 def _render_profit_decomposition_chart(
     res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
     contract: sp.SPIAContract | tp.TermLifeContract,
@@ -864,31 +916,14 @@ def _render_profit_decomposition_chart(
         product_type=product_type,
     )
 
-    wf_rows = []
-    running = 0.0
-    for label, val, is_total in rows:
-        if is_total:
-            wf_rows.append({"Step": label, "delta": 0.0, "base": 0.0, "top": val, "is_total": True})
-            running = val
-            continue
-        base = running if val >= 0.0 else running + val
-        wf_rows.append({"Step": label, "delta": val, "base": base, "top": running + val, "is_total": False})
-        running += val
-
-    wf = pd.DataFrame(wf_rows)
+    wf = pd.DataFrame(_waterfall_stack_from_decomposition_rows(rows))
     st.bar_chart(
         _round_for_visuals(wf.set_index("Step")[["base", "delta"]]),
         stack=True,
         color=["rgba(0,0,0,0)", "#1f77b4"],
     )
 
-    table = pd.DataFrame(
-        [
-            {"Component": label, "Amount ($)": val}
-            for label, val, _ in rows
-            if label != "Single premium"
-        ]
-    )
+    table = pd.DataFrame([{"Component": label, "Amount ($)": val} for label, val, _ in rows])
     table_display = _round_for_visuals(table)
     st.dataframe(
         table_display,
