@@ -283,8 +283,8 @@ def _serialize_array(arr: Any, *, include_full: bool, max_points: int = 250) -> 
     }
 
 
-def _contract_to_dict(contract: sp.SPIAContract) -> dict[str, Any]:
-    return {
+def _contract_to_dict(contract: sp.SPIAContract | tp.TermLifeContract) -> dict[str, Any]:
+    out: dict[str, Any] = {
         "issue_age": int(contract.issue_age),
         "sex": str(contract.sex),
         "benefit_annual": float(contract.benefit_annual),
@@ -292,6 +292,12 @@ def _contract_to_dict(contract: sp.SPIAContract) -> dict[str, Any]:
         "payment_freq_per_year": int(getattr(contract, "payment_freq_per_year", 1)),
         "payment_cessation": str(getattr(contract, "payment_cessation", "")),
     }
+    if isinstance(contract, tp.TermLifeContract):
+        out["death_benefit"] = float(contract.death_benefit)
+        out["monthly_premium"] = float(contract.monthly_premium)
+        out["term_years"] = int(contract.term_years)
+        out["premium_mode"] = str(contract.premium_mode)
+    return out
 
 
 def _yield_curve_to_dict(yc: sp.YieldCurve) -> dict[str, Any]:
@@ -314,8 +320,8 @@ def _mortality_to_dict(mort: Any) -> dict[str, Any]:
 
 
 def _pricing_result_to_dict(
-    res: sp.SPIAProjectionResult,
-    contract_state: sp.SPIAContract,
+    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
+    contract_state: sp.SPIAContract | tp.TermLifeContract,
     *,
     include_full: bool,
 ) -> dict[str, Any]:
@@ -390,8 +396,8 @@ def _alm_assumptions_to_dict(asm: sp.ALMAssumptions) -> dict[str, Any]:
 
 def _whatif_result_to_dict(
     *,
-    base_res: sp.SPIAProjectionResult,
-    shocked_res: sp.SPIAProjectionResult,
+    base_res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
+    shocked_res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
     baseline_mc: Any,
     shocked_mc: Any,
     whatif_params: dict[str, Any],
@@ -1098,16 +1104,130 @@ def _mc_cache_get_or_compute(
     return out
 
 
+def compute_what_if_term_shocked_pricing(
+    *,
+    base_contract: tp.TermLifeContract,
+    yield_curve: sp.YieldCurve,
+    mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
+    horizon_age: int,
+    spread: float,
+    valuation_year: int | None,
+    term_monthly_premium_mult: float = 1.0,
+) -> tp.TermLifeProjectionResult:
+    """Reprice Term for what-if; kept pure for unit tests (regression vs SPIA horizon mismatch)."""
+    shocked_contract = dataclasses.replace(
+        base_contract,
+        monthly_premium=float(base_contract.monthly_premium) * float(term_monthly_premium_mult),
+    )
+    return tp.price_term_life_level_monthly(
+        contract=shocked_contract,
+        yield_curve=yield_curve,
+        mortality=mortality,
+        horizon_age=horizon_age,
+        spread=spread,
+        valuation_year=valuation_year,
+    )
+
+
+def build_alm_pricing_for_mc_scenario(
+    *,
+    product_type: ProductType,
+    scenario_source: str,
+    baseline_pricing: Any,
+    contract: Any,
+    yield_curve: sp.YieldCurve,
+    mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
+    horizon_age: int,
+    spread: float,
+    valuation_year: int | None,
+    expenses: sp.ExpenseAssumptions,
+    expense_annual_inflation: float,
+    mc_n_sims: int,
+    mc_seed: int,
+    mc_scenario_idx: int,
+    mc_params: dict[str, Any],
+) -> Any:
+    """
+    Single-path MC repricing for ALM liability PV. SPIA-only; other products always return baseline.
+    """
+    if scenario_source != "MC simulation (single path)":
+        return baseline_pricing
+    if product_type != ProductType.SPIA or not isinstance(contract, sp.SPIAContract):
+        return baseline_pricing
+    n_months = int(baseline_pricing.months.size)
+    idx_paths = sp.simulate_index_levels_gbm(
+        n_sims=mc_n_sims,
+        n_months=n_months,
+        s0=float(mc_params.get("s0", 100.0) or 100.0),
+        annual_drift=float(mc_params.get("annual_drift", 0.06) or 0.06),
+        annual_vol=float(mc_params.get("annual_vol", 0.15) or 0.15),
+        seed=mc_seed,
+    )
+    idx_one = idx_paths[int(mc_scenario_idx)]
+    idx_levels_payment = np.asarray(idx_one[1:], dtype=float)
+    idx_s0 = float(idx_one[0])
+    return sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yield_curve,
+        mortality=mortality,
+        horizon_age=int(horizon_age),
+        spread=spread,
+        valuation_year=int(valuation_year) if valuation_year is not None else None,
+        expenses=expenses,
+        expense_annual_inflation=float(expense_annual_inflation),
+        index_s0=idx_s0,
+        index_levels_payment=idx_levels_payment,
+    )
+
+
+def _run_alm_from_session_pricing(
+    *,
+    pricing: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
+    yield_curve: sp.YieldCurve,
+    spread: float,
+    assumptions: sp.ALMAssumptions,
+    initial_asset_market_value: float,
+    asset_curve: sp.YieldCurve | None = None,
+    liability_cashflows: np.ndarray | None = None,
+) -> sp.ALMResult:
+    if isinstance(pricing, tp.TermLifeProjectionResult):
+        return sp.run_alm_projection_from_liability_path(
+            liability_path=tp.liability_path_from_term_projection(pricing),
+            yield_curve=yield_curve,
+            spread=spread,
+            assumptions=assumptions,
+            initial_asset_market_value=float(initial_asset_market_value),
+            asset_curve=asset_curve,
+            liability_cashflows=liability_cashflows,
+        )
+    return sp.run_alm_projection(
+        pricing=pricing,
+        yield_curve=yield_curve,
+        spread=spread,
+        assumptions=assumptions,
+        initial_asset_market_value=float(initial_asset_market_value),
+        asset_curve=asset_curve,
+        liability_cashflows=liability_cashflows,
+    )
+
+
 def _render_what_if_studio() -> None:
     st.header("What-if Analysis")
     st.caption("Live scenario shocks relative to the latest baseline run in Pricing Run.")
 
     base_res = st.session_state.get("pricing_res")
     base_contract = st.session_state.get("pricing_contract")
+    product_raw = st.session_state.get("pricing_product_type", ProductType.SPIA.value)
+    try:
+        product_type = ProductType(str(product_raw))
+    except ValueError:
+        product_type = ProductType.SPIA
     ctx = st.session_state.get("pricing_excel_context") or {}
     base_curve = ctx.get("yield_curve")
     base_mort = ctx.get("mortality")
     base_expenses = ctx.get("expenses")
+    if not isinstance(base_expenses, sp.ExpenseAssumptions) and product_type == ProductType.TERM_LIFE:
+        base_expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
 
     if (
         base_res is None
@@ -1124,7 +1244,6 @@ def _render_what_if_studio() -> None:
         rate_shift_bps = st.slider("Rates shift (bps)", min_value=-300, max_value=300, value=0, step=5)
         spread_shift_bps = st.slider("Credit spread shift (bps)", min_value=-300, max_value=300, value=0, step=5)
     with c2:
-        inflation_shift_pct = st.slider("Expense inflation shift (%)", min_value=-5.0, max_value=10.0, value=0.0, step=0.1)
         longevity_improvement_pct = st.slider(
             "Longevity improvement shock (%)",
             min_value=-20.0,
@@ -1133,45 +1252,69 @@ def _render_what_if_studio() -> None:
             step=0.5,
             help="Positive values reduce mortality rates (longer lives).",
         )
+        inflation_shift_pct = 0.0
+        if product_type == ProductType.SPIA:
+            inflation_shift_pct = st.slider(
+                "Expense inflation shift (%)", min_value=-5.0, max_value=10.0, value=0.0, step=0.1
+            )
     with c3:
-        expense_ratio_mult = st.slider("Expense ratio multiplier", min_value=0.50, max_value=2.00, value=1.00, step=0.05)
-        equity_regime = st.selectbox(
-            "Equity regime",
-            options=["defensive", "base", "bullish", "stressed"],
-            index=1,
-            format_func=lambda x: x.capitalize(),
-        )
-        mc_sims = st.slider("Tail-risk MC simulations", min_value=200, max_value=5000, value=800, step=200)
+        expense_ratio_mult = 1.0
+        equity_regime = "base"
+        mc_sims = 800
+        term_monthly_premium_mult = 1.0
+        if product_type == ProductType.SPIA:
+            expense_ratio_mult = st.slider("Expense ratio multiplier", min_value=0.50, max_value=2.00, value=1.00, step=0.05)
+            equity_regime = st.selectbox(
+                "Equity regime",
+                options=["defensive", "base", "bullish", "stressed"],
+                index=1,
+                format_func=lambda x: x.capitalize(),
+            )
+            mc_sims = st.slider("Tail-risk MC simulations", min_value=200, max_value=5000, value=800, step=200)
+        elif product_type == ProductType.TERM_LIFE:
+            term_monthly_premium_mult = st.slider(
+                "Monthly premium multiplier",
+                min_value=0.50,
+                max_value=1.50,
+                value=1.00,
+                step=0.01,
+                help="Applies to Term monthly premium to test premium adequacy sensitivity.",
+            )
 
-    st.markdown("**ALM add-on shocks**")
-    st.caption(
-        "These apply on top of the main What-if scenario. Asset curve shocks tilt **mark-to-market** on the Treasury ladder; "
-        "liability stress scales **After** SPIA outflows in the ALM engine. "
-        "Uses assumptions from the **ALM** tab if you ran them there; otherwise built-in defaults."
-    )
-    wa1, wa2, wa3, wa4 = st.columns(4)
-    with wa1:
-        alm_asset_parallel_bps = st.slider(
-            "Asset earned-rate parallel shift (bps)",
-            min_value=-200,
-            max_value=200,
-            value=0,
-            step=5,
-            help="Extra parallel shift on the **After** zero curve for **asset** discounting only.",
+    alm_asset_parallel_bps = 0
+    alm_twist_short_bps = 0
+    alm_twist_long_bps = 0
+    alm_liability_cf_pct = 0.0
+    if product_type == ProductType.SPIA:
+        st.markdown("**ALM add-on shocks**")
+        st.caption(
+            "These apply on top of the main What-if scenario. Asset curve shocks tilt **mark-to-market** on the Treasury ladder; "
+            "liability stress scales **After** SPIA outflows in the ALM engine. "
+            "Uses assumptions from the **ALM** tab if you ran them there; otherwise built-in defaults."
         )
-    with wa2:
-        alm_twist_short_bps = st.slider("Twist: short-end add-on (bps)", -75, 75, 0, 5)
-    with wa3:
-        alm_twist_long_bps = st.slider("Twist: long-end add-on (bps)", -75, 75, 0, 5)
-    with wa4:
-        alm_liability_cf_pct = st.slider(
-            "Liability outflow stress (%)",
-            -40.0,
-            40.0,
-            0.0,
-            0.5,
-            help="Scales **After** SPIA cash outflows in the ALM projection (stress on liquidity / disinvestment).",
-        )
+        wa1, wa2, wa3, wa4 = st.columns(4)
+        with wa1:
+            alm_asset_parallel_bps = st.slider(
+                "Asset earned-rate parallel shift (bps)",
+                min_value=-200,
+                max_value=200,
+                value=0,
+                step=5,
+                help="Extra parallel shift on the **After** zero curve for **asset** discounting only.",
+            )
+        with wa2:
+            alm_twist_short_bps = st.slider("Twist: short-end add-on (bps)", -75, 75, 0, 5)
+        with wa3:
+            alm_twist_long_bps = st.slider("Twist: long-end add-on (bps)", -75, 75, 0, 5)
+        with wa4:
+            alm_liability_cf_pct = st.slider(
+                "Liability outflow stress (%)",
+                -40.0,
+                40.0,
+                0.0,
+                0.5,
+                help="Scales **After** SPIA cash outflows in the ALM projection (stress on liquidity / disinvestment).",
+            )
 
     alm_whatif_base: sp.ALMResult | None = None
     alm_whatif_after: sp.ALMResult | None = None
@@ -1194,181 +1337,197 @@ def _render_what_if_studio() -> None:
         shocked_infl = max(-0.99, base_infl + float(inflation_shift_pct) / 100.0)
         shocked_spread = base_spread + float(spread_shift_bps) / 10000.0
 
-        # Equity regime controls how the (deterministic) index levels used for "After" evolve.
-        #
-        # Key requirement: when What-if dials are at identity (all 0 / multipliers at 1) and
-        # equity_regime == "base", "After" must reproduce the Pricing Run deterministic result.
-        # We do that by applying a regime-specific multiplicative tilt to the Pricing Run's
-        # actual baseline index_level_at_payment.
-        drift_map, vol_map = _equity_regime_params(equity_regime)
-        drift_base_map, vol_base_map = _equity_regime_params("base")
+        baseline_mc = None
+        shocked_mc = None
+        if product_type == ProductType.SPIA:
+            # Equity regime controls how the (deterministic) index levels used for "After" evolve.
+            #
+            # Key requirement: when What-if dials are at identity (all 0 / multipliers at 1) and
+            # equity_regime == "base", "After" must reproduce the Pricing Run deterministic result.
+            # We do that by applying a regime-specific multiplicative tilt to the Pricing Run's
+            # actual baseline index_level_at_payment.
+            drift_map, vol_map = _equity_regime_params(equity_regime)
+            drift_base_map, vol_base_map = _equity_regime_params("base")
 
-        base_is_identity = (
-            equity_regime == "base"
-            and abs(float(rate_shift_bps)) < 1e-12
-            and abs(float(spread_shift_bps)) < 1e-12
-            and abs(float(inflation_shift_pct)) < 1e-12
-            and abs(float(longevity_improvement_pct)) < 1e-9
-            and abs(float(expense_ratio_mult) - 1.0) < 1e-9
-        )
-
-        # Monte Carlo drift/vol are anchored to the Pricing Run's MC parameters so that
-        # equity_regime=="base" gives an identity for tail-risk stats too.
-        base_mc_params = st.session_state.get("pricing_mc_params") or {}
-        base_drift = float(base_mc_params.get("annual_drift", 0.06))
-        base_vol = float(base_mc_params.get("annual_vol", 0.15))
-
-        if base_is_identity:
-            idx_levels = np.asarray(base_res.index_level_at_payment, dtype=float)
-        else:
-            idx_regime_det = _deterministic_index_levels_from_regime(
-                s0=s0, annual_drift=drift_map, n_months=n_months
+            base_is_identity = (
+                equity_regime == "base"
+                and abs(float(rate_shift_bps)) < 1e-12
+                and abs(float(spread_shift_bps)) < 1e-12
+                and abs(float(inflation_shift_pct)) < 1e-12
+                and abs(float(longevity_improvement_pct)) < 1e-9
+                and abs(float(expense_ratio_mult) - 1.0) < 1e-9
             )
-            idx_base_det = _deterministic_index_levels_from_regime(
-                s0=s0, annual_drift=drift_base_map, n_months=n_months
-            )
-            idx_base_det = np.asarray(idx_base_det, dtype=float)
-            idx_regime_det = np.asarray(idx_regime_det, dtype=float)
-            scale = idx_regime_det / idx_base_det
-            idx_levels = np.asarray(base_res.index_level_at_payment, dtype=float) * scale
 
-        if equity_regime == "base":
-            drift_mc = base_drift
-            vol_mc = base_vol
-        else:
-            # Scale regime drifts/vols relative to the regime mapping's "base" so the meaning
-            # of defensive/bullish/stressed stays consistent even if the Pricing Run used different MC inputs.
-            drift_mc = base_drift * (drift_map / drift_base_map) if abs(drift_base_map) > 1e-15 else base_drift
-            vol_mc = base_vol * (vol_map / vol_base_map) if abs(vol_base_map) > 1e-15 else base_vol
+            # Monte Carlo drift/vol are anchored to the Pricing Run's MC parameters so that
+            # equity_regime=="base" gives an identity for tail-risk stats too.
+            base_mc_params = st.session_state.get("pricing_mc_params") or {}
+            base_drift = float(base_mc_params.get("annual_drift", 0.06))
+            base_vol = float(base_mc_params.get("annual_vol", 0.15))
 
-        shocked_res = sp.price_spia_single_premium(
-            contract=base_contract,
-            yield_curve=shocked_curve,
-            mortality=shocked_mort,
-            horizon_age=horizon_age,
-            spread=shocked_spread,
-            valuation_year=int(valuation_year) if valuation_year is not None else None,
-            expenses=shocked_expenses,
-            index_s0=s0,
-            index_levels_payment=idx_levels,
-            expense_annual_inflation=shocked_infl,
-        )
-        vy = int(valuation_year) if valuation_year is not None else None
-        baseline_key = (
-            "baseline",
-            int(mc_sims),
-            int(horizon_age),
-            float(base_spread),
-            float(base_infl),
-            float(base_drift),
-            float(base_vol),
-            float(s0),
-            int(base_contract.issue_age),
-            float(base_contract.benefit_annual),
-        )
-        baseline_mc = _mc_cache_get_or_compute(
-            baseline_key,
-            contract=base_contract,
-            yield_curve=base_curve,
-            mortality=base_mort,
-            horizon_age=horizon_age,
-            spread=base_spread,
-            valuation_year=vy,
-            expenses=base_expenses,
-            expense_annual_inflation=base_infl,
-            n_sims=int(mc_sims),
-            annual_drift=float(base_drift),
-            annual_vol=float(base_vol),
-            seed=42,
-            s0=float(s0),
-        )
-        shocked_key = (
-            "shocked",
-            int(mc_sims),
-            int(horizon_age),
-            float(shocked_spread),
-            float(shocked_infl),
-            float(drift_mc),
-            float(vol_mc),
-            float(s0),
-            float(rate_shift_bps),
-            float(spread_shift_bps),
-            float(longevity_improvement_pct),
-            float(expense_ratio_mult),
-            str(equity_regime),
-            int(base_contract.issue_age),
-            float(base_contract.benefit_annual),
-        )
-        shocked_mc = _mc_cache_get_or_compute(
-            shocked_key,
-            contract=base_contract,
-            yield_curve=shocked_curve,
-            mortality=shocked_mort,
-            horizon_age=horizon_age,
-            spread=shocked_spread,
-            valuation_year=vy,
-            expenses=shocked_expenses,
-            expense_annual_inflation=shocked_infl,
-            n_sims=int(mc_sims),
-            annual_drift=float(drift_mc),
-            annual_vol=float(vol_mc),
-            seed=42,
-            s0=float(s0),
-        )
-
-        try:
-            asm_wf = st.session_state.get("alm_last_assumptions")
-            if not isinstance(asm_wf, sp.ALMAssumptions):
-                asm_wf = st.session_state.get("alm_current_assumptions")
-            if not isinstance(asm_wf, sp.ALMAssumptions):
-                asm_wf = sp.ALMAssumptions(
-                    allocation=sp.alm_default_allocation_spec(),
-                    rebalance_band=0.05,
-                    rebalance_frequency_months=1,
-                    reinvest_rule="pro_rata",
-                    disinvest_rule="shortest_first",
-                    rebalance_policy="liquidity_only",
-                    borrowing_policy="borrow_after_assets_insufficient",
-                    borrowing_rate_mode="scenario_linked",
-                    borrowing_rate_tenor_years=1.0,
-                    borrowing_spread_annual=0.01,
-                    borrowing_rate_annual=0.05,
-                    liquidity_near_liquid_years=0.25,
+            if base_is_identity:
+                idx_levels = np.asarray(base_res.index_level_at_payment, dtype=float)
+            else:
+                idx_regime_det = _deterministic_index_levels_from_regime(
+                    s0=s0, annual_drift=drift_map, n_months=n_months
                 )
-            asm_whatif_used = asm_wf
-            aum_wf = st.session_state.get("alm_last_initial_asset_market_value")
-            if aum_wf is None:
-                aum_wf = st.session_state.get("alm_current_initial_asset_market_value")
-            aum_wf_use = float(aum_wf) if isinstance(aum_wf, (int, float, np.floating)) else float(base_res.single_premium)
-            alm_whatif_base = sp.run_alm_projection(
-                pricing=base_res,
-                yield_curve=base_curve,
-                spread=base_spread,
-                assumptions=asm_wf,
-                initial_asset_market_value=aum_wf_use,
-            )
-            yc_alm_asset = sp.yield_curve_twist_linear_bps(
-                sp.yield_curve_parallel_bps(shocked_curve, float(alm_asset_parallel_bps)),
-                bps_short=float(alm_twist_short_bps),
-                bps_long=float(alm_twist_long_bps),
-            )
-            cf_alm = np.asarray(shocked_res.expected_total_cashflows, dtype=float) * (
-                1.0 + float(alm_liability_cf_pct) / 100.0
-            )
-            alm_whatif_after = sp.run_alm_projection(
-                pricing=shocked_res,
+                idx_base_det = _deterministic_index_levels_from_regime(
+                    s0=s0, annual_drift=drift_base_map, n_months=n_months
+                )
+                idx_base_det = np.asarray(idx_base_det, dtype=float)
+                idx_regime_det = np.asarray(idx_regime_det, dtype=float)
+                scale = idx_regime_det / idx_base_det
+                idx_levels = np.asarray(base_res.index_level_at_payment, dtype=float) * scale
+
+            if equity_regime == "base":
+                drift_mc = base_drift
+                vol_mc = base_vol
+            else:
+                # Scale regime drifts/vols relative to the regime mapping's "base" so the meaning
+                # of defensive/bullish/stressed stays consistent even if the Pricing Run used different MC inputs.
+                drift_mc = base_drift * (drift_map / drift_base_map) if abs(drift_base_map) > 1e-15 else base_drift
+                vol_mc = base_vol * (vol_map / vol_base_map) if abs(vol_base_map) > 1e-15 else base_vol
+
+            shocked_res = sp.price_spia_single_premium(
+                contract=base_contract,
                 yield_curve=shocked_curve,
+                mortality=shocked_mort,
+                horizon_age=horizon_age,
                 spread=shocked_spread,
-                assumptions=asm_wf,
-                initial_asset_market_value=aum_wf_use,
-                asset_curve=yc_alm_asset,
-                liability_cashflows=cf_alm,
+                valuation_year=int(valuation_year) if valuation_year is not None else None,
+                expenses=shocked_expenses,
+                index_s0=s0,
+                index_levels_payment=idx_levels,
+                expense_annual_inflation=shocked_infl,
             )
-        except Exception as alm_ex:
-            alm_whatif_base = None
-            alm_whatif_after = None
-            asm_whatif_used = None
-            st.warning(f"ALM what-if layer skipped: {alm_ex!r}")
+        elif product_type == ProductType.TERM_LIFE and isinstance(base_contract, tp.TermLifeContract):
+            shocked_res = compute_what_if_term_shocked_pricing(
+                base_contract=base_contract,
+                yield_curve=shocked_curve,
+                mortality=shocked_mort,
+                horizon_age=horizon_age,
+                spread=shocked_spread,
+                valuation_year=int(valuation_year) if valuation_year is not None else None,
+                term_monthly_premium_mult=float(term_monthly_premium_mult),
+            )
+        else:
+            raise ValueError(f"What-if analysis is not implemented for product type: {product_type.value}")
+        vy = int(valuation_year) if valuation_year is not None else None
+        if product_type == ProductType.SPIA:
+            baseline_key = (
+                "baseline",
+                int(mc_sims),
+                int(horizon_age),
+                float(base_spread),
+                float(base_infl),
+                float(base_drift),
+                float(base_vol),
+                float(s0),
+                int(base_contract.issue_age),
+                float(base_contract.benefit_annual),
+            )
+            baseline_mc = _mc_cache_get_or_compute(
+                baseline_key,
+                contract=base_contract,
+                yield_curve=base_curve,
+                mortality=base_mort,
+                horizon_age=horizon_age,
+                spread=base_spread,
+                valuation_year=vy,
+                expenses=base_expenses,
+                expense_annual_inflation=base_infl,
+                n_sims=int(mc_sims),
+                annual_drift=float(base_drift),
+                annual_vol=float(base_vol),
+                seed=42,
+                s0=float(s0),
+            )
+            shocked_key = (
+                "shocked",
+                int(mc_sims),
+                int(horizon_age),
+                float(shocked_spread),
+                float(shocked_infl),
+                float(drift_mc),
+                float(vol_mc),
+                float(s0),
+                float(rate_shift_bps),
+                float(spread_shift_bps),
+                float(longevity_improvement_pct),
+                float(expense_ratio_mult),
+                str(equity_regime),
+                int(base_contract.issue_age),
+                float(base_contract.benefit_annual),
+            )
+            shocked_mc = _mc_cache_get_or_compute(
+                shocked_key,
+                contract=base_contract,
+                yield_curve=shocked_curve,
+                mortality=shocked_mort,
+                horizon_age=horizon_age,
+                spread=shocked_spread,
+                valuation_year=vy,
+                expenses=shocked_expenses,
+                expense_annual_inflation=shocked_infl,
+                n_sims=int(mc_sims),
+                annual_drift=float(drift_mc),
+                annual_vol=float(vol_mc),
+                seed=42,
+                s0=float(s0),
+            )
+
+            try:
+                asm_wf = st.session_state.get("alm_last_assumptions")
+                if not isinstance(asm_wf, sp.ALMAssumptions):
+                    asm_wf = st.session_state.get("alm_current_assumptions")
+                if not isinstance(asm_wf, sp.ALMAssumptions):
+                    asm_wf = sp.ALMAssumptions(
+                        allocation=sp.alm_default_allocation_spec(),
+                        rebalance_band=0.05,
+                        rebalance_frequency_months=1,
+                        reinvest_rule="pro_rata",
+                        disinvest_rule="shortest_first",
+                        rebalance_policy="liquidity_only",
+                        borrowing_policy="borrow_after_assets_insufficient",
+                        borrowing_rate_mode="scenario_linked",
+                        borrowing_rate_tenor_years=1.0,
+                        borrowing_spread_annual=0.01,
+                        borrowing_rate_annual=0.05,
+                        liquidity_near_liquid_years=0.25,
+                    )
+                asm_whatif_used = asm_wf
+                aum_wf = st.session_state.get("alm_last_initial_asset_market_value")
+                if aum_wf is None:
+                    aum_wf = st.session_state.get("alm_current_initial_asset_market_value")
+                aum_wf_use = float(aum_wf) if isinstance(aum_wf, (int, float, np.floating)) else float(base_res.single_premium)
+                alm_whatif_base = _run_alm_from_session_pricing(
+                    pricing=base_res,
+                    yield_curve=base_curve,
+                    spread=base_spread,
+                    assumptions=asm_wf,
+                    initial_asset_market_value=aum_wf_use,
+                )
+                yc_alm_asset = sp.yield_curve_twist_linear_bps(
+                    sp.yield_curve_parallel_bps(shocked_curve, float(alm_asset_parallel_bps)),
+                    bps_short=float(alm_twist_short_bps),
+                    bps_long=float(alm_twist_long_bps),
+                )
+                cf_alm = np.asarray(shocked_res.expected_total_cashflows, dtype=float) * (
+                    1.0 + float(alm_liability_cf_pct) / 100.0
+                )
+                alm_whatif_after = _run_alm_from_session_pricing(
+                    pricing=shocked_res,
+                    yield_curve=shocked_curve,
+                    spread=shocked_spread,
+                    assumptions=asm_wf,
+                    initial_asset_market_value=aum_wf_use,
+                    asset_curve=yc_alm_asset,
+                    liability_cashflows=cf_alm,
+                )
+            except Exception as alm_ex:
+                alm_whatif_base = None
+                alm_whatif_after = None
+                asm_whatif_used = None
+                st.warning(f"ALM what-if layer skipped: {alm_ex!r}")
     except Exception as ex:
         st.error(f"What-if scenario failed: {ex!r}")
         return
@@ -1381,6 +1540,7 @@ def _render_what_if_studio() -> None:
         "expense_ratio_mult": float(expense_ratio_mult),
         "equity_regime": str(equity_regime),
         "mc_sims": int(mc_sims),
+        "term_monthly_premium_mult": float(term_monthly_premium_mult),
         "alm_asset_parallel_bps": float(alm_asset_parallel_bps),
         "alm_twist_short_bps": float(alm_twist_short_bps),
         "alm_twist_long_bps": float(alm_twist_long_bps),
@@ -1409,30 +1569,45 @@ def _render_what_if_studio() -> None:
     with m3:
         _render_impact_metric("Reserve at issue", float(base_res.economic_reserve[0]), float(shocked_res.economic_reserve[0]), money=True)
     with m4:
-        _render_impact_metric(
-            "Tail risk (P95 premium)",
-            float(baseline_mc.premium_p95),
-            float(shocked_mc.premium_p95),
-            money=True,
-        )
+        if baseline_mc is not None and shocked_mc is not None:
+            _render_impact_metric(
+                "Tail risk (P95 premium)",
+                float(baseline_mc.premium_p95),
+                float(shocked_mc.premium_p95),
+                money=True,
+            )
+        else:
+            _render_impact_metric("PV benefit", float(base_res.pv_benefit), float(shocked_res.pv_benefit), money=True)
 
     compare_df = pd.DataFrame(
         {
-            "Metric": ["Single premium", "Margin", "Reserve at issue", "Tail risk (P95 premium)"],
+            "Metric": ["Single premium", "Margin", "Reserve at issue"],
             "Before": [
                 float(base_res.single_premium),
                 float(base_res.single_premium - (base_res.pv_benefit + base_res.pv_monthly_expenses)),
                 float(base_res.economic_reserve[0]),
-                float(baseline_mc.premium_p95),
             ],
             "After": [
                 float(shocked_res.single_premium),
                 float(shocked_res.single_premium - (shocked_res.pv_benefit + shocked_res.pv_monthly_expenses)),
                 float(shocked_res.economic_reserve[0]),
-                float(shocked_mc.premium_p95),
             ],
         }
     )
+    if baseline_mc is not None and shocked_mc is not None:
+        compare_df = pd.concat(
+            [
+                compare_df,
+                pd.DataFrame(
+                    {
+                        "Metric": ["Tail risk (P95 premium)"],
+                        "Before": [float(baseline_mc.premium_p95)],
+                        "After": [float(shocked_mc.premium_p95)],
+                    }
+                ),
+            ],
+            ignore_index=True,
+        )
     compare_df["Impact"] = compare_df["After"] - compare_df["Before"]
     compare_display = _round_for_visuals(compare_df)
     st.dataframe(
@@ -1459,22 +1634,23 @@ def _render_what_if_studio() -> None:
     st.line_chart(reserve_display[["Before reserve", "After reserve"]])
     st.bar_chart(reserve_display[["Impact"]])
 
-    st.markdown("**Tail-risk distribution impact (single premium)**")
-    c1, c2 = st.columns(2)
-    with c1:
-        counts_b, edges_b = np.histogram(baseline_mc.single_premium, bins=35)
-        mids_b = 0.5 * (edges_b[:-1] + edges_b[1:])
-        mids_b_disp = np.rint(mids_b).astype(int)
-        bin_labels_b = [f"{int(v):,}" for v in mids_b_disp]
-        df_b = pd.DataFrame({"bin": bin_labels_b, "count_before": counts_b.astype(int)}).set_index("bin")
-        st.bar_chart(_round_for_visuals(df_b))
-    with c2:
-        counts_a, edges_a = np.histogram(shocked_mc.single_premium, bins=35)
-        mids_a = 0.5 * (edges_a[:-1] + edges_a[1:])
-        mids_a_disp = np.rint(mids_a).astype(int)
-        bin_labels_a = [f"{int(v):,}" for v in mids_a_disp]
-        df_a = pd.DataFrame({"bin": bin_labels_a, "count_after": counts_a.astype(int)}).set_index("bin")
-        st.bar_chart(_round_for_visuals(df_a))
+    if baseline_mc is not None and shocked_mc is not None:
+        st.markdown("**Tail-risk distribution impact (single premium)**")
+        c1, c2 = st.columns(2)
+        with c1:
+            counts_b, edges_b = np.histogram(baseline_mc.single_premium, bins=35)
+            mids_b = 0.5 * (edges_b[:-1] + edges_b[1:])
+            mids_b_disp = np.rint(mids_b).astype(int)
+            bin_labels_b = [f"{int(v):,}" for v in mids_b_disp]
+            df_b = pd.DataFrame({"bin": bin_labels_b, "count_before": counts_b.astype(int)}).set_index("bin")
+            st.bar_chart(_round_for_visuals(df_b))
+        with c2:
+            counts_a, edges_a = np.histogram(shocked_mc.single_premium, bins=35)
+            mids_a = 0.5 * (edges_a[:-1] + edges_a[1:])
+            mids_a_disp = np.rint(mids_a).astype(int)
+            bin_labels_a = [f"{int(v):,}" for v in mids_a_disp]
+            df_a = pd.DataFrame({"bin": bin_labels_a, "count_after": counts_a.astype(int)}).set_index("bin")
+            st.bar_chart(_round_for_visuals(df_a))
 
     if alm_whatif_base is not None and alm_whatif_after is not None:
         _alm_b = alm_whatif_base
@@ -2602,17 +2778,24 @@ def _render_excel_replicator() -> None:
 
 def _render_alm_section() -> None:
     st.header("Asset–liability management (ALM)")
-    st.caption(
-        "Dynamic Treasury ladder + cash versus priced SPIA outflows. Earned rate on assets and liability discounting use "
-        "the same zero curve + credit spread as **Pricing Run** for consistency. "
-        "Rebalancing uses a drift band versus target weights on the review months you choose."
-    )
 
     res = st.session_state.get("pricing_res")
     contract_state = st.session_state.get("pricing_contract")
     ctx = st.session_state.get("pricing_excel_context") or {}
     yc = ctx.get("yield_curve")
     spr = float(ctx.get("spread", 0.0))
+    meta_alm = st.session_state.get("pricing_meta") or {}
+    pt_raw = str(meta_alm.get("product_type", ProductType.SPIA.value))
+    try:
+        alm_product_type = ProductType(pt_raw)
+    except ValueError:
+        alm_product_type = ProductType.SPIA
+    liab_label = "Term" if alm_product_type == ProductType.TERM_LIFE else "SPIA"
+    st.caption(
+        f"Dynamic Treasury ladder + cash versus priced {liab_label} outflows. Earned rate on assets and liability discounting use "
+        "the same zero curve + credit spread as **Pricing Run** for consistency. "
+        "Rebalancing uses a drift band versus target weights on the review months you choose."
+    )
 
     if (
         res is None
@@ -2855,9 +3038,7 @@ def _render_alm_section() -> None:
     )
     run_alm_opt = st.button("Optimize allocation and run ALM")
 
-    def _build_pricing_for_selected_scenario() -> sp.SPIAProjectionResult:
-        if scenario_source != "MC simulation (single path)":
-            return res
+    def _build_pricing_for_selected_scenario() -> Any:
         mort = ctx.get("mortality")
         expenses = ctx.get("expenses")
         valuation_year = ctx.get("valuation_year")
@@ -2866,20 +3047,10 @@ def _render_alm_section() -> None:
             raise ValueError("Pricing Run mortality missing from session state.")
         if not isinstance(expenses, sp.ExpenseAssumptions):
             raise ValueError("Pricing Run expenses missing from session state.")
-
-        n_months = int(res.months.size)
-        idx_paths = sp.simulate_index_levels_gbm(
-            n_sims=mc_n_sims,
-            n_months=n_months,
-            s0=float(mc_params.get("s0", 100.0) or 100.0),
-            annual_drift=float(mc_params.get("annual_drift", 0.06) or 0.06),
-            annual_vol=float(mc_params.get("annual_vol", 0.15) or 0.15),
-            seed=mc_seed,
-        )
-        idx_one = idx_paths[int(mc_scenario_idx)]
-        idx_levels_payment = np.asarray(idx_one[1:], dtype=float)
-        idx_s0 = float(idx_one[0])
-        return sp.price_spia_single_premium(
+        return build_alm_pricing_for_mc_scenario(
+            product_type=alm_product_type,
+            scenario_source=scenario_source,
+            baseline_pricing=res,
             contract=contract_state,
             yield_curve=yc,
             mortality=mort,
@@ -2888,8 +3059,10 @@ def _render_alm_section() -> None:
             valuation_year=int(valuation_year) if valuation_year is not None else None,
             expenses=expenses,
             expense_annual_inflation=float(res.expense_annual_inflation),
-            index_s0=idx_s0,
-            index_levels_payment=idx_levels_payment,
+            mc_n_sims=mc_n_sims,
+            mc_seed=mc_seed,
+            mc_scenario_idx=int(mc_scenario_idx),
+            mc_params=mc_params,
         )
 
     if run_alm:
@@ -2918,7 +3091,7 @@ def _render_alm_section() -> None:
                     liquidity_near_liquid_years=float(near_liq_y),
                 )
                 pricing_for_alm = _build_pricing_for_selected_scenario()
-                out = sp.run_alm_projection(
+                out = _run_alm_from_session_pricing(
                     pricing=pricing_for_alm,
                     yield_curve=yc,
                     spread=spr,
@@ -3034,7 +3207,7 @@ def _render_alm_section() -> None:
                         borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
                         liquidity_near_liquid_years=float(near_liq_y),
                     )
-                    out_try = sp.run_alm_projection(
+                    out_try = _run_alm_from_session_pricing(
                         pricing=pricing_for_alm,
                         yield_curve=yc,
                         spread=spr,
@@ -3641,13 +3814,17 @@ def main() -> None:
                 what_if_alm_assumptions = st.session_state.get("whatif_last_alm_assumptions")
                 what_if_params = st.session_state.get("whatif_last_params") or {}
 
+                pricing_meta_whatif = st.session_state.get("pricing_meta") or {}
+                pt_whatif = str(pricing_meta_whatif.get("product_type", ProductType.SPIA.value))
+                what_if_need_mc = pt_whatif != ProductType.TERM_LIFE.value
                 if (
                     whatif_run_id == current_pricing_run_id
-                    and
-                    what_if_shocked_res is not None
+                    and what_if_shocked_res is not None
                     and what_if_base_res is not None
-                    and what_if_baseline_mc is not None
-                    and what_if_shocked_mc is not None
+                    and (
+                        not what_if_need_mc
+                        or (what_if_baseline_mc is not None and what_if_shocked_mc is not None)
+                    )
                 ):
                     payload["what_if"] = _whatif_result_to_dict(
                         base_res=what_if_base_res,
