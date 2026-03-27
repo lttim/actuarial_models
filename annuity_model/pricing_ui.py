@@ -588,7 +588,6 @@ _SSA_2015_PERIOD_QX_CSV = """age,male_qx,female_qx
 SECTION_LABELS: dict[str, str] = {
     "overview": "Overview",
     "run": "Pricing Run",
-    "charts": "Charts",
     "alm": "ALM",
     "what_if": "What-if Analysis",
     "excel_replicator": "Excel Replicator",
@@ -597,7 +596,6 @@ SECTION_LABELS: dict[str, str] = {
 SECTION_ORDER: list[str] = [
     "overview",
     "run",
-    "charts",
     "alm",
     "what_if",
     "excel_replicator",
@@ -825,62 +823,23 @@ def _result_dataframe(res: sp.SPIAProjectionResult, contract: sp.SPIAContract) -
     )
 
 
-def _render_charts(res: sp.SPIAProjectionResult, contract: sp.SPIAContract) -> None:
+def _render_pricing_run_charts(
+    res: sp.SPIAProjectionResult, contract: sp.SPIAContract, expenses: sp.ExpenseAssumptions | None
+) -> None:
     expected_payment_pv = res.expected_benefit_cashflows * res.discount_factors
-    cumulative_pv = np.cumsum(expected_payment_pv)
     ages_r = contract.issue_age + res.reserve_times_years
-    ages_pay = res.ages_at_payment
 
-    st.subheader("Illustrations")
-    use_index = bool((st.session_state.get("pricing_meta") or {}).get("use_index", False))
-    if use_index:
-        _ret_labels = {
-            "simple": "Month-over-month simple return",
-            "log": "Month-over-month log return",
-            "cumulative": "Cumulative return from month 0",
-            "level": "Index level",
-        }
-        key = st.selectbox(
-            "Index return chart (S&P proxy)",
-            options=list(_ret_labels.keys()),
-            format_func=lambda k: _ret_labels[k],
-            key="index_return_chart_choice",
-        )
-        if key == "simple":
-            ret_series = np.rint(res.index_simple_return * 100.0)
-            ylabel = "Simple return (%)"
-        elif key == "log":
-            ret_series = np.rint(res.index_log_return * 100.0)
-            ylabel = "Log return (%)"
-        elif key == "cumulative":
-            ret_series = np.rint(res.index_cumulative_return * 100.0)
-            ylabel = "Cumulative return (%)"
-        else:
-            ret_series = np.rint(res.index_level_at_payment)
-            ylabel = "Index level"
-
-        st.line_chart(pd.DataFrame({"age": ages_pay, "value": ret_series}).set_index("age"))
-        st.caption(f"{ylabel} vs attained age at payment (proxy series; not an official index print).")
-
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("**Survival to payment**")
-        st.line_chart(
-            pd.DataFrame({"age": res.ages_at_payment, "survival_pct": np.rint(res.survival_to_payment * 100.0)}).set_index("age")
-        )
-    with c2:
-        st.markdown("**Expected PV per payment**")
-        st.line_chart(
-            pd.DataFrame({"age": res.ages_at_payment, "pv": np.rint(expected_payment_pv)}).set_index("age")
-        )
-
-    st.markdown("**Cumulative PV of benefits**")
-    st.line_chart(
-        pd.DataFrame({"age": res.ages_at_payment, "cumulative_pv": np.rint(cumulative_pv)}).set_index("age")
-    )
+    st.subheader("Run charts")
+    st.markdown("**PV benefits**")
+    st.line_chart(pd.DataFrame({"age": res.ages_at_payment, "pv_benefits": np.rint(expected_payment_pv)}).set_index("age"))
 
     st.markdown("**Economic reserve** (benefit + monthly expense, PV roll-forward)")
     st.line_chart(pd.DataFrame({"age": ages_r, "reserve": np.rint(res.economic_reserve)}).set_index("age"))
+
+    if isinstance(expenses, sp.ExpenseAssumptions):
+        _render_profit_decomposition_chart(res, contract, expenses)
+    else:
+        st.warning("Profit decomposition unavailable: pricing expense assumptions were not found in session state.")
 
 
 def _render_profit_decomposition_chart(
@@ -2189,6 +2148,9 @@ def _render_run_and_results() -> None:
             )
         with c_dl2:
             st.caption("Excel download moved to the Excel Replicator section.")
+        ctx = st.session_state.get("pricing_excel_context") or {}
+        expenses = ctx.get("expenses")
+        _render_pricing_run_charts(res, contract_state, expenses)
 
 
 def _read_workbook_cell_float(ws: Any, coord: str) -> float | None:
@@ -3517,25 +3479,6 @@ def _render_alm_section() -> None:
             st.info(f"Key rate duration chart unavailable for current inputs: {ex!r}")
 
 
-def _render_charts_section() -> None:
-    st.header("Charts")
-
-    res = st.session_state.get("pricing_res")
-    contract_state = st.session_state.get("pricing_contract")
-    if res is None or contract_state is None:
-        st.info("Run pricing first in Pricing Run to populate charts.")
-        return
-
-    _render_charts(res, contract_state)
-
-    ctx = st.session_state.get("pricing_excel_context") or {}
-    expenses = ctx.get("expenses")
-    if isinstance(expenses, sp.ExpenseAssumptions):
-        _render_profit_decomposition_chart(res, contract_state, expenses)
-    else:
-        st.warning("Profit decomposition unavailable: pricing expense assumptions were not found in session state.")
-
-
 def main() -> None:
     st.set_page_config(page_title="Pricing Demo", layout="wide")
     with st.sidebar:
@@ -3681,8 +3624,6 @@ def main() -> None:
         _render_overview()
     elif page == "run":
         _render_run_and_results()
-    elif page == "charts":
-        _render_charts_section()
     elif page == "alm":
         _render_alm_section()
     elif page == "what_if":

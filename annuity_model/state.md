@@ -1,57 +1,61 @@
 # Current Working State
 
 - Branch: `main`
-- Latest pushed commit: `6e785a5` on `origin/main`
-- Status at handoff: hard rename/deprecation completed; canonical naming is now `pricing_*` (legacy `spia_*` files removed).
-- Validation status: `python -m pytest tests/parity/ -v` passed (18/18), `python -m pytest tests/ -v` passed (95/95), and lints were clean on edited files.
+- Workspace: `annuity_model`
+- Recent changes in this chat were applied in `pricing_ui.py` (with existing unrelated `state.md` edits already present before this handoff update).
+- Latest verified gates for this handoff:
+  - `python -m pytest tests/parity/ -v` (pass)
+  - `python -m pytest tests/ -v` (pass)
 
 # Key Logic Implemented
 
 ## Python Architecture Decisions
 
-- Product orchestration is centralized in `product_registry.py` using:
-  - `ProductType` enum
-  - adapter protocol + concrete adapters (SPIA and TERM_LIFE)
-  - product capability/config helpers (UI behavior, mortality options/defaults, metric schema, export naming)
-- Product workbook dispatch is centralized in `product_excel.py`, routing per product type to the correct workbook spec/builder.
-- Canonical modules and entrypoints are now:
-  - `pricing_projection.py` (core pricing/ALM engine)
-  - `build_pricing_excel_workbook.py` (pricing workbook builder)
-  - `pricing_ui.py` and `run_pricing_ui.bat` (UI launch)
-- Term product logic is isolated in:
-  - `term_projection.py` (deterministic term pricing + liability path adapter)
-  - `build_term_excel_workbook.py` (Term Excel path with ModelCheck reconciliation)
+- Relocated run-result charts into `Pricing Run` by adding `_render_pricing_run_charts()`:
+  - `Cumulative PV benefits` line chart (replacing point-in-time PV benefit chart)
+  - `Economic reserve` line chart
+  - `Profit decomposition` waterfall/table (reused existing renderer)
+- Hooked chart rendering directly under the existing month-by-month projection table in `_render_run_and_results()`.
+- Removed dedicated chart navigation and rendering:
+  - Deleted `"charts"` from `SECTION_LABELS` and `SECTION_ORDER`
+  - Removed `_render_charts_section()`
+  - Removed `main()` route branch for `page == "charts"`
+- Deleted old generic chart block (`_render_charts`) that included additional visuals no longer requested.
 
-## UI/Data Structure Decisions
+## Data Structures and UI Mapping
 
-- Product-specific UI inputs/labels/defaults are centralized in registry helpers rather than hardcoded in UI.
-- Pricing output metrics are product-driven via `get_pricing_metrics(...)` and rendered generically in the UI.
-- Export filenames are product-driven via `get_product_ui_config(...)`.
-- `pandas.DataFrame` remains the core table structure for:
-  - projection table display/export
-  - workbook snapshot/reconciliation helper tables
-  - parity-facing tabular checkpoints
+- Kept `st.session_state` behavior unchanged.
+- Chart rendering remains gated by existing successful run state:
+  - charts only render when both `pricing_res` and `pricing_contract` exist
+  - therefore charts appear only after clicking `Run pricing` and obtaining results
+- Reused expense assumptions from `st.session_state["pricing_excel_context"]["expenses"]` for profit decomposition.
+
+## Product/UI Behavior Decisions (Current)
+
+- Mortality input:
+  - Remove the Streamlit warning text: `The widget with key "run_m_mode" was created with a default value but also had its value set via the Session State API.`
+- Term Life monthly premium default:
+  - Default should be **backsolved premium at issue** (using current assumptions and selected benefit structure), because this keeps first-run behavior internally consistent with pricing logic and avoids arbitrary fixed default values.
+  - UX expectation: when product changes to `Term Life`, auto-populate monthly premium with this backsolved value unless user has manually overridden premium in the current session.
+- Charts:
+  - Replace point-in-time `PV benefits` display with `Cumulative PV benefits` to better align with total discounted outgo interpretation over projection horizon.
 
 ## Actuarial Modeling Assumptions Finalized
 
-- Term variant implemented: **20-year level term life**.
-- Premium structure: **level monthly premium**.
-- Benefit timing: **end of policy year of death (EOY)**.
-- Term release scope: deterministic path only (**no Monte Carlo**).
-- Product capability behavior:
-  - Term hides Economic Scenario and Monte Carlo controls.
-- Mortality defaults:
-  - Term defaults to **US SSA 2015 period** (sex-specific), with options/default selected through registry.
-- Parity invariants remain enforced (tie-break epsilon policy, tolerance policy, step-level parity).
+- No actuarial formula changes were introduced in this chat.
+- No changes to disinvestment/reinvestment logic, epsilon tie-break behavior, or parity tolerances.
+- Changes are UI presentation/routing only.
 
 # Immediate Next Steps
 
-- Optional cleanup: rename SPIA-specific function/test symbol names (e.g., `price_spia_*`) to neutral naming if desired; currently they remain for continuity while files are pricing-agnostic.
-- Optional product expansion: implement `WHOLE_LIFE` / `VARIABLE_ANNUITY` adapters and workbook paths using the now-centralized product config seams.
-- Optional release governance: if preparing release notes, document naming migration (`spia_*` file removal) and new canonical launch path (`run_pricing_ui.bat`).
+- Manual UI sanity check in Streamlit:
+  1. Run pricing and confirm charts appear below the monthly projection table in `Pricing Run`.
+  2. Confirm `Charts` section is no longer present in sidebar.
+  3. Confirm no charts appear before first successful run.
+- If desired, commit this change set in `pricing_ui.py` after review.
 
 # Unresolved Bugs / Pending Calculations
 
-- No known failing tests or active parity discrepancies at handoff.
-- No unresolved runtime bug identified during the latest migration and validation passes.
-- Pending calculations: none required for current scope; next work is feature expansion/refinement rather than defect remediation.
+- No failing tests at handoff.
+- No known parity discrepancies introduced by this chat’s changes.
+- Residual risk: this task did not include workbook (`openpyxl`) chart layout changes; scope was Streamlit UI chart placement/removal.
