@@ -1963,6 +1963,9 @@ def _render_run_and_results() -> None:
             st.session_state.setdefault("run_term_length", term_ui.term_length_options[0])
             st.session_state.setdefault("run_term_premium_mode", term_ui.premium_mode_options[0])
             st.session_state.setdefault("run_term_benefit_timing", term_ui.benefit_timing_options[0])
+            st.session_state.setdefault(
+                "run_term_monthly_premium", float(term_ui.default_monthly_premium)
+            )
             term_choice = t1.selectbox("Term length", options=list(term_ui.term_length_options), key="run_term_length")
             premium_mode_choice = t2.selectbox(
                 "Premium mode", options=list(term_ui.premium_mode_options), key="run_term_premium_mode"
