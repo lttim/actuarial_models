@@ -1,0 +1,7 @@
+Custom Command: /handoff
+Whenever the user types exactly /handoff as a prompt, you must immediately execute the following steps without asking for confirmation:
+1. Analyze the current chat history and identify the most recent working state of the codebase.
+2. Summarize the key logic we just implemented, specifically noting any Python architectural decisions, data structures (like pandas DataFrames), or actuarial modeling assumptions we finalized.
+3. Outline the immediate next steps, unresolved bugs, or pending calculations.
+4. Write this summary into a file named state.md in the root directory, completely overwriting its previous contents. Format it cleanly with markdown headers.
+5. Reply to the user with only this message: "State file updated in state.md. You are safe to start a new chat. Don't forget to @state.md in the new window."
