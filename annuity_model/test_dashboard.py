@@ -1,13 +1,13 @@
 """
-Browser dashboard for SPIA unit tests: descriptions, run controls, and outcomes.
+Browser dashboard for pricing engine unit tests: descriptions, run controls, and outcomes.
 
 Run from the annuity_model folder:
     streamlit run test_dashboard.py
 Or double-click run_test_dashboard.bat (Windows).
 
 For the full model workspace (pricing + charts + these tests), use:
-    streamlit run spia_ui.py
-Or run_spia_ui.bat.
+    streamlit run pricing_ui.py
+Or run_pricing_ui.bat.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from typing import Any
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parent
-TEST_FILE = ROOT / "tests" / "test_spia_projection.py"
+TEST_FILE = ROOT / "tests" / "test_pricing_projection.py"
 REPORTS_DIR = ROOT / "reports"
 JUNIT_PATH = REPORTS_DIR / "junit.xml"
 
@@ -166,8 +166,8 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
     if not embedded:
         st.title("SPIA unit test dashboard")
         st.caption(
-            "Each row is one automated check of `spia_projection.py`. "
-            "Descriptions are taken from the test’s docstring in `tests/test_spia_projection.py`."
+            "Each row is one automated check of `pricing_projection.py`. "
+            "Descriptions are taken from the test’s docstring in `tests/test_pricing_projection.py`."
         )
 
     meta = discover_tests_metadata()
@@ -192,8 +192,8 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
     if embedded:
         st.subheader("Unit tests")
         st.caption(
-            "Automated checks for `spia_projection.py`. Descriptions come from test docstrings in "
-            "`tests/test_spia_projection.py`."
+            "Automated checks for `pricing_projection.py`. Descriptions come from test docstrings in "
+            "`tests/test_pricing_projection.py`."
         )
         b1, b2 = st.columns(2)
         with b1:

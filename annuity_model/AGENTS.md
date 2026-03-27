@@ -23,9 +23,9 @@ workbook shows 0.00 surplus difference.
 
 | File | Purpose |
 |------|---------|
-| `spia_projection.py` | Python ALM engine (source of truth for calculation logic) |
+| `pricing_projection.py` | Python ALM engine (source of truth for calculation logic) |
 | `alm_excel_ladder.py` | Excel formula generator — must match Python exactly |
-| `build_spia_excel_workbook.py` | Workbook builder and OOXML cache injector |
+| `build_pricing_excel_workbook.py` | Workbook builder and OOXML cache injector |
 | `docs/model_parity_contract.md` | Parity contract: tolerances, tie-break, epsilon policies |
 | `docs/parity_test_checklist.md` | Release gate checklist |
 | `tests/parity/test_alm_parity.py` | Parity regression tests |

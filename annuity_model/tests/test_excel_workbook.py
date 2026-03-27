@@ -8,10 +8,10 @@ import numpy as np
 import pytest
 from openpyxl import load_workbook
 
-import spia_projection as sp
+import pricing_projection as sp
 from alm_excel_ladder import ALM_ENGINE_SHEET
 
-from build_spia_excel_workbook import (
+from build_pricing_excel_workbook import (
     ALM_ENGINE_FIELD_GUIDE_SHEET,
     ALM_EXCEL_PATH_MONTH_CAP,
     ALM_ENGINE_STEP_MONTHS,

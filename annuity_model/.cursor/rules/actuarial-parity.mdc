@@ -12,7 +12,7 @@ and the generated Excel workbook. See `docs/model_parity_contract.md` for the fu
 
 1. Run `pytest tests/parity/ -v` — all parity tests must pass (0.00 discrepancy).
 2. Run `pytest tests/ -v` — all unit tests must pass.
-3. If you changed any formula-generating code (`alm_excel_ladder.py`, `build_spia_excel_workbook.py`),
+3. If you changed any formula-generating code (`alm_excel_ladder.py`, `build_pricing_excel_workbook.py`),
    regenerate the workbook and verify the `ModelCheck` sheet shows 0.00 difference.
 
 ## Critical invariants — never break these

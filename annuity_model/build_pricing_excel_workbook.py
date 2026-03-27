@@ -15,12 +15,12 @@ from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
-import spia_projection as sp
+import pricing_projection as sp
 
 from alm_excel_ladder import ALM_ENGINE_SHEET, write_alm_engine_sheet
 
 BASE_DIR = Path(__file__).resolve().parent
-OUT_XLSX = BASE_DIR / "spia_projection_model.xlsx"
+OUT_XLSX = BASE_DIR / "pricing_projection_model.xlsx"
 
 
 @dataclass(frozen=True)
@@ -235,7 +235,7 @@ def mc_excel_snapshot_from_result(
 
 @dataclass(frozen=True)
 class ExcelBuildSpec:
-    """Inputs for a formula-driven SPIA workbook aligned with `spia_ui.py` / `spia_projection.py`."""
+    """Inputs for a formula-driven workbook aligned with `pricing_ui.py` / `pricing_projection.py`."""
 
     issue_age: int
     sex: str
@@ -1122,12 +1122,12 @@ def _write_python_tab(wb: Workbook) -> None:
     lines: list[tuple[str, str]] = [
         ("Purpose", "Regenerate inputs and this workbook from the Python SPIA scaffold."),
         ("Working folder", "annuity_model"),
-        ("Streamlit UI", "streamlit run spia_ui.py — Run & results, then download Excel for the same assumptions."),
+        ("Streamlit UI", "streamlit run pricing_ui.py — Run & results, then download Excel for the same assumptions."),
         ("", ""),
         ("Core commands", "From the annuity_model folder:"),
-        ("1", "python spia_projection.py"),
-        ("2", "python illustrate_spia_projection.py"),
-        ("3", "python build_spia_excel_workbook.py"),
+        ("1", "python pricing_projection.py"),
+        ("2", "python illustrate_pricing_projection.py"),
+        ("3", "python build_pricing_excel_workbook.py"),
         ("", ""),
         ("Typical CSV inputs", "treasury_zero_rate_curve_latest.csv (or par curve + bootstrap in UI)"),
         ("", "rp2014_male_healthy_annuitant_qx_2014.csv / custom q_x CSV"),
@@ -1135,7 +1135,7 @@ def _write_python_tab(wb: Workbook) -> None:
         ("", "expenses_assumptions_us_placeholders.csv"),
         ("", "sp500_scenario_projection_monthly.csv (month, sp500_level for months 0..N)"),
         ("", ""),
-        ("Outputs", "spia_projection_model.xlsx, illustrations/*.png"),
+        ("Outputs", "pricing_projection_model.xlsx, illustrations/*.png"),
         ("", ""),
         ("Note", "This workbook is built for a fixed row count; change issue/horizon in the launcher and re-download."),
     ]
@@ -1148,10 +1148,10 @@ def _write_python_tab(wb: Workbook) -> None:
             ws[f"A{row}"].font = Font(bold=True)
         row += 1
 
-    ws["A28"] = "spia_projection.py (excerpt)"
+    ws["A28"] = "pricing_projection.py (excerpt)"
     ws["A28"].font = Font(bold=True)
-    spia_text = _read_text(BASE_DIR / "spia_projection.py", fallback="spia_projection.py not found")
-    excerpt = "\n".join(spia_text.splitlines()[:140])
+    pricing_text = _read_text(BASE_DIR / "pricing_projection.py", fallback="pricing_projection.py not found")
+    excerpt = "\n".join(pricing_text.splitlines()[:140])
     ws["A29"] = excerpt
 
     ws.column_dimensions["A"].width = 28

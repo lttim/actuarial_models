@@ -18,7 +18,7 @@ import numpy as np
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
-import spia_projection as sp
+import pricing_projection as sp
 
 ALM_ENGINE_SHEET = "ALM_Engine"
 

@@ -5,9 +5,9 @@ Default: uses treasury zero curve, RP-2014 + MP-2016 when workbooks exist, synth
 and 2.5%/year expense inflation. Index return charts can be saved as PNGs or toggled interactively.
 
 Examples:
-    python illustrate_spia_projection.py
-    python illustrate_spia_projection.py --index-return all
-    python illustrate_spia_projection.py --interactive
+    python illustrate_pricing_projection.py
+    python illustrate_pricing_projection.py --index-return all
+    python illustrate_pricing_projection.py --interactive
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.widgets import RadioButtons
 
-from spia_projection import (
+from pricing_projection import (
     DEFAULT_SP500_SCENARIO_CSV,
     ExpenseAssumptions,
     MortalityTableRP2014MP2016,
@@ -158,7 +158,7 @@ def main() -> None:
         plt.ylabel("P(alive at payment)")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig(f"{out_dir}/spia_survival_vs_age.png", dpi=160)
+        plt.savefig(f"{out_dir}/pricing_spia_survival_vs_age.png", dpi=160)
         plt.close()
 
         plt.figure(figsize=(9, 5))
@@ -168,7 +168,7 @@ def main() -> None:
         plt.ylabel("Expected Present Value ($)")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig(f"{out_dir}/spia_expected_pv_contribution_vs_age.png", dpi=160)
+        plt.savefig(f"{out_dir}/pricing_spia_expected_pv_contribution_vs_age.png", dpi=160)
         plt.close()
 
         plt.figure(figsize=(9, 5))
@@ -178,7 +178,7 @@ def main() -> None:
         plt.ylabel("Cumulative Present Value ($)")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig(f"{out_dir}/spia_cumulative_pv_vs_age.png", dpi=160)
+        plt.savefig(f"{out_dir}/pricing_spia_cumulative_pv_vs_age.png", dpi=160)
         plt.close()
 
         plt.figure(figsize=(9, 5))
@@ -188,7 +188,7 @@ def main() -> None:
         plt.ylabel("Expected Benefit Payment ($)")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig(f"{out_dir}/spia_expected_benefit_cashflows_vs_age.png", dpi=160)
+        plt.savefig(f"{out_dir}/pricing_spia_expected_benefit_cashflows_vs_age.png", dpi=160)
         plt.close()
 
         plt.figure(figsize=(9, 5))
@@ -198,7 +198,7 @@ def main() -> None:
         plt.ylabel("Expected Expense Payment ($)")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig(f"{out_dir}/spia_expected_expense_cashflows_vs_age.png", dpi=160)
+        plt.savefig(f"{out_dir}/pricing_spia_expected_expense_cashflows_vs_age.png", dpi=160)
         plt.close()
 
         plt.figure(figsize=(9, 5))
@@ -208,7 +208,7 @@ def main() -> None:
         plt.ylabel("Economic Reserve ($, PV at valuation time)")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig(f"{out_dir}/spia_economic_reserve_vs_age.png", dpi=160)
+        plt.savefig(f"{out_dir}/pricing_spia_economic_reserve_vs_age.png", dpi=160)
         plt.close()
 
     save_core_plots()
@@ -235,7 +235,7 @@ def main() -> None:
             fig, ax = plt.subplots(figsize=(9, 5))
             _plot_return_panel(ax, ages_pay, res, m)
             plt.tight_layout()
-            plt.savefig(f"{out_dir}/spia_index_return_{m}.png", dpi=160)
+            plt.savefig(f"{out_dir}/pricing_spia_index_return_{m}.png", dpi=160)
             plt.close()
 
     print("SPIA illustration (policy):")

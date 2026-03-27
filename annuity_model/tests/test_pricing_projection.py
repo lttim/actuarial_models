@@ -1,4 +1,4 @@
-"""Unit tests for spia_projection (SPIA pricing scaffold)."""
+"""Unit tests for pricing_projection (SPIA pricing scaffold)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import spia_projection as sp
+import pricing_projection as sp
 
 
 # --- Monte Carlo first principles ---

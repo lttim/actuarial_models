@@ -3,12 +3,20 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import spia_projection as sp
-from build_spia_excel_workbook import excel_spec_from_launcher
-from product_registry import ProductType, get_product_adapter
+import pricing_projection as sp
+import term_projection as tp
+from build_pricing_excel_workbook import excel_spec_from_launcher
+from product_registry import (
+    ProductType,
+    get_mortality_mode_label,
+    get_pricing_metrics,
+    get_product_adapter,
+    get_product_ui_config,
+    get_term_contract_ui_config,
+)
 
 
-pytestmark = [pytest.mark.product_spia]
+pytestmark = [pytest.mark.product_spia, pytest.mark.product_term]
 
 
 def _setup_case() -> tuple[sp.SPIAContract, sp.YieldCurve, sp.MortalityTableQx, sp.ExpenseAssumptions]:
@@ -147,3 +155,133 @@ def test_unimplemented_product_types_raise():
         get_product_adapter(ProductType.WHOLE_LIFE)
     with pytest.raises(NotImplementedError):
         get_product_adapter(ProductType.VARIABLE_ANNUITY)
+
+
+def test_term_adapter_price_and_dispatch():
+    contract, yc, mort, ex = _setup_case()
+    term_contract = tp.TermLifeContract(
+        issue_age=contract.issue_age,
+        sex=contract.sex,
+        death_benefit=250_000.0,
+        monthly_premium=250.0,
+        term_years=20,
+    )
+    adapter = get_product_adapter(ProductType.TERM_LIFE)
+    res = adapter.price(
+        contract=term_contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=95,
+        spread=0.0,
+        valuation_year=None,
+        expenses=ex,
+        expenses_csv_path=sp.DEFAULT_EXPENSES_CSV,
+        index_scenario_csv_path=None,
+        expense_annual_inflation=0.0,
+    )
+    direct = tp.price_term_life_level_monthly(
+        contract=term_contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=95,
+        spread=0.0,
+        valuation_year=None,
+    )
+    np.testing.assert_allclose(res.expected_total_cashflows, direct.expected_total_cashflows, rtol=0, atol=0)
+    assert float(res.pv_benefit) == pytest.approx(float(direct.pv_benefit), rel=0, abs=0)
+
+
+def test_term_adapter_monte_carlo_not_available():
+    contract, yc, mort, ex = _setup_case()
+    term_contract = tp.TermLifeContract(issue_age=contract.issue_age, sex=contract.sex, death_benefit=250_000.0)
+    adapter = get_product_adapter(ProductType.TERM_LIFE)
+    with pytest.raises(NotImplementedError):
+        adapter.price_monte_carlo(
+            contract=term_contract,
+            yield_curve=yc,
+            mortality=mort,
+            horizon_age=95,
+            spread=0.0,
+            valuation_year=None,
+            expenses=ex,
+            expenses_csv_path=sp.DEFAULT_EXPENSES_CSV,
+            expense_annual_inflation=0.0,
+            n_sims=100,
+            annual_drift=0.06,
+            annual_vol=0.15,
+            seed=42,
+            s0=100.0,
+        )
+
+
+def test_term_contract_ui_config_defaults():
+    cfg = get_term_contract_ui_config()
+    assert cfg.death_benefit_label == "Death benefit ($)"
+    assert cfg.default_death_benefit == pytest.approx(250_000.0, rel=0, abs=0)
+    assert cfg.term_length_options == ("20 years",)
+    assert cfg.premium_mode_options == ("Level monthly",)
+    assert cfg.benefit_timing_options == ("EOY death benefit",)
+    assert cfg.default_monthly_premium == pytest.approx(250.0, rel=0, abs=0)
+
+
+def test_mortality_mode_label_helper_has_expected_values():
+    assert get_mortality_mode_label("synthetic") == "Synthetic (demo, wide age range)"
+    assert get_mortality_mode_label("us_ssa_2015_period").startswith("US SSA 2015 period life table")
+    assert get_mortality_mode_label("unknown_mode_key") == "unknown_mode_key"
+
+
+def test_pricing_metrics_for_spia_product():
+    contract, yc, mort, ex = _setup_case()
+    res = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        spread=0.0,
+        valuation_year=None,
+        expenses=ex,
+        index_scenario_csv_path=None,
+        expense_annual_inflation=0.0,
+    )
+    metrics = get_pricing_metrics(ProductType.SPIA, res)
+    assert tuple(m.label for m in metrics) == ("Single premium", "PV benefit", "PV monthly expenses", "Annuity factor")
+    assert tuple(m.is_money for m in metrics) == (True, True, True, False)
+    assert metrics[0].value == pytest.approx(float(res.single_premium), rel=0, abs=0)
+
+
+def test_pricing_metrics_for_term_product():
+    contract, yc, mort, _ = _setup_case()
+    term_contract = tp.TermLifeContract(
+        issue_age=contract.issue_age,
+        sex=contract.sex,
+        death_benefit=250_000.0,
+        monthly_premium=250.0,
+        term_years=20,
+    )
+    res = tp.price_term_life_level_monthly(
+        contract=term_contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=95,
+        spread=0.0,
+        valuation_year=None,
+    )
+    metrics = get_pricing_metrics(ProductType.TERM_LIFE, res)
+    assert tuple(m.label for m in metrics) == (
+        "PV claims",
+        "PV premiums",
+        "Net PV (claims - premiums)",
+        "Issue reserve",
+    )
+    assert all(m.is_money for m in metrics)
+    assert metrics[0].value == pytest.approx(float(res.pv_benefit), rel=0, abs=0)
+    assert metrics[1].value == pytest.approx(float(-res.pv_monthly_expenses), rel=0, abs=0)
+
+
+def test_product_ui_config_export_filenames():
+    spia_ui_cfg = get_product_ui_config(ProductType.SPIA)
+    term_ui_cfg = get_product_ui_config(ProductType.TERM_LIFE)
+    assert spia_ui_cfg.projection_csv_filename == "pricing_projection_spia.csv"
+    assert term_ui_cfg.projection_csv_filename == "pricing_projection_term_life.csv"
+    assert spia_ui_cfg.recalc_workbook_filename == "pricing_recalc_model.xlsx"
+    assert term_ui_cfg.recalc_workbook_filename == "pricing_recalc_model.xlsx"
