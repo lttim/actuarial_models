@@ -2,58 +2,57 @@
 
 - Branch: `main` (ahead of `origin/main`; push when ready).
 - Workspace: `annuity_model`
-- Latest completed commit: `41e3251` — Term Excel workbook: formula TermProjection + curve/qx sheets (+ product-specific recalc download filenames).
-- Prior related commits: `3d89cae` (handoff state refresh), `685a78f` (ALM pricing dispatch; SPIA-neutral Excel copy), `f266f24` / `22bac2c` (Term what-if / monthly premium defaults).
-- Working tree: clean; `model output/` (generated xlsx) remains untracked.
+- Latest completed commit (code): `acfa999` — Excel recalc parity: SPIA strips Dashboard/Runbook; Term aligns with SPIA naming (`Liabilities`, `YieldCurve`, `MonthlyCurve`) + optional ALM in download; shared `recalc_excel_shared.py`. Tip of `main` includes a follow-up commit refreshing this `state.md`.
+- Prior related commits: `41e3251` (Term TermProjection + filenames), `3d89cae` (handoff), `685a78f` (ALM dispatch / SPIA-neutral copy).
+- Working tree: clean after commit; `model output/` (generated xlsx) remains untracked.
 
 # Key Logic Implemented
 
+## Shared recalc conventions (`recalc_excel_shared.py`)
+
+- Canonical sheet names and helpers for **YieldCurve** (nodes table) and **MonthlyCurve** (log-linear DF components matching `YieldCurve.discount_factors`).
+- SPIA `build_pricing_excel_workbook` delegates monthly-curve formulas here; intended extension point for future products.
+
+## SPIA Excel recalculation workbook (`build_pricing_excel_workbook.py`)
+
+- **No** `Dashboard` or `Python_Runbook` tabs.
+- ALM projection writer takes `n_months` + `y_last_row` (reusable from Term).
+- **ModelCheck**: optional `pricing_rows`, `sheet_title`, `subtitle` for product-specific metrics.
+
 ## Term Excel recalculation workbook (`build_term_excel_workbook.py`)
 
-- **TermProjection** is formula-driven from **Inputs** (issue age, DB, premium, term, horizon, spread), **ZeroCurve** (log-linear $\ln(\mathrm{DF})$ interpolation + endpoint extrapolation matching `YieldCurve.discount_factors`), and **QxTable** (`MortalityTableQx`) or **MortalMonthly** (RP2014+MP: per-month $q_x$ exported; survival chain still formula).
-- **ModelCheck** aggregates columns **F / I / J** (claims, discount, PV net). Full Excel **CalculateFull** shows differences ~0 vs Python snapshot at export.
-- Per-product download names in `product_registry.py` (e.g. `spia_recalc_model.xlsx`, `term_life_recalc_model.xlsx`).
+- **Liabilities** sheet (replaces `TermProjection`): discount from **MonthlyCurve**; summary **X4–X9** aligned with SPIA-style checks; **C / O / S** columns satisfy ALM ladder (`ExpTotalCF`, discount).
+- **YieldCurve** + **MonthlyCurve** (not inline DF); **Inputs** uses **B6** payments/year and **B9** spread (matches `ALM_Engine`).
+- Optional **ALM_Engine** / **ALM_Projection** / field guide when snapshot + assumptions passed (via `product_excel.build_product_workbook`).
+- **ModelCheck**: five Term rows (claims, premiums, net, APV, annuity-style factor) + optional ALM block.
 
-## Term what-if and product-aware UI (`pricing_ui.py`)
+## Product router (`product_excel.py`)
 
-- What-if branches by `pricing_product_type`: Term uses `compute_what_if_term_shocked_pricing` / `tp.price_term_life_level_monthly`; SPIA unchanged (index regime + MC + ALM overlay).
-- Regression: Term no longer hits SPIA pricer with mismatched `index_levels_payment` shape (e.g. 240 vs 540 months).
-- ALM “single MC path” repricing gated in `build_alm_pricing_for_mc_scenario` (SPIA + `SPIAContract` only).
-- Diagnostics JSON: Term what-if export allowed without MC tail blocks when product is Term.
-- Term what-if tolerates missing `expenses` in context (zero stub).
+- Term path forwards `alm_snapshot` and `alm_assumptions` like SPIA.
 
-## Engine: unified ALM entrypoint (`pricing_projection.py`)
+## Streamlit (`pricing_ui.py`)
 
-- `run_alm_projection_from_pricing_result(...)` dispatches SPIA vs Term (`lazy import term_projection` to avoid import cycle).
-- Streamlit `_run_alm_from_session_pricing` delegates here.
-
-## Excel / tooling copy
-
-- `alm_excel_ladder.py`: field-guide strings say “liability” instead of “SPIA” where the grid is product-agnostic.
-- `test_dashboard.py`: titles use “Model unit tests” (not SPIA-only).
+- Download help text no longer mentions Dashboard ALM charts.
 
 ## Tests
 
-- `tests/parity/test_term_parity.py` — Term workbook formula wiring + ModelCheck snapshot vs Python PV totals.
-- `tests/test_product_registry.py` — product-specific `recalc_workbook_filename` expectations.
-- `tests/test_pricing_ui_what_if_term.py` — Term what-if + ALM MC skip for Term.
-- `tests/test_pricing_projection.py` — `test_run_alm_projection_from_pricing_result_dispatches_spia_and_term`.
+- `tests/parity/test_term_parity.py` — Liabilities wiring, ModelCheck vs Python, ALM sheets when snapshot passed.
+- `tests/test_excel_workbook.py` — asserts no Dashboard/Python_Runbook; ALM + ModelCheck smoke (renamed test).
 
 ## Parity / invariants
 
-- SPIA ALM ladder / disinvestment parity unchanged by Term Excel export work.
-- Term workbook is separate builder from SPIA (`product_excel.build_product_workbook`).
+- SPIA ALM ladder / disinvestment parity unchanged (same formulas; tabs removed only).
+- Term workbook still separate builder; ALM uses same ladder code paths when embedded.
 
 # Validation Completed
 
-- `python -m pytest tests/parity/ -v` — 18 passed.
-- `python -m pytest tests/ -v` — 107 passed.
-- Optional: Excel COM **CalculateFull** on `model output/term_life_recalc_model.xlsx` — ModelCheck column D ~0 (needs `pywin32`).
+- `python -m pytest tests/parity/ -v` — 19 passed.
+- `python -m pytest tests/ -v` — 108 passed.
 
 # Immediate Next Steps
 
 - Push `main` when ready.
-- If extending Term horizon beyond exported **MortalMonthly** rows for RP/MP runs, re-download workbook from Streamlit.
+- Re-download Term/SPIA recalc xlsx from Streamlit after UI runs if you rely on embedded ALM caches.
 
 # Unresolved Bugs / Pending Calculations
 
