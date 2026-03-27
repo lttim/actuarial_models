@@ -824,53 +824,48 @@ def _result_dataframe(res: sp.SPIAProjectionResult, contract: sp.SPIAContract) -
 
 
 def _render_pricing_run_charts(
-    res: sp.SPIAProjectionResult, contract: sp.SPIAContract, expenses: sp.ExpenseAssumptions | None
+    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
+    contract: sp.SPIAContract | tp.TermLifeContract,
+    expenses: sp.ExpenseAssumptions | None,
+    product_type: ProductType,
 ) -> None:
     expected_payment_pv = res.expected_benefit_cashflows * res.discount_factors
+    cumulative_expected_payment_pv = np.cumsum(expected_payment_pv)
     ages_r = contract.issue_age + res.reserve_times_years
 
     st.subheader("Run charts")
-    st.markdown("**PV benefits**")
-    st.line_chart(pd.DataFrame({"age": res.ages_at_payment, "pv_benefits": np.rint(expected_payment_pv)}).set_index("age"))
+    st.markdown("**Cumulative PV benefits**")
+    st.line_chart(
+        pd.DataFrame(
+            {
+                "age": res.ages_at_payment,
+                "cumulative_pv_benefits": np.rint(cumulative_expected_payment_pv),
+            }
+        ).set_index("age")
+    )
 
     st.markdown("**Economic reserve** (benefit + monthly expense, PV roll-forward)")
     st.line_chart(pd.DataFrame({"age": ages_r, "reserve": np.rint(res.economic_reserve)}).set_index("age"))
 
-    if isinstance(expenses, sp.ExpenseAssumptions):
-        _render_profit_decomposition_chart(res, contract, expenses)
-    else:
+    if product_type == ProductType.SPIA and not isinstance(expenses, sp.ExpenseAssumptions):
         st.warning("Profit decomposition unavailable: pricing expense assumptions were not found in session state.")
+    else:
+        _render_profit_decomposition_chart(res, contract, expenses=expenses, product_type=product_type)
 
 
 def _render_profit_decomposition_chart(
-    res: sp.SPIAProjectionResult, contract: sp.SPIAContract, expenses: sp.ExpenseAssumptions
+    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
+    contract: sp.SPIAContract | tp.TermLifeContract,
+    expenses: sp.ExpenseAssumptions | None,
+    product_type: ProductType,
 ) -> None:
     st.subheader("Profit decomposition waterfall")
-
-    b_month = float(contract.benefit_annual) / 12.0
-    n_months = int(res.months.size)
-
-    level_benefit_certain_undisc = float(b_month * n_months)
-    level_benefit_mort_undisc = float(np.sum(b_month * res.survival_to_payment))
-    level_benefit_mort_disc = float(np.sum(b_month * res.survival_to_payment * res.discount_factors))
-
-    mortality_effect = level_benefit_mort_undisc - level_benefit_certain_undisc
-    discounting_effect = level_benefit_mort_disc - level_benefit_mort_undisc
-    indexation_option_cost = float(res.pv_benefit - level_benefit_mort_disc)
-    expense_component = float(expenses.policy_expense_dollars) + float(res.pv_monthly_expenses)
-    margin_component = float(
-        res.single_premium - (res.pv_benefit + res.pv_monthly_expenses + float(expenses.policy_expense_dollars))
+    rows, caption = _build_profit_decomposition_rows(
+        res=res,
+        contract=contract,
+        expenses=expenses,
+        product_type=product_type,
     )
-
-    rows = [
-        ("Undiscounted level benefits (certain life)", level_benefit_certain_undisc, True),
-        ("Mortality effect", mortality_effect, False),
-        ("Discounting effect", discounting_effect, False),
-        ("Indexation option cost", indexation_option_cost, False),
-        ("Expenses (issue + monthly PV)", expense_component, False),
-        ("Margin / premium load", margin_component, False),
-        ("Single premium", float(res.single_premium), True),
-    ]
 
     wf_rows = []
     running = 0.0
@@ -904,13 +899,75 @@ def _render_profit_decomposition_chart(
         hide_index=True,
         column_config=_number_cols_no_decimals(table_display),
     )
-    st.caption(
-        "Interpretation: start from a high baseline that assumes level benefits are paid with certainty and "
-        "without discounting. Mortality and discounting usually reduce that baseline because some future payments "
-        "are not expected to occur and all future cashflows are worth less today. Indexation adds value back when "
-        "projected indexed benefits exceed level benefits, while expenses and premium load/margin increase required "
-        "premium further. The final total equals the modeled single premium."
+    st.caption(caption)
+
+
+def _build_profit_decomposition_rows(
+    *,
+    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
+    contract: sp.SPIAContract | tp.TermLifeContract,
+    expenses: sp.ExpenseAssumptions | None,
+    product_type: ProductType,
+) -> tuple[list[tuple[str, float, bool]], str]:
+    if product_type == ProductType.TERM_LIFE:
+        undiscounted_expected_claims = float(np.sum(res.expected_benefit_cashflows))
+        discounting_effect = float(res.pv_benefit - undiscounted_expected_claims)
+        pv_premiums = float(-float(res.pv_monthly_expenses))
+        rows = [
+            ("Undiscounted expected claims", undiscounted_expected_claims, True),
+            ("Discounting effect", discounting_effect, False),
+            ("Policyholder premium PV (funding)", -pv_premiums, False),
+            ("Net PV (claims - premiums)", float(res.single_premium), True),
+        ]
+        caption = (
+            "Interpretation: this view starts from undiscounted expected claims, applies discounting to get "
+            "PV claims, then subtracts PV policyholder premiums to arrive at net PV."
+        )
+        return rows, caption
+
+    if product_type == ProductType.SPIA and isinstance(contract, sp.SPIAContract):
+        b_month = float(contract.benefit_annual) / 12.0
+        n_months = int(res.months.size)
+        level_benefit_certain_undisc = float(b_month * n_months)
+        level_benefit_mort_undisc = float(np.sum(b_month * res.survival_to_payment))
+        level_benefit_mort_disc = float(np.sum(b_month * res.survival_to_payment * res.discount_factors))
+
+        mortality_effect = level_benefit_mort_undisc - level_benefit_certain_undisc
+        discounting_effect = level_benefit_mort_disc - level_benefit_mort_undisc
+        benefit_design_effect = float(res.pv_benefit - level_benefit_mort_disc)
+        issue_expense = float(expenses.policy_expense_dollars) if isinstance(expenses, sp.ExpenseAssumptions) else 0.0
+        expense_component = issue_expense + float(res.pv_monthly_expenses)
+        margin_component = float(res.single_premium - (res.pv_benefit + res.pv_monthly_expenses + issue_expense))
+        rows = [
+            ("Undiscounted level benefits (certain life)", level_benefit_certain_undisc, True),
+            ("Mortality effect", mortality_effect, False),
+            ("Discounting effect", discounting_effect, False),
+            ("Benefit design effect (e.g., indexation)", benefit_design_effect, False),
+            ("Expenses (issue + monthly PV)", expense_component, False),
+            ("Margin / premium load", margin_component, False),
+            ("Single premium", float(res.single_premium), True),
+        ]
+        caption = (
+            "Interpretation: start from level benefits paid with certainty and no discounting, then layer in "
+            "mortality, discounting, product design effects (such as indexation), expenses, and premium load/margin "
+            "to reconcile to modeled single premium."
+        )
+        return rows, caption
+
+    # Generic fallback for future products where detailed decomposition may differ.
+    issue_expense = float(expenses.policy_expense_dollars) if isinstance(expenses, sp.ExpenseAssumptions) else 0.0
+    monthly_component = float(res.pv_monthly_expenses)
+    rows = [
+        ("PV benefits", float(res.pv_benefit), True),
+        ("PV monthly cashflow component", monthly_component, False),
+        ("Issue expense", issue_expense, False),
+        ("Modeled net premium / value", float(res.single_premium), True),
+    ]
+    caption = (
+        "Interpretation: generic product-level decomposition showing the core PV building blocks. "
+        "Product-specific decomposition should replace this as each product is implemented."
     )
+    return rows, caption
 
 
 def _shock_yield_curve(curve: sp.YieldCurve, rate_shift_bps: float) -> sp.YieldCurve:
@@ -2143,7 +2200,7 @@ def _render_run_and_results() -> None:
             st.caption("Excel download moved to the Excel Replicator section.")
         ctx = st.session_state.get("pricing_excel_context") or {}
         expenses = ctx.get("expenses")
-        _render_pricing_run_charts(res, contract_state, expenses)
+        _render_pricing_run_charts(res, contract_state, expenses, product_type=product_type)
 
 
 def _read_workbook_cell_float(ws: Any, coord: str) -> float | None:
