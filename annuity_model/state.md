@@ -1,60 +1,52 @@
 # Current Working State
 
-- Branch: `main` (ahead of `origin/main` with local commits from this chat).
+- Branch: `main` (ahead of `origin/main`; push when ready).
 - Workspace: `annuity_model`
-- Latest commits from this chat:
-  - `8bd1c52` — moved results charts into `Pricing Run`, removed separate `Charts` page, updated `state.md`.
-  - `7493216` — fixed `run_m_mode` Streamlit widget state conflict warning.
+- Latest completed commit: `685a78f` — Centralize ALM pricing dispatch; neutralize SPIA-only Excel copy.
+- Prior related commits: `f266f24` (Term what-if / ALM UI routing + `tests/test_pricing_ui_what_if_term.py`), `22bac2c` (Term monthly premium default when missing).
+- Working tree: clean after handoff commit (this file).
 
 # Key Logic Implemented
 
-## Python Architecture Decisions
+## Term what-if and product-aware UI (`pricing_ui.py`)
 
-- Consolidated run-result visualization directly into `_render_run_and_results()` via `_render_pricing_run_charts()`.
-- Removed chart-specific navigation architecture:
-  - deleted `"charts"` from section labels/order
-  - removed `_render_charts_section()`
-  - removed `main()` route branch for `page == "charts"`
-- Kept profit decomposition renderer as shared logic, now invoked from the run page flow.
-- Removed mortality radio default-index pattern that conflicted with Session State:
-  - `st.radio(..., key="run_m_mode")` now relies on normalized session value only
-  - explicit `index=...` computation was removed to eliminate Streamlit warning.
-- Updated run chart for benefits:
-  - replaced point-in-time `PV benefits` chart with **Cumulative PV benefits** (`np.cumsum(expected_benefit_cashflows * discount_factors)`).
-- Refactored profit decomposition into product-aware logic via `_build_profit_decomposition_rows(...)`:
-  - `TERM_LIFE`: decomposition now uses claims/premium economics only (undiscounted expected claims, discounting effect, policyholder premium PV funding, net PV).
-  - `SPIA`: retained mortality/discounting decomposition but renamed indexation line to a broader **Benefit design effect (e.g., indexation)**.
-  - fallback path added for future products (Whole Life / Variable Annuity scaffolds) to avoid misleading SPIA-specific labels.
+- What-if branches by `pricing_product_type`: Term uses `compute_what_if_term_shocked_pricing` / `tp.price_term_life_level_monthly`; SPIA unchanged (index regime + MC + ALM overlay).
+- Regression: Term no longer hits SPIA pricer with mismatched `index_levels_payment` shape (e.g. 240 vs 540 months).
+- ALM “single MC path” repricing gated in `build_alm_pricing_for_mc_scenario` (SPIA + `SPIAContract` only).
+- Diagnostics JSON: Term what-if export allowed without MC tail blocks when product is Term.
+- Term what-if tolerates missing `expenses` in context (zero stub).
 
-## Data Structures and UI Mapping
+## Engine: unified ALM entrypoint (`pricing_projection.py`)
 
-- `st.session_state` remains the source of truth for run inputs and selected modes.
-- Charts still require successful run outputs (`pricing_res`, `pricing_contract`) before rendering.
-- Existing use of `pandas.DataFrame` for chart feed tables and run output display remains unchanged.
-- Expense assumptions continue to come from `st.session_state["pricing_excel_context"]["expenses"]` when available.
+- `run_alm_projection_from_pricing_result(...)` dispatches SPIA vs Term (`lazy import term_projection` to avoid import cycle).
+- Streamlit `_run_alm_from_session_pricing` delegates here.
 
-## Actuarial Modeling Assumptions Finalized
+## Excel / tooling copy
 
-- No actuarial engine formula changes were made.
-- No changes to disinvestment/reinvestment ordering, epsilon tie-break policy, or parity tolerances.
-- Prior decision captured for Term Life UX: default monthly premium should be backsolved at issue under current assumptions.
+- `alm_excel_ladder.py`: field-guide strings say “liability” instead of “SPIA” where the grid is product-agnostic.
+- `test_dashboard.py`: titles use “Model unit tests” (not SPIA-only).
+
+## Tests
+
+- `tests/test_pricing_ui_what_if_term.py` — Term what-if + ALM MC skip for Term.
+- `tests/test_pricing_projection.py` — `test_run_alm_projection_from_pricing_result_dispatches_spia_and_term`.
+
+## Parity / invariants
+
+- No changes to disinvestment epsilon, tie-break, or Excel formula generators in this thread.
+- Python-vs-Excel parity for ALM/Term workbooks unchanged by these edits.
+
+# Validation Completed
+
+- `python -m pytest tests/parity/ -v` — 18 passed.
+- `python -m pytest tests/ -v` — 107 passed.
 
 # Immediate Next Steps
 
-- Manual UI sanity check:
-  1. confirm no `run_m_mode` default-vs-session warning appears
-  2. confirm charts appear under `Pricing Run` only after a successful run
-  3. confirm `Charts` sidebar section is absent
-  4. confirm Term waterfall does not show SPIA-only language (e.g., indexation option cost).
-- Run full test gates before release/push:
-  - `pytest tests/parity/ -v`
-  - `pytest tests/ -v`
+- Push `main` (multiple commits ahead of `origin`) and open PR if desired.
+- Quick manual checks: Term pricing run → What-if tab (no shape error); SPIA What-if identity at baseline dials; optional ALM run for Term vs SPIA.
 
 # Unresolved Bugs / Pending Calculations
 
-- No confirmed failing tests in this chat (tests not re-run after the final widget fix commit).
-- Added regression tests in `tests/test_pricing_ui_profit_decomposition.py` for:
-  - Term decomposition label hygiene (no indexation language)
-  - Term decomposition reconciliation to net PV
-  - SPIA decomposition labeling using product design effect wording.
-- No known parity discrepancies introduced by the UI/session-state changes, but parity gates should still be rerun per repo rules.
+- No known failing tests.
+- Optional: document `run_alm_projection_from_pricing_result` in `AGENTS.md` / parity checklist (not done here).
