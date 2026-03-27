@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 import pricing_projection as sp
+import term_projection as tp
 
 
 # --- Monte Carlo first principles ---
@@ -804,6 +805,66 @@ def test_run_alm_projection_smoke_matches_horizon():
         liability_cashflows=cf2,
     )
     assert alm2.liability_pv[0] > alm.liability_pv[0]
+
+
+def test_run_alm_projection_from_pricing_result_dispatches_spia_and_term():
+    """Unified ALM entrypoint: SPIA matches legacy wrapper; Term uses term liability path."""
+    asm = sp.ALMAssumptions(
+        allocation=sp.alm_default_allocation_spec(),
+        rebalance_band=0.10,
+        rebalance_frequency_months=1,
+        reinvest_rule="hold_cash",
+        disinvest_rule="shortest_first",
+        rebalance_policy="liquidity_only",
+        liquidity_near_liquid_years=0.25,
+    )
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.full_like(ages, 0.01, dtype=float)
+    mort = sp.MortalityTableQx(ages, qx)
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    term_contract = tp.TermLifeContract(
+        issue_age=45, sex="male", death_benefit=250_000.0, monthly_premium=250.0, term_years=20
+    )
+    term_res = tp.price_term_life_level_monthly(
+        contract=term_contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=90,
+        spread=0.0,
+        valuation_year=None,
+    )
+    alm_term = sp.run_alm_projection_from_pricing_result(
+        pricing=term_res,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=asm,
+        initial_asset_market_value=500_000.0,
+    )
+    assert alm_term.surplus.shape == term_res.expected_total_cashflows.shape
+
+    contract, yc2, mort2, ex = _mc_contract_and_setup()
+    spia_res = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=yc2,
+        mortality=mort2,
+        horizon_age=75,
+        spread=0.0,
+        expenses=ex,
+        expense_annual_inflation=0.0,
+    )
+    alm_u = sp.run_alm_projection_from_pricing_result(
+        pricing=spia_res, yield_curve=yc2, spread=0.0, assumptions=asm
+    )
+    alm_direct = sp.run_alm_projection(pricing=spia_res, yield_curve=yc2, spread=0.0, assumptions=asm)
+    np.testing.assert_allclose(alm_u.surplus, alm_direct.surplus, rtol=0.0, atol=1e-9)
+
+    with pytest.raises(TypeError, match="pricing must be"):
+        sp.run_alm_projection_from_pricing_result(
+            pricing={"invalid": 1},
+            yield_curve=yc2,
+            spread=0.0,
+            assumptions=asm,
+        )
 
 
 def test_alm_pro_rata_refills_matured_slots_cash_near_target():

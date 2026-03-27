@@ -33,7 +33,7 @@ Important:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Literal, Optional, Sequence, Tuple
+from typing import Any, Callable, Literal, Optional, Sequence, Tuple
 
 ALMReinvestRule = Literal["hold_cash", "pro_rata"]
 ALMDisinvestRule = Literal["shortest_first", "pro_rata"]
@@ -2056,6 +2056,55 @@ def run_alm_projection(
         asset_curve=asset_curve,
         liability_curve=liability_curve,
         liability_cashflows=liability_cashflows,
+    )
+
+
+def run_alm_projection_from_pricing_result(
+    *,
+    pricing: SPIAProjectionResult | Any,
+    yield_curve: YieldCurve,
+    spread: float,
+    assumptions: ALMAssumptions,
+    initial_asset_market_value: float | None = None,
+    asset_curve: YieldCurve | None = None,
+    liability_curve: YieldCurve | None = None,
+    liability_cashflows: np.ndarray | None = None,
+) -> ALMResult:
+    """
+    Run ALM on a priced liability: SPIA projection result or Term life projection result.
+
+    Uses the shared monthly liability-path engine. Import of ``term_projection`` is deferred
+    to avoid a module import cycle (``term_projection`` imports this module).
+    """
+    import term_projection as tp
+
+    if isinstance(pricing, tp.TermLifeProjectionResult):
+        if initial_asset_market_value is None:
+            initial_asset_market_value = float(pricing.single_premium)
+        return run_alm_projection_from_liability_path(
+            liability_path=tp.liability_path_from_term_projection(pricing),
+            yield_curve=yield_curve,
+            spread=spread,
+            assumptions=assumptions,
+            initial_asset_market_value=float(initial_asset_market_value),
+            asset_curve=asset_curve,
+            liability_curve=liability_curve,
+            liability_cashflows=liability_cashflows,
+        )
+    if isinstance(pricing, SPIAProjectionResult):
+        return run_alm_projection(
+            pricing=pricing,
+            yield_curve=yield_curve,
+            spread=spread,
+            assumptions=assumptions,
+            initial_asset_market_value=initial_asset_market_value,
+            asset_curve=asset_curve,
+            liability_curve=liability_curve,
+            liability_cashflows=liability_cashflows,
+        )
+    raise TypeError(
+        "pricing must be a SPIAProjectionResult or term_projection.TermLifeProjectionResult; "
+        f"got {type(pricing).__name__!r}."
     )
 
 

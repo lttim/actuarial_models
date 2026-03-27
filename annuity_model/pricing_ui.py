@@ -1190,17 +1190,7 @@ def _run_alm_from_session_pricing(
     asset_curve: sp.YieldCurve | None = None,
     liability_cashflows: np.ndarray | None = None,
 ) -> sp.ALMResult:
-    if isinstance(pricing, tp.TermLifeProjectionResult):
-        return sp.run_alm_projection_from_liability_path(
-            liability_path=tp.liability_path_from_term_projection(pricing),
-            yield_curve=yield_curve,
-            spread=spread,
-            assumptions=assumptions,
-            initial_asset_market_value=float(initial_asset_market_value),
-            asset_curve=asset_curve,
-            liability_cashflows=liability_cashflows,
-        )
-    return sp.run_alm_projection(
+    return sp.run_alm_projection_from_pricing_result(
         pricing=pricing,
         yield_curve=yield_curve,
         spread=spread,

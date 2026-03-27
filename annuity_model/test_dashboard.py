@@ -164,7 +164,7 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
     When embedded=True, sidebar controls are inlined so a parent app can own the sidebar.
     """
     if not embedded:
-        st.title("SPIA unit test dashboard")
+        st.title("Model unit test dashboard")
         st.caption(
             "Each row is one automated check of `pricing_projection.py`. "
             "Descriptions are taken from the test’s docstring in `tests/test_pricing_projection.py`."
@@ -259,7 +259,7 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="SPIA unit tests", layout="wide")
+    st.set_page_config(page_title="Model unit tests", layout="wide")
     render_unit_tests_page(embedded=False)
 
 

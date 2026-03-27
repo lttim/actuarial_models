@@ -117,7 +117,7 @@ def write_alm_engine_sheet(
         ws["A6"], ws["B6"] = ("Δt note", "(use dt_y col; B6 unused)")
     else:
         ws["A2"] = (
-            f"Monthly rows; **B6** = Δt (yr); **cf** = SPIA outflow for that month ({sh} col ExpTotalCF). "
+            f"Monthly rows; **B6** = Δt (yr); **cf** = liability outflow for that month ({sh} col ExpTotalCF). "
             "Collapse column groups for ladder detail. liquidity_only."
         )
         ws["A6"], ws["B6"] = "Δt (years)", 1.0 / 12.0
@@ -215,14 +215,14 @@ def write_alm_engine_sheet(
         )
         take1(
             "cf",
-            f"SPIA outflows in period ($, {sh})",
-            f"Sum of expected benefit plus expense cash outflows from **{sh}** column ExpTotalCF for all months in the period.",
+            f"Liability outflows in period ($, {sh})",
+            f"Sum of expected total cash outflows from **{sh}** column ExpTotalCF for all months in the period.",
         )
     else:
         take1(
             "cf",
-            f"SPIA outflow, $ ({sh} ExpTotalCF)",
-            f"Expected SPIA benefit plus expense cash outflow for the month from **{sh}** column ExpTotalCF (same as column S).",
+            f"Liability outflow, $ ({sh} ExpTotalCF)",
+            f"Expected monthly liability cash outflow from **{sh}** column ExpTotalCF (same as column S).",
         )
     take1(
         "d_acc",
@@ -343,13 +343,13 @@ def write_alm_engine_sheet(
     )
     take1(
         "cash_cf",
-        "Cash net of SPIA outflow ($)",
+        "Cash net of liability outflow ($)",
         "Cash after reinvestment minus this row's liability cash outflow.",
     )
     take1(
         "need_raw",
         "Liquidity need before policy ($)",
-        "Shortfall if SPIA outflow exceeds cash (before borrow-first or sell rules).",
+        "Shortfall if liability outflow exceeds cash (before borrow-first or sell rules).",
     )
     take1(
         "cash_bb",
@@ -499,7 +499,7 @@ def write_alm_engine_sheet(
     sec = ws.cell(row=engine_section_row, column=1)
     sec.value = (
         "Data grid (read left to right): accrue borrowing → roll tenors / maturities → repay debt → "
-        "mark bonds → rebalance toward targets → fund SPIA outflow → disinvest if needed → final borrow/repay → EOM. "
+        "mark bonds → rebalance toward targets → fund liability outflow → disinvest if needed → final borrow/repay → EOM. "
         "Bond 1…n = Treasury buckets. Use Excel outline (collapse ▶) to hide inner columns."
     )
     sec.font = Font(bold=True, size=11)
