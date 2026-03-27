@@ -65,6 +65,16 @@ def test_term_product_normalizes_non_positive_monthly_premium_to_default() -> No
     assert float(state["run_term_monthly_premium"]) == 250.0
 
 
+def test_term_product_sets_default_monthly_premium_when_missing() -> None:
+    state: dict[str, object] = {}
+    _normalize_run_state_for_selected_product(
+        state,
+        selected_product=ProductType.TERM_LIFE,
+        switched_product=True,
+    )
+    assert float(state["run_term_monthly_premium"]) == 250.0
+
+
 def test_invalid_basic_controls_are_normalized() -> None:
     state: dict[str, object] = {
         "run_sex": "unknown",

@@ -725,9 +725,13 @@ def _normalize_run_state_for_selected_product(
     # Term premium defaults can get seeded as 0.0 from prior SPIA runs.
     if selected_product == ProductType.TERM_LIFE:
         default_term_premium = float(get_term_contract_ui_config().default_monthly_premium)
-        current_term_premium = float(state.get("run_term_monthly_premium", default_term_premium))
-        if current_term_premium <= 0.0:
+        current_term_premium_raw = state.get("run_term_monthly_premium")
+        if current_term_premium_raw is None:
             state["run_term_monthly_premium"] = default_term_premium
+        else:
+            current_term_premium = float(current_term_premium_raw)
+            if current_term_premium <= 0.0:
+                state["run_term_monthly_premium"] = default_term_premium
 
 
 def _build_yield_curve(
