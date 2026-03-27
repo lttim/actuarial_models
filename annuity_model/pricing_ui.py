@@ -1777,18 +1777,11 @@ def _render_run_and_results() -> None:
         mortality_options = list(get_product_mortality_mode_options(selected_product))
         if st.session_state.get("run_m_mode") not in mortality_options:
             st.session_state["run_m_mode"] = get_product_default_mortality_mode(selected_product)
-        mortality_default_mode = get_product_default_mortality_mode(selected_product)
-        mortality_default_index = (
-            mortality_options.index(mortality_default_mode)
-            if mortality_default_mode in mortality_options
-            else 0
-        )
         m_mode = st.radio(
             "Table",
             options=mortality_options,
             format_func=lambda x: get_mortality_mode_label(str(x)),
             horizontal=True,
-            index=mortality_default_index,
             key="run_m_mode",
         )
         st.session_state.setdefault("run_qx_csv", sp.DEFAULT_MORTALITY_QX_CSV)
