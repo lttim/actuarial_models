@@ -22,9 +22,9 @@ def _launch() -> None:
     if str(app_dir) not in sys.path:
         sys.path.insert(0, str(app_dir))
 
-    import spia_ui
+    import pricing_ui
 
-    spia_ui.main()
+    pricing_ui.main()
 
 
 try:
