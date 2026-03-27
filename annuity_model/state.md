@@ -1,60 +1,39 @@
 # Current Working State
 
-- Branch: `main` (ahead of `origin/main`; push when ready).
+- Branch: `main` (synced with `origin/main` after publish; verify with `git status`).
 - Workspace: `annuity_model`
-- Latest completed commit (code): `acfa999` — Excel recalc parity: SPIA strips Dashboard/Runbook; Term aligns with SPIA naming (`Liabilities`, `YieldCurve`, `MonthlyCurve`) + optional ALM in download; shared `recalc_excel_shared.py`. Tip of `main` includes a follow-up commit refreshing this `state.md`.
-- Prior related commits: `41e3251` (Term TermProjection + filenames), `3d89cae` (handoff), `685a78f` (ALM dispatch / SPIA-neutral copy).
-- Working tree: clean after commit; `model output/` (generated xlsx) remains untracked.
+- Latest completed commit (code): see `git log -1 --oneline` — Streamlit Pricing Run: `pricing_run_form_state` (seed defaults + `run_number_input` + `ensure_session_choice`) fixes min-value first-paint bugs (Term premium, SPIA valuation year / RP-2014 context, other run numerics).
+- Prior related commits: Term premium UI seed (`e87e690` area); Excel recalc parity (`acfa999`); Term/SPIA workbook alignment.
 
 # Key Logic Implemented
 
-## Shared recalc conventions (`recalc_excel_shared.py`)
+## Streamlit Pricing Run (`pricing_ui.py` + `pricing_run_form_state.py`)
 
-- Canonical sheet names and helpers for **YieldCurve** (nodes table) and **MonthlyCurve** (log-linear DF components matching `YieldCurve.discount_factors`).
-- SPIA `build_pricing_excel_workbook` delegates monthly-curve formulas here; intended extension point for future products.
-
-## SPIA Excel recalculation workbook (`build_pricing_excel_workbook.py`)
-
-- **No** `Dashboard` or `Python_Runbook` tabs.
-- ALM projection writer takes `n_months` + `y_last_row` (reusable from Term).
-- **ModelCheck**: optional `pricing_rows`, `sheet_title`, `subtitle` for product-specific metrics.
-
-## Term Excel recalculation workbook (`build_term_excel_workbook.py`)
-
-- **Liabilities** sheet (replaces `TermProjection`): discount from **MonthlyCurve**; summary **X4–X9** aligned with SPIA-style checks; **C / O / S** columns satisfy ALM ladder (`ExpTotalCF`, discount).
-- **YieldCurve** + **MonthlyCurve** (not inline DF); **Inputs** uses **B6** payments/year and **B9** spread (matches `ALM_Engine`).
-- Optional **ALM_Engine** / **ALM_Projection** / field guide when snapshot + assumptions passed (via `product_excel.build_product_workbook`).
-- **ModelCheck**: five Term rows (claims, premiums, net, APV, annuity-style factor) + optional ALM block.
-
-## Product router (`product_excel.py`)
-
-- Term path forwards `alm_snapshot` and `alm_assumptions` like SPIA.
-
-## Streamlit (`pricing_ui.py`)
-
-- Download help text no longer mentions Dashboard ALM charts.
+- **Single source of truth** for initial `run_*` session keys: `build_run_form_seed_defaults` (extend when adding products/inputs).
+- **`run_number_input`**: always passes explicit `value=` so `st.number_input` does not default to `value="min"` → wrong UI before first run.
+- **`ensure_session_choice`**: before mortality / yield / expense radios when option sets are product-dependent.
+- Prior: SPIA Excel recalc strips Dashboard/Runbook; Term `Liabilities` / curves / optional ALM; shared `recalc_excel_shared.py`.
 
 ## Tests
 
-- `tests/parity/test_term_parity.py` — Liabilities wiring, ModelCheck vs Python, ALM sheets when snapshot passed.
-- `tests/test_excel_workbook.py` — asserts no Dashboard/Python_Runbook; ALM + ModelCheck smoke (renamed test).
+- `tests/test_pricing_run_form_state.py` — coercion, seed shape, `ensure_session_choice`.
+- Parity + workbook tests unchanged in scope.
 
 ## Parity / invariants
 
-- SPIA ALM ladder / disinvestment parity unchanged (same formulas; tabs removed only).
-- Term workbook still separate builder; ALM uses same ladder code paths when embedded.
+- No calculation-engine changes; parity contract unchanged.
 
 # Validation Completed
 
 - `python -m pytest tests/parity/ -v` — 19 passed.
-- `python -m pytest tests/ -v` — 108 passed.
+- `python -m pytest tests/ -v` — 111 passed.
 
 # Immediate Next Steps
 
-- Push `main` when ready.
-- Re-download Term/SPIA recalc xlsx from Streamlit after UI runs if you rely on embedded ALM caches.
+- None required after publish.
 
 # Unresolved Bugs / Pending Calculations
 
 - No known failing tests.
 - Optional: document `run_alm_projection_from_pricing_result` in `AGENTS.md` / parity checklist.
+- Optional: apply same `run_number_input` pattern to ALM / What-if tabs if min-value display issues appear there.

@@ -5,6 +5,11 @@ interactive charts, and embedded unit-test dashboard.
 Run from the annuity_model folder:
     streamlit run pricing_ui.py
 Or: run_pricing_ui.bat (Windows).
+
+New Pricing Run numeric inputs and ``run_*`` session keys: extend
+``pricing_run_form_state.build_run_form_seed_defaults`` and use
+``run_number_input`` / ``ensure_session_choice`` so Streamlit does not default
+widgets to ``min_value`` on first paint.
 """
 
 from __future__ import annotations
@@ -66,6 +71,8 @@ from product_registry import (
     product_options_for_ui,
 )
 from test_dashboard import render_unit_tests_page
+
+from pricing_run_form_state import build_run_form_seed_defaults, ensure_session_choice, run_number_input
 
 
 def _maybe_alm_excel_snapshot_for_workbook() -> ALMExcelSnapshot | None:
@@ -638,44 +645,12 @@ def _seed_run_form_state_from_last_inputs() -> None:
     except ValueError:
         default_product_type = ProductType.SPIA
 
-    def _nonblank_str(saved_key: str, fallback: str) -> str:
-        raw = saved_inputs.get(saved_key, fallback)
-        txt = str(raw) if raw is not None else ""
-        return txt if txt.strip() else fallback
-
-    term_ui_default_monthly_premium = float(get_term_contract_ui_config().default_monthly_premium)
-    seeded_term_monthly_premium = float(saved_inputs.get("term_monthly_premium", term_ui_default_monthly_premium))
-    if seeded_term_monthly_premium <= 0.0:
-        seeded_term_monthly_premium = term_ui_default_monthly_premium
-
-    defaults: dict[str, Any] = {
-        "run_product_type": product_default,
-        "run_issue_age": int(saved_inputs.get("issue_age", 65)),
-        "run_sex": str(saved_inputs.get("sex", "male")),
-        "run_term_monthly_premium": seeded_term_monthly_premium,
-        "run_y_mode": str(meta.get("yield_mode", "par_bootstrap")),
-        "run_m_mode": str(
-            meta.get("mortality_mode", get_product_default_mortality_mode(default_product_type))
-        ),
-        "run_expense_mode": str(meta.get("expense_mode", "csv")),
-        "run_horizon_age": int(saved_inputs.get("horizon_age", 110)),
-        "run_valuation_year": int(saved_inputs.get("valuation_year", 2025)),
-        "run_spread": float(saved_inputs.get("spread", 0.0)),
-        "run_use_index": bool(saved_inputs.get("use_index", True)),
-        "run_index_csv": str(saved_inputs.get("index_scenario_csv_path") or sp.DEFAULT_SP500_SCENARIO_CSV),
-        "run_expense_inflation_pct": float(saved_inputs.get("expense_annual_inflation", 0.025) * 100.0),
-        "run_mc_enable": bool(saved_inputs.get("mc_enabled", True)),
-        "run_mc_n_sims": int(saved_inputs.get("mc_n_sims", 100)),
-        "run_mc_seed": int(saved_inputs.get("mc_seed", 42)),
-        "run_mc_drift_pct": float(saved_inputs.get("mc_annual_drift", 0.06) * 100.0),
-        "run_mc_vol_pct": float(saved_inputs.get("mc_annual_vol", 0.15) * 100.0),
-        "run_mc_s0": float(saved_inputs.get("mc_s0", 100.0)),
-        "run_qx_csv": _nonblank_str("mortality_qx_csv", sp.DEFAULT_MORTALITY_QX_CSV),
-        "run_rp_xlsx": _nonblank_str("mortality_rp_xlsx", sp.DEFAULT_RP2014_XLSX),
-        "run_rp_out": _nonblank_str("mortality_rp_out_csv", sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV),
-        "run_mp_xlsx": _nonblank_str("mortality_mp_xlsx", sp.DEFAULT_MP2016_XLSX),
-        "run_mp_out": _nonblank_str("mortality_mp_out_csv", sp.DEFAULT_MP2016_MALE_IMPROVEMENT_CSV),
-    }
+    defaults = build_run_form_seed_defaults(
+        product_default=product_default,
+        saved_inputs=saved_inputs,
+        meta=meta,
+        default_product_type=default_product_type,
+    )
     for k, v in defaults.items():
         st.session_state.setdefault(k, v)
 
@@ -1948,24 +1923,18 @@ def _render_run_and_results() -> None:
 
     with st.expander("Contract", expanded=True):
         c1, c2, c3 = st.columns(3)
-        issue_age = c1.number_input("Issue age", min_value=0, max_value=120, step=1, key="run_issue_age")
+        issue_age = run_number_input("Issue age", "run_issue_age", default=65, min_value=0, max_value=120, step=1)
         sex = c2.selectbox("Sex (metadata)", options=["male", "female"], key="run_sex")
         if selected_product == ProductType.TERM_LIFE:
             term_ui = get_term_contract_ui_config()
-            st.session_state.setdefault("run_term_benefit_annual", float(term_ui.default_death_benefit))
-            benefit_annual = c3.number_input(
+            benefit_annual = run_number_input(
                 term_ui.death_benefit_label,
+                "run_term_benefit_annual",
+                default=float(term_ui.default_death_benefit),
                 min_value=1.0,
                 step=10_000.0,
-                key="run_term_benefit_annual",
             )
             t1, t2, t3 = st.columns(3)
-            st.session_state.setdefault("run_term_length", term_ui.term_length_options[0])
-            st.session_state.setdefault("run_term_premium_mode", term_ui.premium_mode_options[0])
-            st.session_state.setdefault("run_term_benefit_timing", term_ui.benefit_timing_options[0])
-            st.session_state.setdefault(
-                "run_term_monthly_premium", float(term_ui.default_monthly_premium)
-            )
             term_choice = t1.selectbox("Term length", options=list(term_ui.term_length_options), key="run_term_length")
             premium_mode_choice = t2.selectbox(
                 "Premium mode", options=list(term_ui.premium_mode_options), key="run_term_premium_mode"
@@ -1973,24 +1942,29 @@ def _render_run_and_results() -> None:
             benefit_timing_choice = t3.selectbox(
                 "Benefit timing", options=list(term_ui.benefit_timing_options), key="run_term_benefit_timing"
             )
-            monthly_premium = st.number_input(
+            monthly_premium = run_number_input(
                 "Monthly premium ($)",
+                "run_term_monthly_premium",
+                default=float(term_ui.default_monthly_premium),
                 min_value=0.0,
                 step=10.0,
-                key="run_term_monthly_premium",
+                replace_non_positive=True,
             )
         else:
-            st.session_state.setdefault("run_spia_benefit_annual", 100_000.0)
-            benefit_annual = c3.number_input("Annual benefit ($)", min_value=0.0, step=1_000.0, key="run_spia_benefit_annual")
+            benefit_annual = run_number_input(
+                "Annual benefit ($)", "run_spia_benefit_annual", default=100_000.0, min_value=0.0, step=1_000.0
+            )
             term_choice = "n/a"
             premium_mode_choice = "n/a"
             benefit_timing_choice = "n/a"
             monthly_premium = 0.0
 
     with st.expander("Yield curve", expanded=True):
+        _y_opts = ("flat", "zero_csv", "par_bootstrap")
+        ensure_session_choice(st.session_state, "run_y_mode", _y_opts, "par_bootstrap")
         y_mode = st.radio(
             "Source",
-            options=["flat", "zero_csv", "par_bootstrap"],
+            options=list(_y_opts),
             format_func=lambda x: {
                 "flat": "Flat zero rate",
                 "zero_csv": "Zero curve CSV",
@@ -1999,26 +1973,35 @@ def _render_run_and_results() -> None:
             horizontal=True,
             key="run_y_mode",
         )
-        st.session_state.setdefault("run_flat_rate", 0.04)
-        st.session_state.setdefault("run_zero_csv", sp.DEFAULT_ZERO_CURVE_CSV)
-        st.session_state.setdefault("run_par_csv", sp.DEFAULT_PAR_CURVE_CSV)
-        st.session_state.setdefault("run_coupon_freq", 2)
         flat_rate = float(st.session_state.get("run_flat_rate", 0.04))
         zero_csv = str(st.session_state.get("run_zero_csv", sp.DEFAULT_ZERO_CURVE_CSV))
         par_csv = str(st.session_state.get("run_par_csv", sp.DEFAULT_PAR_CURVE_CSV))
         coupon_freq = int(st.session_state.get("run_coupon_freq", 2))
         if y_mode == "flat":
-            flat_rate = st.number_input("Flat continuously compounded zero rate", format="%.4f", key="run_flat_rate")
+            flat_rate = float(
+                run_number_input(
+                    "Flat continuously compounded zero rate",
+                    "run_flat_rate",
+                    default=0.04,
+                    format="%.4f",
+                )
+            )
         elif y_mode == "zero_csv":
             zero_csv = st.text_input("Zero curve CSV path", key="run_zero_csv")
         else:
             par_csv = st.text_input("Par yield CSV path", key="run_par_csv")
-            coupon_freq = st.number_input("Coupon payments per year", min_value=1, step=1, key="run_coupon_freq")
+            coupon_freq = int(
+                run_number_input("Coupon payments per year", "run_coupon_freq", default=2, min_value=1, step=1)
+            )
 
     with st.expander("Mortality", expanded=True):
         mortality_options = list(get_product_mortality_mode_options(selected_product))
-        if st.session_state.get("run_m_mode") not in mortality_options:
-            st.session_state["run_m_mode"] = get_product_default_mortality_mode(selected_product)
+        ensure_session_choice(
+            st.session_state,
+            "run_m_mode",
+            mortality_options,
+            get_product_default_mortality_mode(selected_product),
+        )
         m_mode = st.radio(
             "Table",
             options=mortality_options,
@@ -2026,11 +2009,6 @@ def _render_run_and_results() -> None:
             horizontal=True,
             key="run_m_mode",
         )
-        st.session_state.setdefault("run_qx_csv", sp.DEFAULT_MORTALITY_QX_CSV)
-        st.session_state.setdefault("run_rp_xlsx", sp.DEFAULT_RP2014_XLSX)
-        st.session_state.setdefault("run_rp_out", sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV)
-        st.session_state.setdefault("run_mp_xlsx", sp.DEFAULT_MP2016_XLSX)
-        st.session_state.setdefault("run_mp_out", sp.DEFAULT_MP2016_MALE_IMPROVEMENT_CSV)
         qx_csv = str(st.session_state.get("run_qx_csv", sp.DEFAULT_MORTALITY_QX_CSV))
         rp_xlsx = str(st.session_state.get("run_rp_xlsx", sp.DEFAULT_RP2014_XLSX))
         rp_out = str(st.session_state.get("run_rp_out", sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV))
@@ -2056,17 +2034,15 @@ def _render_run_and_results() -> None:
             st.caption("Source: SSA actuarial life table (US Social Security area population), period year 2015.")
 
     with st.expander("Expenses & valuation", expanded=True):
+        _exp_opts = ("csv", "manual")
+        ensure_session_choice(st.session_state, "run_expense_mode", _exp_opts, "csv")
         expense_mode = st.radio(
             "Expenses",
-            options=["csv", "manual"],
+            options=list(_exp_opts),
             format_func=lambda x: "Load from CSV" if x == "csv" else "Enter manually",
             horizontal=True,
             key="run_expense_mode",
         )
-        st.session_state.setdefault("run_expenses_csv", sp.DEFAULT_EXPENSES_CSV)
-        st.session_state.setdefault("run_policy_expense", 0.0)
-        st.session_state.setdefault("run_premium_expense_pct", 0.0)
-        st.session_state.setdefault("run_monthly_expense", 0.0)
         expenses_csv = str(st.session_state.get("run_expenses_csv", sp.DEFAULT_EXPENSES_CSV))
         pol = float(st.session_state.get("run_policy_expense", 0.0))
         prem_pct = float(st.session_state.get("run_premium_expense_pct", 0.0))
@@ -2074,26 +2050,32 @@ def _render_run_and_results() -> None:
         if expense_mode == "csv":
             expenses_csv = st.text_input("Expenses CSV path", key="run_expenses_csv")
         else:
-            pol = float(st.number_input("Policy expense at issue ($)", key="run_policy_expense"))
+            pol = float(run_number_input("Policy expense at issue ($)", "run_policy_expense", default=0.0))
             prem_pct = float(
-                st.number_input(
+                run_number_input(
                     "Premium expense (% of single premium)",
+                    "run_premium_expense_pct",
+                    default=0.0,
                     min_value=0.0,
                     max_value=99.99,
                     help="Enter 2 for 2%. Must stay below 100%.",
-                    key="run_premium_expense_pct",
                 )
             )
-            monthly_ex = float(st.number_input("Monthly expense while alive ($)", key="run_monthly_expense"))
-        valuation_year = st.number_input(
+            monthly_ex = float(
+                run_number_input("Monthly expense while alive ($)", "run_monthly_expense", default=0.0)
+            )
+        valuation_year = run_number_input(
             "Valuation year (calendar)",
+            "run_valuation_year",
+            default=2025,
             min_value=1950,
             max_value=2100,
             help="Used for RP+MP calendar-year mortality; ignored for static/synthetic q_x.",
-            key="run_valuation_year",
         )
-        horizon_age = st.number_input("Horizon age (stop monthly grid)", min_value=1, max_value=130, key="run_horizon_age")
-        spread = st.number_input("Credit spread added to zero rate", format="%.4f", key="run_spread")
+        horizon_age = run_number_input(
+            "Horizon age (stop monthly grid)", "run_horizon_age", default=110, min_value=1, max_value=130
+        )
+        spread = run_number_input("Credit spread added to zero rate", "run_spread", default=0.0, format="%.4f")
 
     product_caps = get_product_capabilities(selected_product)
     can_use_economic_scenario = bool(product_caps.supports_economic_scenario)
@@ -2113,12 +2095,13 @@ def _render_run_and_results() -> None:
                 "Index scenario CSV (columns: month, sp500_level for months 0..N)",
                 key="run_index_csv",
             )
-            expense_inflation_pct = st.number_input(
+            expense_inflation_pct = run_number_input(
                 "Expense annual inflation (%, not tied to S&P)",
+                "run_expense_inflation_pct",
+                default=2.5,
                 min_value=0.0,
                 max_value=25.0,
                 help="Applied monthly as (1 + annual)^(1/12) to maintenance expenses only.",
-                key="run_expense_inflation_pct",
             )
 
     mc_enable = False
@@ -2134,11 +2117,19 @@ def _render_run_and_results() -> None:
                 help="Simulates index paths and reprices for each path. Mortality, curve, and expense inflation remain deterministic.",
                 key="run_mc_enable",
             )
-            mc_n_sims = st.number_input("Number of simulations", min_value=100, max_value=20000, step=100, key="run_mc_n_sims")
-            mc_seed = st.number_input("Random seed", min_value=0, max_value=2_147_483_647, step=1, key="run_mc_seed")
-            mc_drift_pct = st.number_input("Annual drift (%)", min_value=-50.0, max_value=50.0, step=0.1, key="run_mc_drift_pct")
-            mc_vol_pct = st.number_input("Annual volatility (%)", min_value=0.0, max_value=200.0, step=0.1, key="run_mc_vol_pct")
-            mc_s0 = st.number_input("Initial index level (S0)", min_value=0.01, step=1.0, key="run_mc_s0")
+            mc_n_sims = run_number_input(
+                "Number of simulations", "run_mc_n_sims", default=100, min_value=100, max_value=20000, step=100
+            )
+            mc_seed = run_number_input(
+                "Random seed", "run_mc_seed", default=42, min_value=0, max_value=2_147_483_647, step=1
+            )
+            mc_drift_pct = run_number_input(
+                "Annual drift (%)", "run_mc_drift_pct", default=6.0, min_value=-50.0, max_value=50.0, step=0.1
+            )
+            mc_vol_pct = run_number_input(
+                "Annual volatility (%)", "run_mc_vol_pct", default=15.0, min_value=0.0, max_value=200.0, step=0.1
+            )
+            mc_s0 = run_number_input("Initial index level (S0)", "run_mc_s0", default=100.0, min_value=0.01, step=1.0)
 
     run = st.button("Run pricing", type="primary")
 
