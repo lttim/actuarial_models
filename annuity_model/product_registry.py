@@ -388,22 +388,22 @@ _PRODUCT_UI_CONFIG: dict[ProductType, ProductUIConfig] = {
     ProductType.SPIA: ProductUIConfig(
         selected_info_message=None,
         projection_csv_filename="pricing_projection_spia.csv",
-        recalc_workbook_filename="pricing_recalc_model.xlsx",
+        recalc_workbook_filename="spia_recalc_model.xlsx",
     ),
     ProductType.TERM_LIFE: ProductUIConfig(
         selected_info_message="Term Life (20Y) is enabled with deterministic pricing. Monte Carlo is not available in this release.",
         projection_csv_filename="pricing_projection_term_life.csv",
-        recalc_workbook_filename="pricing_recalc_model.xlsx",
+        recalc_workbook_filename="term_life_recalc_model.xlsx",
     ),
     ProductType.WHOLE_LIFE: ProductUIConfig(
         selected_info_message="Selected product is scaffolded but not implemented yet.",
         projection_csv_filename="pricing_projection_whole_life.csv",
-        recalc_workbook_filename="pricing_recalc_model.xlsx",
+        recalc_workbook_filename="whole_life_recalc_model.xlsx",
     ),
     ProductType.VARIABLE_ANNUITY: ProductUIConfig(
         selected_info_message="Selected product is scaffolded but not implemented yet.",
         projection_csv_filename="pricing_projection_variable_annuity.csv",
-        recalc_workbook_filename="pricing_recalc_model.xlsx",
+        recalc_workbook_filename="variable_annuity_recalc_model.xlsx",
     ),
 }
 

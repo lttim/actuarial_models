@@ -283,5 +283,5 @@ def test_product_ui_config_export_filenames():
     term_ui_cfg = get_product_ui_config(ProductType.TERM_LIFE)
     assert spia_ui_cfg.projection_csv_filename == "pricing_projection_spia.csv"
     assert term_ui_cfg.projection_csv_filename == "pricing_projection_term_life.csv"
-    assert spia_ui_cfg.recalc_workbook_filename == "pricing_recalc_model.xlsx"
-    assert term_ui_cfg.recalc_workbook_filename == "pricing_recalc_model.xlsx"
+    assert spia_ui_cfg.recalc_workbook_filename == "spia_recalc_model.xlsx"
+    assert term_ui_cfg.recalc_workbook_filename == "term_life_recalc_model.xlsx"

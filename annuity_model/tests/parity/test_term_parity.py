@@ -84,8 +84,38 @@ def test_term_workbook_modelcheck_reconciles_zero_difference():
         mortality_mode_label="synthetic",
         expense_mode_label="manual",
     )
+    res = tp.price_term_life_level_monthly(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=90,
+        spread=0.0,
+        valuation_year=None,
+    )
     xlsx = build_term_workbook_from_spec(spec)
-    wb = load_workbook(io.BytesIO(xlsx), data_only=True)
-    ws = wb["ModelCheck"]
-    diffs = [float(ws[f"D{r}"].value) for r in (2, 3, 4)]
-    np.testing.assert_allclose(np.asarray(diffs, dtype=float), np.zeros(3, dtype=float), atol=0.0, rtol=0.0)
+    wb = load_workbook(io.BytesIO(xlsx), data_only=False)
+    ws_mc = wb["ModelCheck"]
+    ws_tp = wb["TermProjection"]
+    assert ws_mc["C5"].value.startswith("=SUMPRODUCT(")
+    assert ws_mc["C6"].value.startswith("=SUMPRODUCT(")
+    assert ws_mc["C7"].value.startswith("=SUM(")
+    assert ws_mc["D5"].value == "=C5-B5"
+    assert ws_mc["D6"].value == "=C6-B6"
+    assert ws_mc["D7"].value == "=C7-B7"
+    for coord, needle in (
+        ("A2", "=IF(ROW()-1>"),
+        ("C2", "=IF(A2="),
+        ("F2", "=IF(A2="),
+        ("I2", "=IF(A2="),
+        ("J2", "=IF(A2="),
+    ):
+        v = ws_tp[coord].value
+        assert isinstance(v, str) and v.startswith("="), coord
+        assert needle in v, (coord, v)
+    ex_claims = float(np.sum(res.expected_claim_cashflows * res.discount_factors))
+    ex_prem = float(np.sum(res.expected_premium_cashflows * res.discount_factors))
+    ex_net = float(np.sum(res.expected_total_cashflows * res.discount_factors))
+    np.testing.assert_allclose(float(ws_mc["B5"].value), ex_claims, rtol=0.0, atol=1e-9)
+    np.testing.assert_allclose(float(ws_mc["B6"].value), ex_prem, rtol=0.0, atol=1e-9)
+    np.testing.assert_allclose(float(ws_mc["B7"].value), ex_net, rtol=0.0, atol=1e-9)
+    np.testing.assert_allclose(ex_net, ex_claims - ex_prem, rtol=0.0, atol=1e-9)
