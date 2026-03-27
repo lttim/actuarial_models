@@ -637,11 +637,16 @@ def _seed_run_form_state_from_last_inputs() -> None:
         txt = str(raw) if raw is not None else ""
         return txt if txt.strip() else fallback
 
+    term_ui_default_monthly_premium = float(get_term_contract_ui_config().default_monthly_premium)
+    seeded_term_monthly_premium = float(saved_inputs.get("term_monthly_premium", term_ui_default_monthly_premium))
+    if seeded_term_monthly_premium <= 0.0:
+        seeded_term_monthly_premium = term_ui_default_monthly_premium
+
     defaults: dict[str, Any] = {
         "run_product_type": product_default,
         "run_issue_age": int(saved_inputs.get("issue_age", 65)),
         "run_sex": str(saved_inputs.get("sex", "male")),
-        "run_term_monthly_premium": float(saved_inputs.get("term_monthly_premium", 150.0)),
+        "run_term_monthly_premium": seeded_term_monthly_premium,
         "run_y_mode": str(meta.get("yield_mode", "par_bootstrap")),
         "run_m_mode": str(
             meta.get("mortality_mode", get_product_default_mortality_mode(default_product_type))
@@ -716,6 +721,13 @@ def _normalize_run_state_for_selected_product(
         state["run_use_index"] = False
     if not capabilities.supports_monte_carlo:
         state["run_mc_enable"] = False
+
+    # Term premium defaults can get seeded as 0.0 from prior SPIA runs.
+    if selected_product == ProductType.TERM_LIFE:
+        default_term_premium = float(get_term_contract_ui_config().default_monthly_premium)
+        current_term_premium = float(state.get("run_term_monthly_premium", default_term_premium))
+        if current_term_premium <= 0.0:
+            state["run_term_monthly_premium"] = default_term_premium
 
 
 def _build_yield_curve(
