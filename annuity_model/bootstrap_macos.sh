@@ -79,7 +79,9 @@ fi
 
 # 4. Smoke import — fail fast if a dep is wrong before launching pytest.
 python - <<'PY'
-import importlib, sys
+import importlib.util
+import sys
+
 mods = ["numpy", "pandas", "openpyxl", "streamlit", "matplotlib", "pyarrow"]
 missing = [m for m in mods if importlib.util.find_spec(m) is None]
 if missing:
