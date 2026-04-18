@@ -89,12 +89,12 @@ def test_simulate_index_levels_gbm_one_step_logreturn_moments_match_theory():
     # Monte Carlo SE for variance ≈ sigma_lr^2 * sqrt(2/(n-1))
     se_var = theoretical_var * math.sqrt(2.0 / (n_sims - 1))
 
-    assert (
-        abs(sample_mean - theoretical_mean) < 5.0 * se_mean
-    ), f"Log-return mean {sample_mean:.6f} too far from theory {theoretical_mean:.6f}"
-    assert (
-        abs(sample_var - theoretical_var) < 5.0 * se_var
-    ), f"Log-return variance {sample_var:.6f} too far from theory {theoretical_var:.6f}"
+    assert abs(sample_mean - theoretical_mean) < 5.0 * se_mean, (
+        f"Log-return mean {sample_mean:.6f} too far from theory {theoretical_mean:.6f}"
+    )
+    assert abs(sample_var - theoretical_var) < 5.0 * se_var, (
+        f"Log-return variance {sample_var:.6f} too far from theory {theoretical_var:.6f}"
+    )
 
 
 def test_simulate_index_levels_gbm_logreturn_variance_scales_with_time():
@@ -114,9 +114,9 @@ def test_simulate_index_levels_gbm_logreturn_variance_scales_with_time():
     var_6 = float(np.var(log_ret_6, ddof=1))
     ratio = var_6 / var_1
     # Expect ratio ≈ 6; allow 5% relative tolerance for Monte Carlo noise
-    assert (
-        abs(ratio - 6.0) / 6.0 < 0.05
-    ), f"Variance ratio month-6/month-1 is {ratio:.4f}, expected ~6.0"
+    assert abs(ratio - 6.0) / 6.0 < 0.05, (
+        f"Variance ratio month-6/month-1 is {ratio:.4f}, expected ~6.0"
+    )
 
 
 def test_simulate_index_levels_gbm_is_seed_reproducible():
@@ -167,9 +167,9 @@ def test_price_spia_monte_carlo_quantiles_are_ordered():
         s0=100.0,
         expense_annual_inflation=0.0,
     )
-    assert (
-        mc.premium_p05 <= mc.premium_median <= mc.premium_p95
-    ), f"Quantile order violated: p05={mc.premium_p05:.2f} median={mc.premium_median:.2f} p95={mc.premium_p95:.2f}"
+    assert mc.premium_p05 <= mc.premium_median <= mc.premium_p95, (
+        f"Quantile order violated: p05={mc.premium_p05:.2f} median={mc.premium_median:.2f} p95={mc.premium_p95:.2f}"
+    )
     for attr in (
         "premium_mean",
         "premium_median",
@@ -223,9 +223,9 @@ def test_price_spia_monte_carlo_different_seed_changes_results():
     )
     mc1 = sp.price_spia_single_premium_monte_carlo(**common, seed=11)
     mc2 = sp.price_spia_single_premium_monte_carlo(**common, seed=99)
-    assert not np.array_equal(
-        mc1.single_premium, mc2.single_premium
-    ), "Premium arrays from different seeds should not be identical"
+    assert not np.array_equal(mc1.single_premium, mc2.single_premium), (
+        "Premium arrays from different seeds should not be identical"
+    )
 
 
 def test_price_spia_monte_carlo_matches_manual_path_loop():
@@ -294,9 +294,9 @@ def test_price_spia_monte_carlo_higher_vol_increases_distribution_width():
 
     spread_low = mc_low_vol.premium_p95 - mc_low_vol.premium_p05
     spread_high = mc_high_vol.premium_p95 - mc_high_vol.premium_p05
-    assert (
-        spread_high > spread_low
-    ), f"Higher vol should widen p95-p05 spread: low_vol_spread={spread_low:.2f}, high_vol_spread={spread_high:.2f}"
+    assert spread_high > spread_low, (
+        f"Higher vol should widen p95-p05 spread: low_vol_spread={spread_low:.2f}, high_vol_spread={spread_high:.2f}"
+    )
 
 
 def test_price_spia_monte_carlo_zero_vol_matches_deterministic_mean():
@@ -757,7 +757,7 @@ def test_return_indexation_doubles_with_doubling_index(tmp_path):
     p = tmp_path / "idx.csv"
     rows = ["month,sp500_level"]
     for m in range(13):
-        rows.append(f"{m},{100.0 * (2.0 ** m)}")
+        rows.append(f"{m},{100.0 * (2.0**m)}")
     p.write_text("\n".join(rows) + "\n", encoding="utf-8")
 
     contract = sp.SPIAContract(issue_age=30, sex="male", benefit_annual=120_000.0)

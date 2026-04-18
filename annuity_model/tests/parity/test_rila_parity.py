@@ -15,9 +15,9 @@ from parity_constants import RILA_AV_TOL, RILA_PV_TOL
 pytestmark = [pytest.mark.parity, pytest.mark.product_rila]
 
 
-def _setup_case() -> (
-    tuple[rp.RILAContract, sp.YieldCurve, sp.MortalityTableQx, sp.ExpenseAssumptions]
-):
+def _setup_case() -> tuple[
+    rp.RILAContract, sp.YieldCurve, sp.MortalityTableQx, sp.ExpenseAssumptions
+]:
     contract = rp.RILAContract(
         issue_age=55,
         sex="male",

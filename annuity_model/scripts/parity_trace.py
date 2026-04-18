@@ -48,15 +48,13 @@ from tests.parity.excel_formula_sim import (  # noqa: E402
 )
 
 
-def _default_scenario() -> (
-    tuple[
-        sp.SPIAContract,
-        sp.YieldCurve,
-        sp.MortalityTableQx,
-        sp.ALMAssumptions,
-        sp.ExpenseAssumptions,
-    ]
-):
+def _default_scenario() -> tuple[
+    sp.SPIAContract,
+    sp.YieldCurve,
+    sp.MortalityTableQx,
+    sp.ALMAssumptions,
+    sp.ExpenseAssumptions,
+]:
     contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=120_000.0)
     yc = sp.YieldCurve.from_flat_rate(0.045)
     ages = np.arange(0, 121, dtype=int)

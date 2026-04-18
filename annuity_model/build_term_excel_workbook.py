@@ -137,7 +137,7 @@ def _qx_lookup_expr(acell: str, mode: Literal["qx_table", "mortal_monthly"]) -> 
             f"{SHEET_QX}!$A$2:$A$50000,0))"
         )
         return clamp_inner.format(inner=inner)
-    inner = f"INDEX({SHEET_MTH_QX}!$D$2:$D$50000," f"MATCH({acell},{SHEET_MTH_QX}!$A$2:$A$50000,0))"
+    inner = f"INDEX({SHEET_MTH_QX}!$D$2:$D$50000,MATCH({acell},{SHEET_MTH_QX}!$A$2:$A$50000,0))"
     return clamp_inner.format(inner=inner)
 
 
@@ -148,7 +148,7 @@ def _survival_end_formula(
     p_m = f"EXP(-(-LN(1-{qx_e}))/12)"
     if r == first_row:
         return f'=IF({acell}="","",{p_m})'
-    prev = f"D{r-1}"
+    prev = f"D{r - 1}"
     return f'=IF({acell}="","",{prev}*{p_m})'
 
 
@@ -292,7 +292,7 @@ def build_term_workbook_from_spec(
         if r == first:
             d_surv_start = f'=IF({a}="","",1)'
         else:
-            d_surv_start = f'=IF({a}="","",D{r-1})'
+            d_surv_start = f'=IF({a}="","",D{r - 1})'
         ws_pr.cell(row=r, column=5, value=d_surv_start)
         ws_pr.cell(row=r, column=6, value=f'=IF({a}="","",MAX(0,MIN(1,E{r}-D{r})))')
         ws_pr.cell(

@@ -112,7 +112,7 @@ def _survival_end_formula(
     p_m = f"EXP(-(-LN(1-{qx_e}))/12)"
     if r == first_row:
         return f'=IF({acell}="","",{p_m})'
-    prev = f"D{r-1}"
+    prev = f"D{r - 1}"
     return f'=IF({acell}="","",{prev}*{p_m})'
 
 
@@ -328,17 +328,17 @@ def build_rila_workbook_from_spec(
     for r in range(first, last_cap_row + 1):
         a = f"A{r}"
         ws_pr.cell(row=r, column=1, value=f'=IF(ROW()-3>{nm_ref},"",ROW()-3)')
-        ws_pr.cell(row=r, column=2, value=f"=IF({a}=\"\",\"\",{a}/{_in_addr('B', _IN_ROW_FREQ)})")
+        ws_pr.cell(row=r, column=2, value=f'=IF({a}="","",{a}/{_in_addr("B", _IN_ROW_FREQ)})')
         ws_pr.cell(
             row=r,
             column=3,
-            value=f"=IF({a}=\"\",\"\",{_in_addr('B', _IN_ROW_ISSUE_AGE)}+({a}-1)/{_in_addr('B', _IN_ROW_FREQ)})",
+            value=f'=IF({a}="","",{_in_addr("B", _IN_ROW_ISSUE_AGE)}+({a}-1)/{_in_addr("B", _IN_ROW_FREQ)})',
         )
         ws_pr.cell(row=r, column=4, value=_survival_end_formula(r, a, mort_mode, first_row=first))
         if r == first:
             d_surv_start = f'=IF({a}="","",1)'
         else:
-            d_surv_start = f'=IF({a}="","",D{r-1})'
+            d_surv_start = f'=IF({a}="","",D{r - 1})'
         ws_pr.cell(row=r, column=5, value=d_surv_start)
         ws_pr.cell(row=r, column=6, value=f'=IF({a}="","",MAX(0,MIN(1,E{r}-D{r})))')
         ws_pr.cell(
@@ -358,20 +358,19 @@ def build_rila_workbook_from_spec(
             row=r,
             column=9,
             value=(
-                f'=IF({a}="","",IF(AND({a}>=12,MOD({a},12)=0),'
-                f"MAX({fl},MIN({cap},{part}*H{r})),0))"
+                f'=IF({a}="","",IF(AND({a}>=12,MOD({a},12)=0),MAX({fl},MIN({cap},{part}*H{r})),0))'
             ),
         )
         ws_pr.cell(
             row=r,
             column=10,
-            value=(f'=IF({a}="","",' f"(IF({a}=1,{prem},J{r-1})*(1+I{r}))*(1-{rider}/12))"),
+            value=(f'=IF({a}="","",(IF({a}=1,{prem},J{r - 1})*(1+I{r}))*(1-{rider}/12))'),
         )
         ws_pr.cell(row=r, column=11, value=f'=IF({a}="",0,F{r}*J{r})')
         ws_pr.cell(
             row=r,
             column=12,
-            value=(f'=IF({a}="",0,{exp_m}*' f"POWER(1+((1+{exp_if})^(1/12)-1),{a}-1)*D{r})"),
+            value=(f'=IF({a}="",0,{exp_m}*POWER(1+((1+{exp_if})^(1/12)-1),{a}-1)*D{r})'),
         )
         ws_pr.cell(row=r, column=13, value=f'=IF({a}="",0,K{r}+L{r})')
         ws_pr.cell(

@@ -159,9 +159,9 @@ def test_alm_projection_sheet_and_modelcheck_links():
                 v = cell.value
                 if isinstance(v, str) and v.startswith("="):
                     max_formula_len = max(max_formula_len, len(v))
-    assert (
-        max_formula_len <= 8192
-    ), f"Excel rejects formulas over 8192 chars (longest was {max_formula_len})"
+    assert max_formula_len <= 8192, (
+        f"Excel rejects formulas over 8192 chars (longest was {max_formula_len})"
+    )
     wb_cached = load_workbook(io.BytesIO(raw), data_only=True)
     wac = wb_cached[ALM_SHEET_NAME]
     assert wac["C13"].value is not None
@@ -170,7 +170,7 @@ def test_alm_projection_sheet_and_modelcheck_links():
     assert wac["F13"].value is not None
     assert wac["H13"].value is not None
     assert float(wac["C13"].value) == pytest.approx(
-        sum(float(wac[f"{chr(ord('H')+k)}13"].value) for k in range(6)),
+        sum(float(wac[f"{chr(ord('H') + k)}13"].value) for k in range(6)),
         rel=1e-9,
         abs=1e-2,
     )

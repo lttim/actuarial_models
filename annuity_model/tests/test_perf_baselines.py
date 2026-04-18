@@ -94,8 +94,7 @@ def test_spia_workbook_build_under_budget(benchmark) -> None:
     blob = benchmark(build_workbook_from_spec, spec)
     assert isinstance(blob, (bytes, bytearray))
     assert benchmark.stats.stats.mean < SPIA_BUILD_BUDGET_S, (
-        f"SPIA build mean {benchmark.stats.stats.mean:.3f}s "
-        f"exceeded budget {SPIA_BUILD_BUDGET_S}s"
+        f"SPIA build mean {benchmark.stats.stats.mean:.3f}s exceeded budget {SPIA_BUILD_BUDGET_S}s"
     )
 
 
@@ -120,8 +119,7 @@ def test_rila_workbook_build_under_budget(benchmark) -> None:
     blob = benchmark(build_rila_workbook_from_spec, spec)
     assert isinstance(blob, (bytes, bytearray))
     assert benchmark.stats.stats.mean < RILA_BUILD_BUDGET_S, (
-        f"RILA build mean {benchmark.stats.stats.mean:.3f}s "
-        f"exceeded budget {RILA_BUILD_BUDGET_S}s"
+        f"RILA build mean {benchmark.stats.stats.mean:.3f}s exceeded budget {RILA_BUILD_BUDGET_S}s"
     )
 
 
@@ -132,6 +130,5 @@ def test_validator_under_budget(benchmark) -> None:
 
     benchmark(validate_workbook_or_raise, wb)
     assert benchmark.stats.stats.mean < VALIDATOR_BUDGET_S, (
-        f"Validator mean {benchmark.stats.stats.mean:.3f}s "
-        f"exceeded budget {VALIDATOR_BUDGET_S}s"
+        f"Validator mean {benchmark.stats.stats.mean:.3f}s exceeded budget {VALIDATOR_BUDGET_S}s"
     )

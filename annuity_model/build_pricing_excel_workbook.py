@@ -513,8 +513,8 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
             ws[f"G{r}"] = f"=Inputs!$B$22*F{r}/INDEX({br},MATCH(0,{ir},0))"
             ws[f"H{r}"] = "=Inputs!$B$12"
         else:
-            ws[f"G{r}"] = f"=G{r-1}*F{r}/F{r-1}"
-            ws[f"H{r}"] = f"=H{r-1}*(1+Inputs!$B$17)^(1/12)"
+            ws[f"G{r}"] = f"=G{r - 1}*F{r}/F{r - 1}"
+            ws[f"H{r}"] = f"=H{r - 1}*(1+Inputs!$B$17)^(1/12)"
 
         ws[f"I{r}"] = f'=IFERROR(INDEX(BaseQx!$B:$B,MATCH(D{r},BaseQx!$A:$A,0)),"")'
         ws[f"J{r}"] = (
@@ -527,7 +527,7 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
         if r == first:
             ws[f"N{r}"] = f"=M{r}"
         else:
-            ws[f"N{r}"] = f"=N{r-1}*M{r}"
+            ws[f"N{r}"] = f"=N{r - 1}*M{r}"
 
         ws[f"O{r}"] = f'=IFERROR(INDEX(MonthlyCurve!$L:$L,MATCH(A{r},MonthlyCurve!$A:$A,0)),"")'
         ws[f"P{r}"] = f'=IF(B{r}>0,-LN(O{r})/B{r},"")'
@@ -540,7 +540,7 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
         if r == last:
             ws[f"V{r}"] = 0.0
         else:
-            ws[f"V{r}"] = f"=SUMPRODUCT(S{r+1}:S{last},O{r+1}:O{last})/(N{r}*O{r})"
+            ws[f"V{r}"] = f"=SUMPRODUCT(S{r + 1}:S{last},O{r + 1}:O{last})/(N{r}*O{r})"
 
     ws["W3"] = "Summary"
     ws["W3"].font = Font(bold=True)

@@ -51,7 +51,10 @@ ignore = [
     "B905",   # zip() without strict= -- broad change; revisit in P2
     "F841",   # unused local (a few intentional debug/snapshot vars; revisit in P2)
     "UP042",  # str+Enum should be StrEnum -- ProductType migration in P2
-    "UP038",  # isinstance(x, X | Y) -- ruff deprecated this rule in 0.10; we use the legacy tuple form intentionally
+    # UP038 was removed in ruff 0.10 (it warned about `isinstance(x, X | Y)`).
+    # We bumped to ruff 0.15 in 2026-04 -- keeping it in `ignore` produces a
+    # "rules have been removed" warning, so it is dropped here. The legacy
+    # tuple form is no longer flagged at all.
     "SIM108", # ternary often hurts readability for actuarial branches
     "SIM118", # `key in dict.keys()` -- benign style, revisit in P2
 ]

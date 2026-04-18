@@ -260,8 +260,7 @@ def main() -> int:
                     head = meta.get("head", [])
                     nonblank = [r for r in head if any(c not in (None, "") for c in r)]
                     print(
-                        f"      ModelCheck has {len(nonblank)} non-blank "
-                        f"head rows (showing first):"
+                        f"      ModelCheck has {len(nonblank)} non-blank head rows (showing first):"
                     )
                     if nonblank:
                         print(f"        {nonblank[0]}")

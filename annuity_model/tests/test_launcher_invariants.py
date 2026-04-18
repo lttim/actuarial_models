@@ -77,23 +77,23 @@ def test_pyproject_declares_requires_python() -> None:
 def test_shell_launcher_min_python_matches_pyproject() -> None:
     major, minor = _requires_python_from_pyproject()
     text = SH.read_text(encoding="utf-8")
-    assert (
-        f"MIN_PYTHON_MAJOR={major}" in text
-    ), "run_pricing_ui.sh must declare MIN_PYTHON_MAJOR matching pyproject."
-    assert (
-        f"MIN_PYTHON_MINOR={minor}" in text
-    ), "run_pricing_ui.sh must declare MIN_PYTHON_MINOR matching pyproject."
+    assert f"MIN_PYTHON_MAJOR={major}" in text, (
+        "run_pricing_ui.sh must declare MIN_PYTHON_MAJOR matching pyproject."
+    )
+    assert f"MIN_PYTHON_MINOR={minor}" in text, (
+        "run_pricing_ui.sh must declare MIN_PYTHON_MINOR matching pyproject."
+    )
 
 
 def test_batch_launcher_min_python_matches_pyproject() -> None:
     major, minor = _requires_python_from_pyproject()
     text = BAT.read_text(encoding="utf-8")
-    assert (
-        f"MIN_PY_MAJOR={major}" in text
-    ), "run_pricing_ui.bat must declare MIN_PY_MAJOR matching pyproject."
-    assert (
-        f"MIN_PY_MINOR={minor}" in text
-    ), "run_pricing_ui.bat must declare MIN_PY_MINOR matching pyproject."
+    assert f"MIN_PY_MAJOR={major}" in text, (
+        "run_pricing_ui.bat must declare MIN_PY_MAJOR matching pyproject."
+    )
+    assert f"MIN_PY_MINOR={minor}" in text, (
+        "run_pricing_ui.bat must declare MIN_PY_MINOR matching pyproject."
+    )
 
 
 # ---------------------------------------------------------------------------

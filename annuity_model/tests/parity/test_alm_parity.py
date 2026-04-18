@@ -408,19 +408,19 @@ def test_alm_60month_parity_python_vs_excel(flat_rate, aum, annual_benefit):
             py_cash[m],
             xl_cash[m],
             atol=TOL_DOLLAR,
-            err_msg=f"Cash mismatch at month {m+1}: Python={py_cash[m]:.6f}, Excel={xl_cash[m]:.6f}",
+            err_msg=f"Cash mismatch at month {m + 1}: Python={py_cash[m]:.6f}, Excel={xl_cash[m]:.6f}",
         )
         np.testing.assert_allclose(
             py_mv[m],
             xl_mv[m],
             atol=TOL_DOLLAR,
-            err_msg=f"Total MV mismatch at month {m+1}: Python={py_mv[m]:.6f}, Excel={xl_mv[m]:.6f}",
+            err_msg=f"Total MV mismatch at month {m + 1}: Python={py_mv[m]:.6f}, Excel={xl_mv[m]:.6f}",
         )
         np.testing.assert_allclose(
             py_face[m],
             xl_face[m],
             atol=TOL_DOLLAR,
-            err_msg=f"Face array mismatch at month {m+1}",
+            err_msg=f"Face array mismatch at month {m + 1}",
         )
 
 

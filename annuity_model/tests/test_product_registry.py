@@ -19,9 +19,9 @@ from product_registry import (
 pytestmark = [pytest.mark.product_spia, pytest.mark.product_term, pytest.mark.product_rila]
 
 
-def _setup_case() -> (
-    tuple[sp.SPIAContract, sp.YieldCurve, sp.MortalityTableQx, sp.ExpenseAssumptions]
-):
+def _setup_case() -> tuple[
+    sp.SPIAContract, sp.YieldCurve, sp.MortalityTableQx, sp.ExpenseAssumptions
+]:
     contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=100_000.0)
     yc = sp.YieldCurve.from_flat_rate(0.04)
     ages = np.arange(0, 121, dtype=int)

@@ -46,9 +46,11 @@ repos:
   # near-identical pins (black==25.1.0 + ruff==0.8.4), and obviates the
   # dependabot black-major-bump PR.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.15.11
     hooks:
-      - id: ruff
+      # ruff-pre-commit 0.15 renamed the lint hook from `ruff` to `ruff-check`
+      # (the old id still works but prints a "legacy alias" warning).
+      - id: ruff-check
         args: ["--fix"]
         files: ^annuity_model/.*\.py$
       - id: ruff-format
@@ -59,14 +61,14 @@ repos:
   # list there too.
   #
   # NB: `rev` matches the version pinned in annuity_model/requirements-dev.txt
-  # (mypy==1.13.0). Pre-commit's mirrors-mypy uses `vX.Y.Z` tags. Bump both
+  # (mypy==1.20.1). Pre-commit's mirrors-mypy uses `vX.Y.Z` tags. Bump both
   # together so local pre-commit and CI use the exact same checker.
   #
   # `pricing_projection` and `alm_excel_ladder` are excluded here while their
   # 52 strict-mypy errors are being narrowed (P5 follow-up). See pyproject.toml
   # `[[tool.mypy.overrides]]` for the matching rationale comment.
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+    rev: v1.20.1
     hooks:
       - id: mypy
         name: mypy (parity-critical core)

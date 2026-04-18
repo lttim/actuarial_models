@@ -40,7 +40,7 @@ def _excel_df_flat(*, t_cell: str, y_last_row: int, spread_ref: str = "Inputs!$B
     hi = f"INDEX({ya},({br})+1)"
     zlo = f"INDEX({zb},{br})"
     zhi = f"INDEX({zb},({br})+1)"
-    w = f"IF(ABS(({hi})-({lo}))<1E-15,0," f"(({t_cell})-({lo}))/MAX(ABS(({hi})-({lo})),1E-15))"
+    w = f"IF(ABS(({hi})-({lo}))<1E-15,0,(({t_cell})-({lo}))/MAX(ABS(({hi})-({lo})),1E-15))"
     ldf_lo = f"(-(({zlo})+{sp})*({lo}))"
     ldf_hi = f"(-(({zhi})+{sp})*({hi}))"
     ldf_mid = f"({ldf_lo})+({w})*((({ldf_hi})-({ldf_lo})))"
@@ -303,7 +303,9 @@ def write_alm_engine_sheet(
         "mv_pm",
         nb,
         lambda i: f"Bond {i + 1}: market value ($)",
-        lambda i: f"Mark-to-market value of bucket {i + 1} (face after maturities × discount factor).",
+        lambda i: (
+            f"Mark-to-market value of bucket {i + 1} (face after maturities × discount factor)."
+        ),
     )
     take1(
         "aum_re",
@@ -333,7 +335,9 @@ def write_alm_engine_sheet(
         "split",
         nb,
         lambda i: f"Bond {i + 1}: reinvest share",
-        lambda i: f"Fraction of aggregate reinvestment allocated to bucket {i + 1} (pro-rata to gaps or weights).",
+        lambda i: (
+            f"Fraction of aggregate reinvestment allocated to bucket {i + 1} (pro-rata to gaps or weights)."
+        ),
     )
     dmv = taken(
         "dmv",
@@ -359,7 +363,9 @@ def write_alm_engine_sheet(
         "t_re",
         nb,
         lambda i: f"Bond {i + 1}: tenor after reinvest (y)",
-        lambda i: f"Tenor in years after reinvestment for bucket {i + 1} (new purchases at bucket nominal tenor if flat).",
+        lambda i: (
+            f"Tenor in years after reinvestment for bucket {i + 1} (new purchases at bucket nominal tenor if flat)."
+        ),
     )
     take1(
         "cash_cf",
@@ -499,7 +505,9 @@ def write_alm_engine_sheet(
         "mvb",
         nb,
         lambda i: f"Bond {i + 1}: MV EOM ($)",
-        lambda i: f"Closing market value for bucket {i + 1} (face EOM × discount factor at tenor EOM).",
+        lambda i: (
+            f"Closing market value for bucket {i + 1} (face EOM × discount factor at tenor EOM)."
+        ),
     )
     last_col = c - 1
 

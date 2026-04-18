@@ -8,20 +8,22 @@ pytest-html==4.2.0
 # Static-analysis / formatter (mirrored by pre-commit + CI)
 # black removed 2026-04: ruff-format is the single source of truth for
 # formatting (black-compatible output, no double-formatter conflict).
-ruff==0.7.4
-mypy==1.13.0
+# When bumping ruff or mypy, also bump the matching `rev:` in
+# .pre-commit-config.yaml so local pre-commit and CI use the same checker.
+ruff==0.15.11
+mypy==1.20.1
 
 # Documentation site (mkdocs --serve / GitHub Pages deploy)
 mkdocs==1.6.1
-mkdocs-material==9.5.49
+mkdocs-material==9.7.6
 mkdocstrings[python]==0.27.0
-pymdown-extensions==10.12
+pymdown-extensions==10.21.2
 
 # Property tests + perf gates + mutation pilot (P4)
-hypothesis==6.122.3
-pytest-benchmark==5.1.0
+hypothesis==6.152.1
+pytest-benchmark==5.2.3
 pytest-cov==6.0.0
-mutmut==3.2.0
+mutmut==3.5.0
 
 # Runtime-Excel parity (P4 -- xlcalculator-based recalc gate)
 # PARKED 2026-04: xlcalculator==0.5.0 transitively pulls yearfrac<2, which
@@ -31,9 +33,14 @@ mutmut==3.2.0
 #   1. xlcalculator release that drops or relaxes the yearfrac dep
 #   2. Replace with `formulas` or `pycel` (pure-Python evaluators w/o yearfrac)
 #   3. Vendor a yearfrac fork that supports numpy 2.x
+# Quarterly recurring check: re-test xlcalculator + yearfrac + numpy 2.x
+# compatibility to restore the runtime Excel recalc gate.
 # Tracking: docs/runbooks/runtime_excel_recalc_gate.md
 # xlcalculator==0.5.0
 
 # Security / supply-chain
-pip-audit==2.7.3
-bandit==1.7.10
+# When bumping these, also bump the matching hardcoded versions in
+# .github/workflows/security.yml (pip-audit / bandit jobs install fixed
+# versions to avoid surprise CI failures from new rule sets).
+pip-audit==2.10.0
+bandit==1.9.4

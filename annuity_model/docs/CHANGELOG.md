@@ -33,6 +33,28 @@ ALM rules, RILA crediting) MUST also be logged in
   sync (the marker list was missing `invariant` and `property`). `pytest.ini`
   is the single runtime source of truth until the `src/` migration moves
   config into `pyproject.toml` and deletes `pytest.ini` in the same commit.
+- Dropped `UP038` from `[tool.ruff.lint.ignore]` -- the rule was removed in
+  ruff 0.10 (2025-Q1) and ignoring it now produces a "rules have been
+  removed" warning. Tuple-form `isinstance(x, (X, Y))` is no longer flagged.
+
+### Changed
+- **Dependabot patch-and-minor group bump (PR #7 applied directly to main):**
+  `ruff 0.7.4 -> 0.15.11`, `mypy 1.13.0 -> 1.20.1`,
+  `mkdocs-material 9.5.49 -> 9.7.6`, `pymdown-extensions 10.12 -> 10.21.2`,
+  `hypothesis 6.122.3 -> 6.152.1`, `pytest-benchmark 5.1.0 -> 5.2.3`,
+  `mutmut 3.2.0 -> 3.5.0`, `pip-audit 2.7.3 -> 2.10.0`,
+  `bandit 1.7.10 -> 1.9.4`. Side effects:
+  - `.pre-commit-config.yaml` `rev:` fields bumped in lockstep
+    (`ruff-pre-commit v0.15.11`, `mirrors-mypy v1.20.1`).
+  - `ruff-pre-commit` 0.15 renamed the lint hook id from `ruff` to
+    `ruff-check`; `.pre-commit-config.yaml` updated accordingly to silence
+    the legacy-alias warning.
+  - `.github/workflows/security.yml` hardcoded `pip-audit==2.7.3` and
+    `bandit==1.7.10` bumped to match `requirements-dev.txt`.
+  - `requirements.lock` regenerated from `pip freeze`.
+  - 14 source files reformatted by ruff-format 0.15 (whitespace and
+    long-line wrapping only -- no semantic changes; verified by full
+    pytest + parity + deep_smoke green).
 
 ### Fixed
 - CI coverage gate: `--fail-under=85` was aspirational and CI never went
