@@ -38,6 +38,16 @@ ALM rules, RILA crediting) MUST also be logged in
   removed" warning. Tuple-form `isinstance(x, (X, Y))` is no longer flagged.
 
 ### Changed
+- **Dependabot mkdocstrings major bump (PR #8 applied directly to main):**
+  `mkdocstrings[python] 0.27.0 -> 1.0.4`. Verified `mkdocs build --strict`
+  still succeeds against the existing `mkdocs.yml` plugin block; 1.0's
+  breaking changes are confined to `BaseHandler` internal API
+  (`__init__` signature, removed submodules) which we do not import.
+  Side benefit: silences the `set_fallback_anchor_function is deprecated`
+  warning that the 0.27 plugin emitted on every build.
+  `mkdocstrings-python` jumped to 2.0.3 (transitive dep) -- `requirements.lock`
+  regenerated. Closes Dependabot PR #8.
+
 - **Dependabot Actions + pytest-cov bumps (PRs #1, #2, #3, #4, #9 applied directly to main):**
   - `actions/checkout v4 -> v6` across `ci.yml`, `docs.yml`, `parity-gate.yml`,
     `security.yml` (8 occurrences). v5 dropped Node 16; v6 ships on Node 20
