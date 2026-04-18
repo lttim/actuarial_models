@@ -9,12 +9,15 @@ import numpy as np
 import pricing_projection as sp
 import term_projection as tp
 from build_pricing_excel_workbook import ExcelBuildSpec, excel_spec_from_launcher
+from build_rila_excel_workbook import RILAExcelBuildSpec, rila_excel_spec_from_launcher
 from build_term_excel_workbook import TermExcelBuildSpec, term_excel_spec_from_launcher
+import rila_projection as rp
 
 
 class ProductType(str, Enum):
     SPIA = "spia"
     TERM_LIFE = "term_life"
+    RILA = "rila"
     WHOLE_LIFE = "whole_life"
     VARIABLE_ANNUITY = "variable_annuity"
 
@@ -108,7 +111,7 @@ class ProductAdapter(Protocol):
         index_s0: float,
         index_levels_at_payment: np.ndarray,
         expense_annual_inflation: float,
-    ) -> ExcelBuildSpec | TermExcelBuildSpec: ...
+    ) -> ExcelBuildSpec | TermExcelBuildSpec | RILAExcelBuildSpec: ...
 
 
 @dataclass(frozen=True)
@@ -340,9 +343,128 @@ class TermLifeProductAdapter:
 
 _TERM_ADAPTER = TermLifeProductAdapter()
 
+
+@dataclass(frozen=True)
+class RILAProductAdapter:
+    @property
+    def product_type(self) -> ProductType:
+        return ProductType.RILA
+
+    @property
+    def display_name(self) -> str:
+        return "RILA (accumulation)"
+
+    def is_available(self) -> bool:
+        return True
+
+    def price(
+        self,
+        *,
+        contract: object,
+        yield_curve: sp.YieldCurve,
+        mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
+        horizon_age: int,
+        spread: float,
+        valuation_year: int | None,
+        expenses: sp.ExpenseAssumptions | None,
+        expenses_csv_path: str,
+        index_scenario_csv_path: str | None,
+        expense_annual_inflation: float,
+    ) -> rp.RILAProjectionResult:
+        if not isinstance(contract, rp.RILAContract):
+            raise TypeError("RILA adapter requires RILAContract.")
+        return rp.price_rila_single_premium(
+            contract=contract,
+            yield_curve=yield_curve,
+            mortality=mortality,
+            horizon_age=horizon_age,
+            spread=spread,
+            valuation_year=valuation_year,
+            expenses=expenses,
+            expenses_csv_path=expenses_csv_path,
+            index_scenario_csv_path=index_scenario_csv_path,
+            expense_annual_inflation=expense_annual_inflation,
+        )
+
+    def price_monte_carlo(
+        self,
+        *,
+        contract: object,
+        yield_curve: sp.YieldCurve,
+        mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
+        horizon_age: int,
+        spread: float,
+        valuation_year: int | None,
+        expenses: sp.ExpenseAssumptions | None,
+        expenses_csv_path: str,
+        expense_annual_inflation: float,
+        n_sims: int,
+        annual_drift: float,
+        annual_vol: float,
+        seed: int,
+        s0: float,
+    ) -> rp.RILAMonteCarloResult:
+        if not isinstance(contract, rp.RILAContract):
+            raise TypeError("RILA adapter requires RILAContract.")
+        return rp.price_rila_single_premium_monte_carlo(
+            contract=contract,
+            yield_curve=yield_curve,
+            mortality=mortality,
+            horizon_age=horizon_age,
+            spread=spread,
+            valuation_year=valuation_year,
+            expenses=expenses,
+            expenses_csv_path=expenses_csv_path,
+            expense_annual_inflation=expense_annual_inflation,
+            n_sims=n_sims,
+            annual_drift=annual_drift,
+            annual_vol=annual_vol,
+            seed=seed,
+            s0=s0,
+        )
+
+    def excel_spec_from_run(
+        self,
+        *,
+        contract: object,
+        yield_curve: sp.YieldCurve,
+        mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
+        horizon_age: int,
+        spread: float,
+        valuation_year: int,
+        expenses: sp.ExpenseAssumptions,
+        yield_mode_label: str,
+        mortality_mode_label: str,
+        expense_mode_label: str,
+        index_s0: float,
+        index_levels_at_payment: np.ndarray,
+        expense_annual_inflation: float,
+    ) -> RILAExcelBuildSpec:
+        if not isinstance(contract, rp.RILAContract):
+            raise TypeError("RILA adapter requires RILAContract.")
+        return rila_excel_spec_from_launcher(
+            contract=contract,
+            yield_curve=yield_curve,
+            mortality=mortality,
+            horizon_age=horizon_age,
+            spread=spread,
+            valuation_year=valuation_year,
+            expenses=expenses,
+            yield_mode_label=yield_mode_label,
+            mortality_mode_label=mortality_mode_label,
+            expense_mode_label=expense_mode_label,
+            index_s0=index_s0,
+            index_levels_at_payment=index_levels_at_payment,
+            expense_annual_inflation=expense_annual_inflation,
+        )
+
+
+_RILA_ADAPTER = RILAProductAdapter()
+
 _PRODUCT_DISPLAY_NAME: dict[ProductType, str] = {
     ProductType.SPIA: "SPIA",
     ProductType.TERM_LIFE: "Term Life (20Y)",
+    ProductType.RILA: "RILA (accumulation)",
     ProductType.WHOLE_LIFE: "Whole Life (coming soon)",
     ProductType.VARIABLE_ANNUITY: "Variable Annuity (coming soon)",
 }
@@ -350,6 +472,7 @@ _PRODUCT_DISPLAY_NAME: dict[ProductType, str] = {
 _PRODUCT_CAPABILITIES: dict[ProductType, ProductCapabilities] = {
     ProductType.SPIA: ProductCapabilities(supports_economic_scenario=True, supports_monte_carlo=True),
     ProductType.TERM_LIFE: ProductCapabilities(supports_economic_scenario=False, supports_monte_carlo=False),
+    ProductType.RILA: ProductCapabilities(supports_economic_scenario=True, supports_monte_carlo=True),
     ProductType.WHOLE_LIFE: ProductCapabilities(supports_economic_scenario=False, supports_monte_carlo=False),
     ProductType.VARIABLE_ANNUITY: ProductCapabilities(supports_economic_scenario=True, supports_monte_carlo=True),
 }
@@ -357,6 +480,7 @@ _PRODUCT_CAPABILITIES: dict[ProductType, ProductCapabilities] = {
 _PRODUCT_MORTALITY_MODE_OPTIONS: dict[ProductType, tuple[str, ...]] = {
     ProductType.SPIA: ("synthetic", "qx_csv", "rp2014_mp2016"),
     ProductType.TERM_LIFE: ("us_ssa_2015_period", "qx_csv", "synthetic"),
+    ProductType.RILA: ("synthetic", "qx_csv", "rp2014_mp2016"),
     ProductType.WHOLE_LIFE: ("synthetic", "qx_csv"),
     ProductType.VARIABLE_ANNUITY: ("synthetic", "qx_csv", "rp2014_mp2016"),
 }
@@ -364,6 +488,7 @@ _PRODUCT_MORTALITY_MODE_OPTIONS: dict[ProductType, tuple[str, ...]] = {
 _PRODUCT_DEFAULT_MORTALITY_MODE: dict[ProductType, str] = {
     ProductType.SPIA: "rp2014_mp2016",
     ProductType.TERM_LIFE: "us_ssa_2015_period",
+    ProductType.RILA: "rp2014_mp2016",
     ProductType.WHOLE_LIFE: "synthetic",
     ProductType.VARIABLE_ANNUITY: "rp2014_mp2016",
 }
@@ -395,6 +520,11 @@ _PRODUCT_UI_CONFIG: dict[ProductType, ProductUIConfig] = {
         projection_csv_filename="pricing_projection_term_life.csv",
         recalc_workbook_filename="term_life_recalc_model.xlsx",
     ),
+    ProductType.RILA: ProductUIConfig(
+        selected_info_message=None,
+        projection_csv_filename="pricing_projection_rila.csv",
+        recalc_workbook_filename="rila_recalc_model.xlsx",
+    ),
     ProductType.WHOLE_LIFE: ProductUIConfig(
         selected_info_message="Selected product is scaffolded but not implemented yet.",
         projection_csv_filename="pricing_projection_whole_life.csv",
@@ -413,11 +543,13 @@ def get_product_adapter(product_type: ProductType) -> ProductAdapter:
         return _SPIA_ADAPTER
     if product_type == ProductType.TERM_LIFE:
         return _TERM_ADAPTER
+    if product_type == ProductType.RILA:
+        return _RILA_ADAPTER
     raise NotImplementedError(f"{_PRODUCT_DISPLAY_NAME[product_type]} is not implemented yet.")
 
 
 def product_options_for_ui() -> list[ProductType]:
-    return [ProductType.SPIA, ProductType.TERM_LIFE, ProductType.WHOLE_LIFE, ProductType.VARIABLE_ANNUITY]
+    return [ProductType.SPIA, ProductType.TERM_LIFE, ProductType.RILA, ProductType.WHOLE_LIFE, ProductType.VARIABLE_ANNUITY]
 
 
 def product_label(product_type: ProductType) -> str:
@@ -445,6 +577,13 @@ def get_term_contract_ui_config() -> TermContractUIConfig:
 
 
 def get_pricing_metrics(product_type: ProductType, result: Any) -> tuple[PricingMetric, ...]:
+    if product_type == ProductType.RILA:
+        return (
+            PricingMetric(label="Single premium", value=float(getattr(result, "single_premium")), is_money=True),
+            PricingMetric(label="PV benefit (claims)", value=float(getattr(result, "pv_benefit")), is_money=True),
+            PricingMetric(label="PV monthly expenses", value=float(getattr(result, "pv_monthly_expenses")), is_money=True),
+            PricingMetric(label="Annuity factor", value=float(getattr(result, "annuity_factor")), is_money=False),
+        )
     if product_type == ProductType.TERM_LIFE:
         pv_claims = float(getattr(result, "pv_benefit"))
         pv_premiums = float(-float(getattr(result, "pv_monthly_expenses")))

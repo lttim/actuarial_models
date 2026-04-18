@@ -5,6 +5,20 @@ from pricing_ui import _normalize_run_state_for_selected_product
 from product_registry import ProductType
 
 
+def test_rila_switch_sets_default_mortality_and_enables_index() -> None:
+    state: dict[str, object] = {
+        "run_m_mode": "us_ssa_2015_period",
+        "run_use_index": False,
+    }
+    _normalize_run_state_for_selected_product(
+        state,
+        selected_product=ProductType.RILA,
+        switched_product=True,
+    )
+    assert state["run_m_mode"] == "rp2014_mp2016"
+    assert state["run_use_index"] is True
+
+
 def test_spia_switch_forces_default_rp_mode_and_nonblank_paths() -> None:
     state: dict[str, object] = {
         "run_m_mode": "qx_csv",

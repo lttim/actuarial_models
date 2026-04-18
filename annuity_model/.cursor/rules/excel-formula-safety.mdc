@@ -1,0 +1,69 @@
+---
+description: Excel workbook builders must produce formulas that load cleanly without "Removed Records: Formula" repair
+globs: build_*excel*.py,recalc_excel_shared.py,alm_excel_ladder.py,excel_workbook_validator.py,tests/test_excel_export_validation.py
+alwaysApply: false
+---
+
+# Excel formula safety rules
+
+When working in any workbook builder (`build_pricing_excel_workbook.py`,
+`build_rila_excel_workbook.py`, `build_term_excel_workbook.py`,
+`recalc_excel_shared.py`, `alm_excel_ladder.py`), the following rules are non-negotiable.
+
+## Mandatory pre-save validation
+
+Every workbook builder **must** call `validate_workbook_or_raise(wb)` from
+`excel_workbook_validator` immediately before `wb.save(...)`. Do not introduce a new
+builder that bypasses this gate.
+
+## Common bug patterns to avoid
+
+These patterns produce the dreaded
+"Removed Records: Formula from /xl/worksheets/sheetN.xml part" Excel repair, which
+silently turns dependent cells into `#DIV/0!`:
+
+1. **Off-by-one parens across f-string concatenation.** When a formula is built across
+   two adjacent f-strings, *count parens in the concatenated literal*, not per-line.
+   Bad:
+   ```python
+   f"=IF({a}=\"\",\"\",IF(AND({a}>=12,MOD({a},12)=0),"
+   f"IFERROR(INDEX(...)/INDEX(...)-1,0))"   # 9 opens, 8 closes -> Excel repair
+   ```
+2. **`IF(cond, value)` without an explicit false branch.** Some Excel versions accept it,
+   others flag it. Always supply all three arguments. Use `IF(cond, value, 0)` or
+   `IF(cond, value, "")` when the false case is "do nothing".
+3. **Embedding Excel error tokens** (`#REF!`, `#NAME?`, `#DIV/0!`, ...) in formula text via
+   string substitution from a misnamed variable.
+4. **Calling a built-in with the wrong arity.** Examples: `IFERROR(VLOOKUP(...))` (missing
+   value-on-error), `MATCH(value)` (missing lookup_array), `POWER(x)` (missing exponent).
+5. **Trailing empty arguments.** `=IF(a, b, )` and `=IFERROR(x, )` are parsed by Excel as
+   `value, 0/blank` but are nearly always the result of an f-string that lost its
+   substitution (e.g. `f"...,\"\")"` becoming `,)` because the `""` was outside the
+   f-string braces). Always write the intended value: `,""` or `,0`.
+6. **Wrong cross-sheet column letter for the product layout.** SPIA / Term Life put
+   `ExpTotalCF` in column `S`; RILA puts it in column `M`. Any new product wiring of the
+   shared ALM helpers (`alm_excel_ladder.write_alm_engine_sheet`,
+   `build_pricing_excel_workbook._alm_liability_pv_cell_formula`,
+   `build_pricing_excel_workbook._write_alm_projection_sheet`) **must** pass the right
+   `liability_total_col` letter so the SUMPRODUCT/INDEX over the liability grid resolves
+   to a populated column. The static validator now rejects references to fully empty
+   columns on a sister sheet (including refs hidden inside `INDIRECT(...)` strings).
+
+## Adding new functions
+
+When using a built-in function not yet listed in
+`excel_workbook_validator.FUNCTION_ARITIES`, add an entry there with `(min_args, max_args)`
+**in the same commit**. Otherwise the validator silently ignores it and bug class #4 above
+returns.
+
+## Regression gates
+
+Before declaring any builder change complete:
+
+1. `pytest tests/test_excel_export_validation.py -v` — must pass.
+2. `pytest tests/parity/ -v` — must pass.
+3. `pytest tests/ -v` — must pass.
+
+The end-to-end gate `tests/test_excel_export_validation.py` builds a complete workbook
+for SPIA, Term Life, and RILA (including the 540-month long-horizon RILA case that
+originally exposed the `IF`-with-missing-else bug) and runs the validator on each.

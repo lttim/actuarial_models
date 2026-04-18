@@ -206,21 +206,36 @@ def mc_excel_snapshot_from_result(
     ]
     rows = []
     for name, arr in metrics:
+        a = np.asarray(arr, dtype=float)
+        finite = a[np.isfinite(a)]
+        if finite.size == 0:
+            rows.append(
+                {"Metric": name, "Mean": float("nan"), "Std Dev": float("nan"),
+                 "P5": float("nan"), "P25": float("nan"), "Median": float("nan"),
+                 "P75": float("nan"), "P95": float("nan")}
+            )
+            continue
         rows.append(
             {
                 "Metric": name,
-                "Mean": float(np.mean(arr)),
-                "Std Dev": float(np.std(arr)),
-                "P5": float(np.percentile(arr, 5)),
-                "P25": float(np.percentile(arr, 25)),
-                "Median": float(np.median(arr)),
-                "P75": float(np.percentile(arr, 75)),
-                "P95": float(np.percentile(arr, 95)),
+                "Mean": float(np.mean(finite)),
+                "Std Dev": float(np.std(finite)),
+                "P5": float(np.percentile(finite, 5)),
+                "P25": float(np.percentile(finite, 25)),
+                "Median": float(np.median(finite)),
+                "P75": float(np.percentile(finite, 75)),
+                "P95": float(np.percentile(finite, 95)),
             }
         )
     summary_df = pd.DataFrame(rows)
 
-    counts, edges = np.histogram(mc.single_premium, bins=n_hist_bins)
+    prem_arr = np.asarray(mc.single_premium, dtype=float)
+    prem_finite = prem_arr[np.isfinite(prem_arr)]
+    if prem_finite.size == 0:
+        counts = np.zeros(n_hist_bins, dtype=int)
+        edges = np.linspace(0.0, 1.0, n_hist_bins + 1)
+    else:
+        counts, edges = np.histogram(prem_finite, bins=n_hist_bins)
     mids = 0.5 * (edges[:-1] + edges[1:])
 
     return MCExcelSnapshot(
@@ -526,20 +541,37 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
     ws["V2"] = "=X9"
 
 
-def _alm_liability_pv_cell_formula(*, excel_row: int, proj_last_row: int, liability_sheet: str) -> str:
+def _alm_liability_pv_cell_formula(
+    *,
+    excel_row: int,
+    proj_last_row: int,
+    liability_sheet: str,
+    liability_total_col: str = "S",
+    liability_discount_col: str = "O",
+) -> str:
     """
     Liability PV at end of month A{excel_row} (month numbering matches liability sheet column A).
-    Mirrors Python ``liab_pv_path``: sum_{j>M} S_j O_j / O_M with S/O from the liability grid.
+    Mirrors Python ``liab_pv_path``: ``sum_{j>M} CF_j * O_j / O_M`` with CF/O taken from the
+    liability grid columns ``liability_total_col`` (ExpTotalCF) and ``liability_discount_col``
+    (DiscountFactor). Both columns must point at populated cells on ``liability_sheet`` —
+    different products lay out the liability grid differently (SPIA uses S/O, RILA uses M/O).
     """
     pl = int(proj_last_row)
     r = int(excel_row)
     sh = liability_sheet
+    cf = str(liability_total_col).strip().upper()
+    df = str(liability_discount_col).strip().upper()
+    if not cf.isalpha() or not df.isalpha():
+        raise ValueError(
+            f"liability_total_col / liability_discount_col must be Excel column letters "
+            f"(got {liability_total_col!r}, {liability_discount_col!r})."
+        )
     return (
-        f'=IF(INDEX({sh}!$O:$O,3+A{r})<=0,NA(),'
+        f'=IF(INDEX({sh}!${df}:${df},3+A{r})<=0,NA(),'
         f'IF(4+A{r}>{pl},0,'
-        f'SUMPRODUCT(INDIRECT("{sh}!S" & (4+A{r}) & ":S{pl}"),'
-        f'INDIRECT("{sh}!O" & (4+A{r}) & ":O{pl}"))'
-        f'/INDEX({sh}!$O:$O,3+A{r})))'
+        f'SUMPRODUCT(INDIRECT("{sh}!{cf}" & (4+A{r}) & ":{cf}{pl}"),'
+        f'INDIRECT("{sh}!{df}" & (4+A{r}) & ":{df}{pl}"))'
+        f'/INDEX({sh}!${df}:${df},3+A{r})))'
     )
 
 
@@ -578,6 +610,9 @@ def _write_alm_projection_sheet(
     n_months: int,
     y_last_row: int,
     engine_step_months: int,
+    yield_curve_spread_ref: str = "Inputs!$B$9",
+    liability_total_col: str = "S",
+    liability_discount_col: str = "O",
 ) -> ALMDashboardLayout:
     n = int(snap.asset_market_value.shape[0])
     n_b = len(snap.bucket_names)
@@ -597,6 +632,8 @@ def _write_alm_projection_sheet(
         snap_bucket_names=snap.bucket_names,
         engine_step_months=int(engine_step_months),
         liability_sheet_name=LIABILITY_SHEET_NAME,
+        liability_total_col=liability_total_col,
+        yield_curve_spread_ref=yield_curve_spread_ref,
     )
     _write_alm_engine_field_guide_sheet(wb, layout.field_guide_rows)
     mv0_letter = get_column_letter(layout.col_mv_cash)
@@ -654,7 +691,8 @@ def _write_alm_projection_sheet(
             row=r,
             column=2,
             value=(
-                f"=IFERROR(INDEX({LIABILITY_SHEET_NAME}!$C:$C,MATCH(A{r},{LIABILITY_SHEET_NAME}!$A:$A,0)),"")"
+                f'=IFERROR(INDEX({LIABILITY_SHEET_NAME}!$C:$C,'
+                f'MATCH(A{r},{LIABILITY_SHEET_NAME}!$A:$A,0)),"")'
             ),
         )
         ws.cell(row=r, column=3, value=f"=SUM({first_bkt}{r}:{last_bkt}{r})")
@@ -662,12 +700,16 @@ def _write_alm_projection_sheet(
             row=r,
             column=4,
             value=_alm_liability_pv_cell_formula(
-                excel_row=r, proj_last_row=proj_last, liability_sheet=LIABILITY_SHEET_NAME
+                excel_row=r,
+                proj_last_row=proj_last,
+                liability_sheet=LIABILITY_SHEET_NAME,
+                liability_total_col=liability_total_col,
+                liability_discount_col=liability_discount_col,
             ),
         )
         ws.cell(row=r, column=5, value=f"={ALM_ENGINE_SHEET}!{debt_letter}{r_eng}")
         ws.cell(row=r, column=6, value=f"=C{r}-D{r}-E{r}")
-        ws.cell(row=r, column=7, value=f"=IF((D{r}+E{r})>0,C{r}/(D{r}+E{r}),"")")
+        ws.cell(row=r, column=7, value=f'=IF((D{r}+E{r})>0,C{r}/(D{r}+E{r}),0)')
         for b in range(n_b):
             if b == 0:
                 ref = f"{ALM_ENGINE_SHEET}!{mv0_letter}{r_eng}"
@@ -1088,6 +1130,10 @@ def build_workbook_from_spec(
         _write_mc_summary_sheet(wb, mc_snapshot)
 
     _prune_blank_default_worksheets(wb)
+
+    from excel_workbook_validator import validate_workbook_or_raise
+
+    validate_workbook_or_raise(wb)
 
     bio = io.BytesIO()
     wb.save(bio)

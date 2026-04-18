@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 import pricing_projection as sp
+import rila_projection as rp
 import term_projection as tp
 from pricing_ui import (
     build_alm_pricing_for_mc_scenario,
@@ -120,3 +121,50 @@ def test_build_alm_mc_scenario_skips_spia_repricer_for_term_product():
         mc_params={"s0": 100.0, "annual_drift": 0.06, "annual_vol": 0.15},
     )
     assert out is term_res
+
+
+def test_build_alm_mc_scenario_reprices_rila_on_single_path():
+    contract = rp.RILAContract(
+        issue_age=55,
+        sex="male",
+        participation=1.0,
+        cap=0.1,
+        floor=0.0,
+        rider_fee_annual=0.0,
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.full_like(ages, 0.015, dtype=float)
+    mort = sp.MortalityTableQx(ages, qx)
+    expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    base = rp.price_rila_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=75,
+        spread=0.0,
+        valuation_year=None,
+        expenses=expenses,
+        index_scenario_csv_path=None,
+        expense_annual_inflation=0.0,
+    )
+    out = build_alm_pricing_for_mc_scenario(
+        product_type=ProductType.RILA,
+        scenario_source="MC simulation (single path)",
+        baseline_pricing=base,
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=75,
+        spread=0.0,
+        valuation_year=None,
+        expenses=expenses,
+        expense_annual_inflation=0.0,
+        mc_n_sims=50,
+        mc_seed=7,
+        mc_scenario_idx=3,
+        mc_params={"s0": 100.0, "annual_drift": 0.06, "annual_vol": 0.15},
+    )
+    assert out is not base
+    assert isinstance(out, rp.RILAProjectionResult)
+    assert out.months.size == base.months.size

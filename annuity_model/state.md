@@ -17,16 +17,17 @@
 |------|--------|--------|
 | Profit decomposition | `pricing_ui.py` | `_build_profit_decomposition_rows`, `_build_profit_waterfall_chart_df`, `_altair_profit_waterfall_chart`; table matches signed `delta` in tooltips. |
 | Pricing Run session keys | `pricing_run_form_state.py`, `pricing_ui.py` | `PRICING_RUN_NUMBER_INPUT_KEYS` + `_pricing_run_numeric_seeds` avoid Streamlit “default + Session State” warnings on `run_number_input`. |
+| RILA (accumulation) | `rila_projection.py`, `build_rila_excel_workbook.py`, `product_registry.py`, `pricing_ui.py` | Annual point-to-point crediting + Excel `ModelCheck`; add `docs/rila_parity_contract.md` to release review. What-if tab is info-only for RILA in this release. |
 
 ## Parity / release gates
 
-- **Do not change** calculation engines or Excel generators without contract updates + parity tests (`docs/model_parity_contract.md`).
+- **Do not change** calculation engines or Excel generators without contract updates + parity tests (`docs/model_parity_contract.md`, and `docs/rila_parity_contract.md` for RILA liability sheets).
 - Before merge: `pytest tests/parity/ -v` (0.00 discrepancy), `pytest tests/ -v`.
 
 ## Validation (this workspace)
 
-- `python -m pytest tests/parity/ -v` — **19** passed.
-- `python -m pytest tests/ -v` — **114** passed.
+- `python -m pytest tests/parity/ -v` — **21** passed (incl. RILA parity).
+- `python -m pytest tests/ -v` — **124** passed (last full run in dev env).
 
 ## Suggested next steps (optional)
 

@@ -56,6 +56,10 @@ PRICING_RUN_NUMBER_INPUT_KEYS: frozenset[str] = frozenset(
         "run_mc_drift_pct",
         "run_mc_vol_pct",
         "run_mc_s0",
+        "run_rila_participation",
+        "run_rila_cap",
+        "run_rila_floor",
+        "run_rila_rider_fee",
     }
 )
 
@@ -205,5 +209,9 @@ def build_run_form_seed_defaults(
         "run_policy_expense": 0.0,
         "run_premium_expense_pct": 0.0,
         "run_monthly_expense": 0.0,
+        "run_rila_participation": float(saved_inputs.get("rila_participation", 1.0)),
+        "run_rila_cap": float(saved_inputs.get("rila_cap", 0.10)),
+        "run_rila_floor": float(saved_inputs.get("rila_floor", 0.0)),
+        "run_rila_rider_fee": float(saved_inputs.get("rila_rider_fee_annual", 0.01)),
     }
     return defaults

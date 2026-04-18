@@ -27,11 +27,11 @@ def _L(c: int) -> str:
     return get_column_letter(c)
 
 
-def _excel_df_flat(*, t_cell: str, y_last_row: int) -> str:
+def _excel_df_flat(*, t_cell: str, y_last_row: int, spread_ref: str = "Inputs!$B$9") -> str:
     """df(t)=exp(-(z+s)*t) with log-linear z between YieldCurve nodes; Excel 2013+."""
     ya = f"YieldCurve!$A$4:$A${y_last_row}"
     zb = f"YieldCurve!$B$4:$B${y_last_row}"
-    sp = "Inputs!$B$9"
+    sp = str(spread_ref)
     br = (
         f"IF({t_cell}<=INDEX({ya},1),1,"
         f"IF({t_cell}>=INDEX({ya},ROWS({ya})),ROWS({ya})-1,MATCH({t_cell},{ya},1)))"
@@ -78,6 +78,8 @@ def write_alm_engine_sheet(
     snap_bucket_names: tuple[str, ...],
     engine_step_months: int = 1,
     liability_sheet_name: str = "Liabilities",
+    liability_total_col: str = "S",
+    yield_curve_spread_ref: str = "Inputs!$B$9",
 ) -> ALMEngineLayout:
     if asm.rebalance_policy != "liquidity_only":
         raise ValueError(
@@ -101,7 +103,13 @@ def write_alm_engine_sheet(
     if tuple(str(b.name) for b in buckets) != snap_bucket_names:
         raise ValueError("Allocation buckets must match ALMExcelSnapshot.bucket_names.")
 
+    yc_spread = str(yield_curve_spread_ref)
     sh = str(liability_sheet_name)
+    liab_cf_col = str(liability_total_col).strip().upper()
+    if not liab_cf_col.isalpha() or not liab_cf_col:
+        raise ValueError(
+            f"liability_total_col must be an Excel column letter (got {liability_total_col!r})."
+        )
 
     nom = np.array([float(buckets[k + 1].tenor_years) for k in range(nb)], dtype=float)
     wsum_b = float(np.sum(w[1:]))
@@ -138,7 +146,7 @@ def write_alm_engine_sheet(
         1 if asm.disinvest_rule == "shortest_first" else 0
     )
 
-    df_borrow = _excel_df_flat(t_cell="$B$8", y_last_row=y_last_row)
+    df_borrow = _excel_df_flat(t_cell="$B$8", y_last_row=y_last_row, spread_ref=yc_spread)
     ws["A13"] = "Borrow rate (for exp(r*dt))"
     if asm.borrowing_rate_mode == "scenario_linked":
         ws["B13"] = f"=IF($B$7=1,MAX(0,-LN(({df_borrow}))/$B$8+$B$9),$B$8)"
@@ -159,7 +167,7 @@ def write_alm_engine_sheet(
         ws.cell(
             row=w_row0 + k,
             column=6,
-            value=f"={_excel_df_flat(t_cell=f'$E${w_row0 + k}', y_last_row=y_last_row)}",
+            value=f"={_excel_df_flat(t_cell=f'$E${w_row0 + k}', y_last_row=y_last_row, spread_ref=yc_spread)}",
         )
 
     last_param_row = w_row0 + nb - 1
@@ -222,7 +230,7 @@ def write_alm_engine_sheet(
         take1(
             "cf",
             f"Liability outflow, $ ({sh} ExpTotalCF)",
-            f"Expected monthly liability cash outflow from **{sh}** column ExpTotalCF (same as column S).",
+            f"Expected monthly liability cash outflow from **{sh}** column ExpTotalCF (column {liab_cf_col}).",
         )
     take1(
         "d_acc",
@@ -543,13 +551,16 @@ def write_alm_engine_sheet(
             ws.cell(
                 row=r,
                 column=cf_i,
-                value=f'=SUM(INDIRECT("{sh}!S"&(3+{_L(m0_c)}{r})&":S"&(3+{_L(mon_c)}{r})))',
+                value=(
+                    f'=SUM(INDIRECT("{sh}!{liab_cf_col}"&(3+{_L(m0_c)}{r})'
+                    f'&":{liab_cf_col}"&(3+{_L(mon_c)}{r})))'
+                ),
             )
         else:
             ws.cell(
                 row=r,
                 column=cf_i,
-                value=f"=INDEX({sh}!$S:$S,3+{_L(mon_c)}{r})",
+                value=f"=INDEX({sh}!${liab_cf_col}:${liab_cf_col},3+{_L(mon_c)}{r})",
             )
 
         d_acc = int(C("d_acc"))
@@ -613,7 +624,7 @@ def write_alm_engine_sheet(
             ws.cell(
                 row=r,
                 column=df_pm[k],
-                value=f"={_excel_df_flat(t_cell=f'{_L(t_pm[k])}{r}', y_last_row=y_last_row)}",
+                value=f"={_excel_df_flat(t_cell=f'{_L(t_pm[k])}{r}', y_last_row=y_last_row, spread_ref=yc_spread)}",
             )
         for k in range(nb):
             ws.cell(row=r, column=mv_pm[k], value=f"={_L(f_pm[k])}{r}*{_L(df_pm[k])}{r}")
@@ -670,7 +681,7 @@ def write_alm_engine_sheet(
 
         for k in range(nb):
             t_use = f"IF({_L(t_pm[k])}{r}>1E-9,{_L(t_pm[k])}{r},$E${WBASE + k})"
-            denom = _excel_df_flat(t_cell=f"({t_use})", y_last_row=y_last_row)
+            denom = _excel_df_flat(t_cell=f"({t_use})", y_last_row=y_last_row, spread_ref=yc_spread)
             ws.cell(
                 row=r,
                 column=f_re[k],
@@ -698,7 +709,7 @@ def write_alm_engine_sheet(
             ws.cell(
                 row=r,
                 column=dfd_cols[k],
-                value=f"={_excel_df_flat(t_cell=f'{_L(t_re[k])}{r}', y_last_row=y_last_row)}",
+                value=f"={_excel_df_flat(t_cell=f'{_L(t_re[k])}{r}', y_last_row=y_last_row, spread_ref=yc_spread)}",
             )
 
         ccf = int(C("cash_cf"))
@@ -805,7 +816,7 @@ def write_alm_engine_sheet(
             ws.cell(
                 row=r,
                 column=mvb[k],
-                value=f"={_L(fe[k])}{r}*({_excel_df_flat(t_cell=f'{_L(te[k])}{r}', y_last_row=y_last_row)})",
+                value=f"={_L(fe[k])}{r}*({_excel_df_flat(t_cell=f'{_L(te[k])}{r}', y_last_row=y_last_row, spread_ref=yc_spread)})",
             )
 
     last_r = R0 + n_periods - 1

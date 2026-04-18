@@ -1,7 +1,7 @@
 # Agent Instructions — SPIA Annuity Model
 
-This project implements a SPIA (Single Premium Immediate Annuity) pricing and ALM projection
-engine with two synchronised calculation engines: Python and Excel.
+This project implements SPIA, Term Life, and RILA (accumulation) pricing with ALM projection
+and two synchronised calculation engines where applicable: Python and Excel.
 
 ## Non-negotiable parity requirement
 
@@ -29,6 +29,11 @@ workbook shows 0.00 surplus difference.
 | `docs/model_parity_contract.md` | Parity contract: tolerances, tie-break, epsilon policies |
 | `docs/parity_test_checklist.md` | Release gate checklist |
 | `tests/parity/test_alm_parity.py` | Parity regression tests |
+| `rila_projection.py` | RILA liability / crediting (Python) |
+| `build_rila_excel_workbook.py` | RILA Excel workbook + `ModelCheck` |
+| `docs/rila_product_spec.md` | RILA v1 product definition |
+| `docs/rila_parity_contract.md` | RILA Python ↔ Excel parity addendum |
+| `tests/parity/test_rila_parity.py` | RILA parity tests |
 
 ## Critical rules
 
@@ -37,6 +42,33 @@ workbook shows 0.00 surplus difference.
 3. Never rely on raw floating-point comparison of `t_rem` values for ordering — always use epsilon tie-breaking.
 4. Every bug fixed must have a permanent regression test capturing the exact scenario.
 5. Step-level reconciliation (monthly state) not just final surplus.
+6. **Excel formulas must pass static validation before saving.** Every workbook builder must
+   call `excel_workbook_validator.validate_workbook_or_raise(wb)` immediately before
+   `wb.save(...)`. The validator now checks both *syntax* and *cross-sheet semantics*:
+   - Balanced parentheses and string quotes (catches f-string concatenation bugs).
+   - Correct argument counts for every known function (no `IF(cond, value)` without an
+     explicit false branch — Excel will repair the file with "Removed Records: Formula
+     from /xl/worksheets/sheetN.xml part" and replace cells with `#DIV/0!`).
+   - No embedded Excel error literals (`#REF!`, `#NAME?`, `#DIV/0!`, ...) inside formula
+     bodies.
+   - No trailing empty arguments (`IF(a, b, )` / `IFERROR(x, )`) — those are almost
+     always an f-string that lost its substitution. Write `,""` or `,0` explicitly.
+   - **Cross-sheet column resolution.** Every `Sheet!Col` reference *and* every
+     `Sheet!Col` literal embedded in `INDIRECT(...)` must resolve to a column that
+     actually has data on the target sheet. This catches the class of silent
+     reconciliation bug where a SPIA-style `Liabilities!S` reference is generated
+     from a RILA workbook (RILA puts `ExpTotalCF` in column M, not S). Excel
+     coerces the missing column to zero in `SUMPRODUCT`/`INDEX`, so without this
+     check the failure only shows up as drift in `ModelCheck` after Excel recalcs.
+   When introducing a new built-in function in any builder, register its arity in
+   `excel_workbook_validator.FUNCTION_ARITIES`. When introducing a new product, the
+   shared ALM helper `_write_alm_projection_sheet` accepts `liability_total_col`
+   (default `"S"` for SPIA/Term) and `liability_discount_col` (default `"O"`) — pass
+   the column letters that match your product's `Liabilities` layout (e.g. RILA
+   uses `liability_total_col="M"`). The end-to-end gate
+   `tests/test_excel_export_validation.py` builds workbooks for every implemented
+   product (SPIA, Term, RILA) and runs the validator on them; that test must
+   always pass.
 
 ## Parity kit for future products
 

@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import pricing_projection as sp
+import rila_projection as rp
 import term_projection as tp
 from build_pricing_excel_workbook import excel_spec_from_launcher
 from product_registry import (
@@ -16,7 +17,7 @@ from product_registry import (
 )
 
 
-pytestmark = [pytest.mark.product_spia, pytest.mark.product_term]
+pytestmark = [pytest.mark.product_spia, pytest.mark.product_term, pytest.mark.product_rila]
 
 
 def _setup_case() -> tuple[sp.SPIAContract, sp.YieldCurve, sp.MortalityTableQx, sp.ExpenseAssumptions]:
@@ -249,6 +250,36 @@ def test_pricing_metrics_for_spia_product():
     assert metrics[0].value == pytest.approx(float(res.single_premium), rel=0, abs=0)
 
 
+def test_pricing_metrics_for_rila_product():
+    contract, yc, mort, ex = _setup_case()
+    rila_c = rp.RILAContract(
+        issue_age=contract.issue_age,
+        sex=contract.sex,
+        participation=0.95,
+        cap=0.1,
+        floor=-0.01,
+        rider_fee_annual=0.005,
+    )
+    res = rp.price_rila_single_premium(
+        contract=rila_c,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=78,
+        spread=0.0,
+        valuation_year=None,
+        expenses=ex,
+        index_scenario_csv_path=None,
+        expense_annual_inflation=0.0,
+    )
+    metrics = get_pricing_metrics(ProductType.RILA, res)
+    assert tuple(m.label for m in metrics) == (
+        "Single premium",
+        "PV benefit (claims)",
+        "PV monthly expenses",
+        "Annuity factor",
+    )
+
+
 def test_pricing_metrics_for_term_product():
     contract, yc, mort, _ = _setup_case()
     term_contract = tp.TermLifeContract(
@@ -281,7 +312,48 @@ def test_pricing_metrics_for_term_product():
 def test_product_ui_config_export_filenames():
     spia_ui_cfg = get_product_ui_config(ProductType.SPIA)
     term_ui_cfg = get_product_ui_config(ProductType.TERM_LIFE)
+    rila_ui_cfg = get_product_ui_config(ProductType.RILA)
     assert spia_ui_cfg.projection_csv_filename == "pricing_projection_spia.csv"
     assert term_ui_cfg.projection_csv_filename == "pricing_projection_term_life.csv"
+    assert rila_ui_cfg.projection_csv_filename == "pricing_projection_rila.csv"
     assert spia_ui_cfg.recalc_workbook_filename == "spia_recalc_model.xlsx"
     assert term_ui_cfg.recalc_workbook_filename == "term_life_recalc_model.xlsx"
+    assert rila_ui_cfg.recalc_workbook_filename == "rila_recalc_model.xlsx"
+
+
+def test_rila_adapter_price_matches_direct():
+    contract, yc, mort, ex = _setup_case()
+    rila_c = rp.RILAContract(
+        issue_age=contract.issue_age,
+        sex=contract.sex,
+        participation=0.9,
+        cap=0.1,
+        floor=0.0,
+        rider_fee_annual=0.01,
+    )
+    adapter = get_product_adapter(ProductType.RILA)
+    res_adapter = adapter.price(
+        contract=rila_c,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=82,
+        spread=0.0,
+        valuation_year=None,
+        expenses=ex,
+        expenses_csv_path=sp.DEFAULT_EXPENSES_CSV,
+        index_scenario_csv_path=None,
+        expense_annual_inflation=0.0,
+    )
+    res_direct = rp.price_rila_single_premium(
+        contract=rila_c,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=82,
+        spread=0.0,
+        valuation_year=None,
+        expenses=ex,
+        index_scenario_csv_path=None,
+        expense_annual_inflation=0.0,
+    )
+    np.testing.assert_allclose(res_adapter.expected_total_cashflows, res_direct.expected_total_cashflows, rtol=0, atol=0)
+    assert float(res_adapter.single_premium) == pytest.approx(float(res_direct.single_premium), rel=0, abs=0)

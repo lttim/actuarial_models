@@ -47,12 +47,20 @@ def write_yield_curve_sheet(wb: Workbook, df: pd.DataFrame) -> tuple[str, int]:
     return name, int(y_last_row)
 
 
-def write_monthly_curve_logdf(ws, n_months: int, y_last_row: int) -> None:
+def write_monthly_curve_logdf(
+    ws,
+    n_months: int,
+    y_last_row: int,
+    *,
+    payments_per_year_ref: str = "Inputs!$B$6",
+    spread_ref: str = "Inputs!$B$9",
+) -> None:
     """
     Monthly discount factors consistent with Python ``YieldCurve.discount_factors``:
     log-linear interpolation on DF between curve nodes; flat zero-rate extrapolation beyond endpoints.
 
-    Expects ``Inputs!$B$6`` = payments per year and ``Inputs!$B$9`` = spread (same convention as SPIA ALM).
+    Defaults match SPIA / Term ``Inputs`` (B6 = payments per year, B9 = spread). RILA uses a
+    different row map — pass ``payments_per_year_ref`` / ``spread_ref`` from the product builder.
     """
     ws.title = RECALC_MONTHLY_CURVE_SHEET
     ws["A1"] = "Monthly Discount Factors (log-linear on DF)"
@@ -81,9 +89,11 @@ def write_monthly_curve_logdf(ws, n_months: int, y_last_row: int) -> None:
     y_rng = f"{yc}!$A$4:$A${y_last_row}"
     z_rng = f"{yc}!$B$4:$B${y_last_row}"
 
+    pay = payments_per_year_ref
+    spr = spread_ref
     for r in range(first, last + 1):
         ws[f"A{r}"] = r - first + 1
-        ws[f"B{r}"] = f"=A{r}/Inputs!$B$6"
+        ws[f"B{r}"] = f"=A{r}/{pay}"
         ws[f"C{r}"] = (
             f"=IF(B{r}<=INDEX({y_rng},1),1,"
             f"IF(B{r}>=INDEX({y_rng},ROWS({y_rng})),ROWS({y_rng})-1,"
@@ -94,11 +104,11 @@ def write_monthly_curve_logdf(ws, n_months: int, y_last_row: int) -> None:
         ws[f"F{r}"] = f"=INDEX({z_rng},C{r})"
         ws[f"G{r}"] = f"=INDEX({z_rng},C{r}+1)"
         ws[f"H{r}"] = f"=IF(E{r}=D{r},0,(B{r}-D{r})/(E{r}-D{r}))"
-        ws[f"I{r}"] = f"=-(F{r}+Inputs!$B$9)*D{r}"
-        ws[f"J{r}"] = f"=-(G{r}+Inputs!$B$9)*E{r}"
+        ws[f"I{r}"] = f"=-(F{r}+{spr})*D{r}"
+        ws[f"J{r}"] = f"=-(G{r}+{spr})*E{r}"
         ws[f"K{r}"] = (
-            f"=IF(B{r}<=INDEX({y_rng},1),-(INDEX({z_rng},1)+Inputs!$B$9)*B{r},"
-            f"IF(B{r}>=INDEX({y_rng},ROWS({y_rng})),-(INDEX({z_rng},ROWS({y_rng}))+Inputs!$B$9)*B{r},"
+            f"=IF(B{r}<=INDEX({y_rng},1),-(INDEX({z_rng},1)+{spr})*B{r},"
+            f"IF(B{r}>=INDEX({y_rng},ROWS({y_rng})),-(INDEX({z_rng},ROWS({y_rng}))+{spr})*B{r},"
             f"I{r}+H{r}*(J{r}-I{r})))"
         )
         ws[f"L{r}"] = f"=EXP(K{r})"

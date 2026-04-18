@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 import pricing_projection as sp
+import rila_projection as rp
 import term_projection as tp
 
 
@@ -857,6 +858,34 @@ def test_run_alm_projection_from_pricing_result_dispatches_spia_and_term():
     )
     alm_direct = sp.run_alm_projection(pricing=spia_res, yield_curve=yc2, spread=0.0, assumptions=asm)
     np.testing.assert_allclose(alm_u.surplus, alm_direct.surplus, rtol=0.0, atol=1e-9)
+
+    rila_c = rp.RILAContract(
+        issue_age=50,
+        sex="male",
+        participation=1.0,
+        cap=0.05,
+        floor=0.0,
+        rider_fee_annual=0.0,
+    )
+    rila_res = rp.price_rila_single_premium(
+        contract=rila_c,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=70,
+        spread=0.0,
+        valuation_year=None,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        index_scenario_csv_path=None,
+        expense_annual_inflation=0.0,
+    )
+    alm_rila = sp.run_alm_projection_from_pricing_result(
+        pricing=rila_res,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=asm,
+        initial_asset_market_value=400_000.0,
+    )
+    assert alm_rila.surplus.shape == rila_res.expected_total_cashflows.shape
 
     with pytest.raises(TypeError, match="pricing must be"):
         sp.run_alm_projection_from_pricing_result(

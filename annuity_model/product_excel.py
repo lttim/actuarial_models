@@ -10,6 +10,7 @@ from build_pricing_excel_workbook import (
     MCExcelSnapshot,
     build_workbook_from_spec,
 )
+from build_rila_excel_workbook import RILAExcelBuildSpec, build_rila_workbook_from_spec
 from build_term_excel_workbook import TermExcelBuildSpec, build_term_workbook_from_spec
 from product_registry import ProductType
 import pricing_projection as sp
@@ -40,6 +41,15 @@ def build_product_workbook(
         if not isinstance(spec, TermExcelBuildSpec):
             raise TypeError("Term workbook builder requires TermExcelBuildSpec.")
         return build_term_workbook_from_spec(
+            spec,
+            out_path=out_path,
+            alm_snapshot=alm_snapshot,
+            alm_assumptions=alm_assumptions,
+        )
+    if product_type == ProductType.RILA:
+        if not isinstance(spec, RILAExcelBuildSpec):
+            raise TypeError("RILA workbook builder requires RILAExcelBuildSpec.")
+        return build_rila_workbook_from_spec(
             spec,
             out_path=out_path,
             alm_snapshot=alm_snapshot,

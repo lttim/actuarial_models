@@ -2091,6 +2091,21 @@ def run_alm_projection_from_pricing_result(
             liability_curve=liability_curve,
             liability_cashflows=liability_cashflows,
         )
+    import rila_projection as rp
+
+    if isinstance(pricing, rp.RILAProjectionResult):
+        if initial_asset_market_value is None:
+            initial_asset_market_value = float(pricing.single_premium)
+        return run_alm_projection_from_liability_path(
+            liability_path=rp.liability_path_from_rila_projection(pricing),
+            yield_curve=yield_curve,
+            spread=spread,
+            assumptions=assumptions,
+            initial_asset_market_value=float(initial_asset_market_value),
+            asset_curve=asset_curve,
+            liability_curve=liability_curve,
+            liability_cashflows=liability_cashflows,
+        )
     if isinstance(pricing, SPIAProjectionResult):
         return run_alm_projection(
             pricing=pricing,
@@ -2103,8 +2118,8 @@ def run_alm_projection_from_pricing_result(
             liability_cashflows=liability_cashflows,
         )
     raise TypeError(
-        "pricing must be a SPIAProjectionResult or term_projection.TermLifeProjectionResult; "
-        f"got {type(pricing).__name__!r}."
+        "pricing must be a SPIAProjectionResult, term_projection.TermLifeProjectionResult, or "
+        f"rila_projection.RILAProjectionResult; got {type(pricing).__name__!r}."
     )
 
 

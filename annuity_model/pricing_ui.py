@@ -38,6 +38,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import pricing_projection as sp
+import rila_projection as rp
 import term_projection as tp
 from alm_excel_ladder import ALM_ENGINE_SHEET
 
@@ -295,7 +296,7 @@ def _serialize_array(arr: Any, *, include_full: bool, max_points: int = 250) -> 
     }
 
 
-def _contract_to_dict(contract: sp.SPIAContract | tp.TermLifeContract) -> dict[str, Any]:
+def _contract_to_dict(contract: sp.SPIAContract | tp.TermLifeContract | rp.RILAContract) -> dict[str, Any]:
     out: dict[str, Any] = {
         "issue_age": int(contract.issue_age),
         "sex": str(contract.sex),
@@ -309,6 +310,11 @@ def _contract_to_dict(contract: sp.SPIAContract | tp.TermLifeContract) -> dict[s
         out["monthly_premium"] = float(contract.monthly_premium)
         out["term_years"] = int(contract.term_years)
         out["premium_mode"] = str(contract.premium_mode)
+    if isinstance(contract, rp.RILAContract):
+        out["rila_participation"] = float(contract.participation)
+        out["rila_cap"] = float(contract.cap)
+        out["rila_floor"] = float(contract.floor)
+        out["rila_rider_fee_annual"] = float(contract.rider_fee_annual)
     return out
 
 
@@ -332,8 +338,8 @@ def _mortality_to_dict(mort: Any) -> dict[str, Any]:
 
 
 def _pricing_result_to_dict(
-    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
-    contract_state: sp.SPIAContract | tp.TermLifeContract,
+    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult | rp.RILAProjectionResult,
+    contract_state: sp.SPIAContract | tp.TermLifeContract | rp.RILAContract,
     *,
     include_full: bool,
 ) -> dict[str, Any]:
@@ -677,11 +683,12 @@ def _normalize_run_state_for_selected_product(
     # Keep enumerated controls valid for current product.
     mortality_options = list(get_product_mortality_mode_options(selected_product))
     default_mortality_mode = get_product_default_mortality_mode(selected_product)
-    current_m_mode = str(state.get("run_m_mode", ""))
-    if switched_product and selected_product == ProductType.SPIA:
-        # SPIA should always land on RP+MP defaults when switching back from other products.
+    if switched_product and selected_product in (ProductType.SPIA, ProductType.RILA):
+        # SPIA/RILA should land on registry default mortality when switching back from Term, etc.
         state["run_m_mode"] = default_mortality_mode
-    elif current_m_mode not in mortality_options:
+    if switched_product and selected_product == ProductType.RILA:
+        state["run_use_index"] = True
+    if str(state.get("run_m_mode", "")) not in mortality_options:
         state["run_m_mode"] = default_mortality_mode
 
     y_mode = str(state.get("run_y_mode", "par_bootstrap"))
@@ -805,7 +812,9 @@ def _render_overview() -> None:
     st.markdown("Use the sidebar to navigate: " + " | ".join(f"**{name}**" for name in section_labels) + ".")
 
 
-def _result_dataframe(res: sp.SPIAProjectionResult, contract: sp.SPIAContract) -> pd.DataFrame:
+def _result_dataframe(
+    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult | rp.RILAProjectionResult,
+) -> pd.DataFrame:
     expected_payment_pv = res.expected_benefit_cashflows * res.discount_factors
     cumulative_pv = np.cumsum(expected_payment_pv)
     return pd.DataFrame(
@@ -831,8 +840,8 @@ def _result_dataframe(res: sp.SPIAProjectionResult, contract: sp.SPIAContract) -
 
 
 def _render_pricing_run_charts(
-    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
-    contract: sp.SPIAContract | tp.TermLifeContract,
+    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult | rp.RILAProjectionResult,
+    contract: sp.SPIAContract | tp.TermLifeContract | rp.RILAContract,
     expenses: sp.ExpenseAssumptions | None,
     product_type: ProductType,
 ) -> None:
@@ -854,7 +863,7 @@ def _render_pricing_run_charts(
     st.markdown("**Economic reserve** (benefit + monthly expense, PV roll-forward)")
     st.line_chart(pd.DataFrame({"age": ages_r, "reserve": np.rint(res.economic_reserve)}).set_index("age"))
 
-    if product_type == ProductType.SPIA and not isinstance(expenses, sp.ExpenseAssumptions):
+    if product_type != ProductType.TERM_LIFE and not isinstance(expenses, sp.ExpenseAssumptions):
         st.warning("Profit decomposition unavailable: pricing expense assumptions were not found in session state.")
     else:
         _render_profit_decomposition_chart(res, contract, expenses=expenses, product_type=product_type)
@@ -962,8 +971,8 @@ def _altair_profit_waterfall_chart(df: pd.DataFrame) -> alt.Chart:
 
 
 def _render_profit_decomposition_chart(
-    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
-    contract: sp.SPIAContract | tp.TermLifeContract,
+    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult | rp.RILAProjectionResult,
+    contract: sp.SPIAContract | tp.TermLifeContract | rp.RILAContract,
     expenses: sp.ExpenseAssumptions | None,
     product_type: ProductType,
 ) -> None:
@@ -992,8 +1001,8 @@ def _render_profit_decomposition_chart(
 
 def _build_profit_decomposition_rows(
     *,
-    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
-    contract: sp.SPIAContract | tp.TermLifeContract,
+    res: sp.SPIAProjectionResult | tp.TermLifeProjectionResult | rp.RILAProjectionResult,
+    contract: sp.SPIAContract | tp.TermLifeContract | rp.RILAContract,
     expenses: sp.ExpenseAssumptions | None,
     product_type: ProductType,
 ) -> tuple[list[tuple[str, float, bool]], str]:
@@ -1214,11 +1223,9 @@ def build_alm_pricing_for_mc_scenario(
     mc_params: dict[str, Any],
 ) -> Any:
     """
-    Single-path MC repricing for ALM liability PV. SPIA-only; other products always return baseline.
+    Single-path MC repricing for ALM liability PV (SPIA or RILA); other products return baseline.
     """
     if scenario_source != "MC simulation (single path)":
-        return baseline_pricing
-    if product_type != ProductType.SPIA or not isinstance(contract, sp.SPIAContract):
         return baseline_pricing
     n_months = int(baseline_pricing.months.size)
     idx_paths = sp.simulate_index_levels_gbm(
@@ -1232,23 +1239,38 @@ def build_alm_pricing_for_mc_scenario(
     idx_one = idx_paths[int(mc_scenario_idx)]
     idx_levels_payment = np.asarray(idx_one[1:], dtype=float)
     idx_s0 = float(idx_one[0])
-    return sp.price_spia_single_premium(
-        contract=contract,
-        yield_curve=yield_curve,
-        mortality=mortality,
-        horizon_age=int(horizon_age),
-        spread=spread,
-        valuation_year=int(valuation_year) if valuation_year is not None else None,
-        expenses=expenses,
-        expense_annual_inflation=float(expense_annual_inflation),
-        index_s0=idx_s0,
-        index_levels_payment=idx_levels_payment,
-    )
+    if product_type == ProductType.SPIA and isinstance(contract, sp.SPIAContract):
+        return sp.price_spia_single_premium(
+            contract=contract,
+            yield_curve=yield_curve,
+            mortality=mortality,
+            horizon_age=int(horizon_age),
+            spread=spread,
+            valuation_year=int(valuation_year) if valuation_year is not None else None,
+            expenses=expenses,
+            expense_annual_inflation=float(expense_annual_inflation),
+            index_s0=idx_s0,
+            index_levels_payment=idx_levels_payment,
+        )
+    if product_type == ProductType.RILA and isinstance(contract, rp.RILAContract):
+        return rp.price_rila_single_premium(
+            contract=contract,
+            yield_curve=yield_curve,
+            mortality=mortality,
+            horizon_age=int(horizon_age),
+            spread=spread,
+            valuation_year=int(valuation_year) if valuation_year is not None else None,
+            expenses=expenses,
+            expense_annual_inflation=float(expense_annual_inflation),
+            index_s0=idx_s0,
+            index_levels_payment=idx_levels_payment,
+        )
+    return baseline_pricing
 
 
 def _run_alm_from_session_pricing(
     *,
-    pricing: sp.SPIAProjectionResult | tp.TermLifeProjectionResult,
+    pricing: sp.SPIAProjectionResult | tp.TermLifeProjectionResult | rp.RILAProjectionResult,
     yield_curve: sp.YieldCurve,
     spread: float,
     assumptions: sp.ALMAssumptions,
@@ -1293,6 +1315,10 @@ def _render_what_if_studio() -> None:
         or not isinstance(base_mort, (sp.MortalityTableQx, sp.MortalityTableRP2014MP2016))
     ):
         st.info("Run pricing first in Pricing Run to set a baseline for What-if analysis.")
+        return
+
+    if product_type == ProductType.RILA:
+        st.info("What-if Analysis is not yet wired for RILA in this release; use Pricing Run and ALM with deterministic scenarios.")
         return
 
     c1, c2, c3 = st.columns(3)
@@ -2041,6 +2067,55 @@ def _render_run_and_results() -> None:
                 step=10.0,
                 replace_non_positive=True,
             )
+        elif selected_product == ProductType.RILA:
+            benefit_annual = 0.0
+            term_choice = "n/a"
+            premium_mode_choice = "n/a"
+            benefit_timing_choice = "n/a"
+            monthly_premium = 0.0
+            r1, r2, r3, r4 = st.columns(4)
+            with r1:
+                run_number_input(
+                    "Participation",
+                    "run_rila_participation",
+                    default=1.0,
+                    min_value=0.0,
+                    max_value=5.0,
+                    format="%.4f",
+                    help=(
+                        "Very high participation with a high cap can make pricing infeasible "
+                        "(PV of death benefits per $1 premium + premium expense rate ≥ 1). "
+                        "If pricing fails, reduce participation or cap."
+                    ),
+                )
+            with r2:
+                run_number_input(
+                    "Annual cap (decimal)",
+                    "run_rila_cap",
+                    default=0.10,
+                    min_value=-1.0,
+                    max_value=2.0,
+                    format="%.4f",
+                    help="e.g. 0.10 = +10% credited return cap per segment",
+                )
+            with r3:
+                run_number_input(
+                    "Annual floor (decimal)",
+                    "run_rila_floor",
+                    default=0.0,
+                    min_value=-1.0,
+                    max_value=1.0,
+                    format="%.4f",
+                )
+            with r4:
+                run_number_input(
+                    "Rider fee (annual on AV)",
+                    "run_rila_rider_fee",
+                    default=0.01,
+                    min_value=0.0,
+                    max_value=1.0,
+                    format="%.4f",
+                )
         else:
             benefit_annual = run_number_input(
                 "Annual benefit ($)", "run_spia_benefit_annual", default=100_000.0, min_value=0.0, step=1_000.0
@@ -2176,10 +2251,15 @@ def _render_run_and_results() -> None:
     index_csv = sp.DEFAULT_SP500_SCENARIO_CSV
     expense_inflation_pct = 0.0
     if can_use_economic_scenario:
-        with st.expander("Economic scenario (benefit indexation & expense inflation)", expanded=True):
+        _econ_title = (
+            "Economic scenario (RILA segment crediting & SPIA benefit indexation)"
+            if selected_product == ProductType.RILA
+            else "Economic scenario (benefit indexation & expense inflation)"
+        )
+        with st.expander(_econ_title, expanded=True):
             use_index = st.checkbox(
-                "Use S&P 500 proxy CSV for benefit return indexation",
-                help="If off, index is flat (zero equity returns); benefits stay level in nominal terms.",
+                "Use S&P 500 proxy CSV for index levels (month, sp500_level)",
+                help="If off, index is flat (zero equity returns). Required for meaningful RILA crediting.",
                 key="run_use_index",
             )
             index_csv = st.text_input(
@@ -2215,14 +2295,39 @@ def _render_run_and_results() -> None:
                 "Random seed", "run_mc_seed", default=42, min_value=0, max_value=2_147_483_647, step=1
             )
             mc_drift_pct = run_number_input(
-                "Annual drift (%)", "run_mc_drift_pct", default=6.0, min_value=-50.0, max_value=50.0, step=0.1
+                "Annual drift (%)",
+                "run_mc_drift_pct",
+                default=6.0,
+                min_value=-50.0,
+                max_value=50.0,
+                step=0.1,
+                help=(
+                    "Real-world equity drift used for index simulation. For RILA pricing, "
+                    "drift well above the risk-free rate combined with a high cap/participation can "
+                    "push some paths into infeasibility (PV death benefits per $1 premium ≥ 1). "
+                    "Reduce drift, cap, or participation if too many paths are skipped."
+                ),
             )
             mc_vol_pct = run_number_input(
                 "Annual volatility (%)", "run_mc_vol_pct", default=15.0, min_value=0.0, max_value=200.0, step=0.1
             )
             mc_s0 = run_number_input("Initial index level (S0)", "run_mc_s0", default=100.0, min_value=0.01, step=1.0)
 
-    run = st.button("Run pricing", type="primary")
+    _is_implemented_product = selected_product in (
+        ProductType.SPIA,
+        ProductType.TERM_LIFE,
+        ProductType.RILA,
+    )
+    run = st.button(
+        "Run pricing",
+        type="primary",
+        disabled=not _is_implemented_product,
+        help=(
+            None
+            if _is_implemented_product
+            else f"{product_label(selected_product)} is not implemented in this release."
+        ),
+    )
 
     if run:
         try:
@@ -2258,6 +2363,15 @@ def _render_run_and_results() -> None:
                     term_years=20,
                     premium_mode="level_monthly",
                     benefit_timing="eoy_death",
+                )
+            elif selected_product == ProductType.RILA:
+                contract = rp.RILAContract(
+                    issue_age=int(issue_age),
+                    sex="male" if sex == "male" else "female",
+                    participation=float(st.session_state.get("run_rila_participation", 1.0)),
+                    cap=float(st.session_state.get("run_rila_cap", 0.10)),
+                    floor=float(st.session_state.get("run_rila_floor", 0.0)),
+                    rider_fee_annual=float(st.session_state.get("run_rila_rider_fee", 0.01)),
                 )
             else:
                 contract = sp.SPIAContract(
@@ -2333,6 +2447,10 @@ def _render_run_and_results() -> None:
                 "term_premium_mode": premium_mode_choice,
                 "term_benefit_timing": benefit_timing_choice,
                 "term_monthly_premium": float(monthly_premium),
+                "rila_participation": float(st.session_state.get("run_rila_participation", 1.0)),
+                "rila_cap": float(st.session_state.get("run_rila_cap", 0.10)),
+                "rila_floor": float(st.session_state.get("run_rila_floor", 0.0)),
+                "rila_rider_fee_annual": float(st.session_state.get("run_rila_rider_fee", 0.01)),
                 "mortality_qx_csv": qx_csv,
                 "mortality_rp_xlsx": rp_xlsx,
                 "mortality_rp_out_csv": rp_out,
@@ -2393,7 +2511,7 @@ def _render_run_and_results() -> None:
             _refresh_pricing_excel_workbook_in_session()
         except Exception as e:
             _clear_dependent_state_on_pricing_change()
-            st.session_state["pricing_err"] = repr(e)
+            st.session_state["pricing_err"] = f"{type(e).__name__}: {e}"
             st.session_state["pricing_res"] = None
             st.session_state.pop("pricing_product_type", None)
             st.session_state.pop("pricing_run_inputs", None)
@@ -2430,22 +2548,39 @@ def _render_run_and_results() -> None:
         mc_res = st.session_state.get("pricing_mc")
         if mc_res is not None:
             st.subheader("Monte Carlo summary (index-path uncertainty)")
+            n_infeasible_mc = int(getattr(mc_res, "n_infeasible", 0))
+            n_feasible_mc = int(getattr(mc_res, "n_feasible", mc_res.n_sims))
+            if n_infeasible_mc > 0:
+                pct = 100.0 * n_infeasible_mc / max(int(mc_res.n_sims), 1)
+                worst = float(getattr(mc_res, "infeasible_max_loading", 0.0))
+                st.warning(
+                    f"{n_infeasible_mc:,} of {mc_res.n_sims:,} Monte Carlo paths ({pct:.1f}%) "
+                    f"were economically infeasible (PV death benefits per $1 premium + premium "
+                    f"expense rate exceeded 1; worst observed loading {worst:.4f}). Statistics "
+                    "below use only the feasible paths. Reduce participation, cap, MC drift, or "
+                    "horizon to lower the share."
+                )
             a1, a2, a3, a4 = st.columns(4)
             a1.metric("Mean premium", f"${mc_res.premium_mean:,.0f}")
             a2.metric("Median premium", f"${mc_res.premium_median:,.0f}")
             a3.metric("P5 premium", f"${mc_res.premium_p05:,.0f}")
             a4.metric("P95 premium", f"${mc_res.premium_p95:,.0f}")
-            st.caption(f"Simulations: {mc_res.n_sims:,}")
-            hist_counts, hist_edges = np.histogram(mc_res.single_premium, bins=40)
-            hist_df = pd.DataFrame(
-                {
-                    "premium_bin_mid": 0.5 * (hist_edges[:-1] + hist_edges[1:]),
-                    "count": hist_counts,
-                }
-            ).set_index("premium_bin_mid")
-            st.line_chart(_round_for_visuals(hist_df))
+            st.caption(
+                f"Simulations: {mc_res.n_sims:,} (feasible {n_feasible_mc:,}; infeasible {n_infeasible_mc:,})"
+            )
+            prem_arr = np.asarray(mc_res.single_premium, dtype=float)
+            prem_arr = prem_arr[np.isfinite(prem_arr)]
+            if prem_arr.size > 0:
+                hist_counts, hist_edges = np.histogram(prem_arr, bins=40)
+                hist_df = pd.DataFrame(
+                    {
+                        "premium_bin_mid": 0.5 * (hist_edges[:-1] + hist_edges[1:]),
+                        "count": hist_counts,
+                    }
+                ).set_index("premium_bin_mid")
+                st.line_chart(_round_for_visuals(hist_df))
 
-        df = _result_dataframe(res, contract_state)
+        df = _result_dataframe(res)
         st.subheader("Month-by-month projection")
         df_display = _round_for_visuals(df)
         st.dataframe(
@@ -2739,6 +2874,15 @@ def _render_excel_replicator() -> None:
             "Mortality, yield curve, and expense inflation are deterministic across paths."
         )
 
+        n_infeasible_mc2 = int(getattr(mc_res, "n_infeasible", 0))
+        n_feasible_mc2 = int(getattr(mc_res, "n_feasible", mc_res.n_sims))
+        if n_infeasible_mc2 > 0:
+            pct2 = 100.0 * n_infeasible_mc2 / max(int(mc_res.n_sims), 1)
+            st.info(
+                f"Distribution stats below are over the {n_feasible_mc2:,} feasible paths "
+                f"({n_infeasible_mc2:,} infeasible / {pct2:.1f}% omitted)."
+            )
+
         _mc_metrics: list[tuple[str, np.ndarray]] = [
             ("Single Premium ($)", mc_res.single_premium),
             ("PV Benefit ($)", mc_res.pv_benefit),
@@ -2748,16 +2892,25 @@ def _render_excel_replicator() -> None:
         ]
         stat_rows = []
         for name, arr in _mc_metrics:
+            a = np.asarray(arr, dtype=float)
+            finite = a[np.isfinite(a)]
+            if finite.size == 0:
+                stat_rows.append(
+                    {"Metric": name, "Mean": float("nan"), "Std Dev": float("nan"),
+                     "P5": float("nan"), "P25": float("nan"), "Median": float("nan"),
+                     "P75": float("nan"), "P95": float("nan")}
+                )
+                continue
             stat_rows.append(
                 {
                     "Metric": name,
-                    "Mean": float(np.mean(arr)),
-                    "Std Dev": float(np.std(arr)),
-                    "P5": float(np.percentile(arr, 5)),
-                    "P25": float(np.percentile(arr, 25)),
-                    "Median": float(np.median(arr)),
-                    "P75": float(np.percentile(arr, 75)),
-                    "P95": float(np.percentile(arr, 95)),
+                    "Mean": float(np.mean(finite)),
+                    "Std Dev": float(np.std(finite)),
+                    "P5": float(np.percentile(finite, 5)),
+                    "P25": float(np.percentile(finite, 25)),
+                    "Median": float(np.median(finite)),
+                    "P75": float(np.percentile(finite, 75)),
+                    "P95": float(np.percentile(finite, 95)),
                 }
             )
         stats_df = pd.DataFrame(stat_rows)
@@ -2772,25 +2925,29 @@ def _render_excel_replicator() -> None:
         st.markdown("**Premium & key metric distributions**")
         ch1, ch2 = st.columns(2)
 
-        def _hist_df(arr: np.ndarray, n_bins: int = 35) -> pd.DataFrame:
-            counts, edges = np.histogram(arr, bins=n_bins)
+        def _hist_df(arr: np.ndarray, n_bins: int = 35) -> pd.DataFrame | None:
+            a = np.asarray(arr, dtype=float)
+            a = a[np.isfinite(a)]
+            if a.size == 0:
+                return None
+            counts, edges = np.histogram(a, bins=n_bins)
             mids = 0.5 * (edges[:-1] + edges[1:])
             return pd.DataFrame({"bin": np.rint(mids), "count": counts}).set_index("bin")
 
-        with ch1:
-            st.markdown("Single premium")
-            st.bar_chart(_hist_df(mc_res.single_premium))
-        with ch2:
-            st.markdown("PV benefit")
-            st.bar_chart(_hist_df(mc_res.pv_benefit))
+        def _maybe_chart(col, title: str, arr: np.ndarray) -> None:
+            with col:
+                st.markdown(title)
+                df_h = _hist_df(arr)
+                if df_h is None:
+                    st.caption("No feasible paths to plot.")
+                else:
+                    st.bar_chart(df_h)
 
+        _maybe_chart(ch1, "Single premium", mc_res.single_premium)
+        _maybe_chart(ch2, "PV benefit", mc_res.pv_benefit)
         ch3, ch4 = st.columns(2)
-        with ch3:
-            st.markdown("Annuity factor")
-            st.bar_chart(_hist_df(mc_res.annuity_factor))
-        with ch4:
-            st.markdown("PV monthly total")
-            st.bar_chart(_hist_df(mc_res.pv_monthly_total))
+        _maybe_chart(ch3, "Annuity factor", mc_res.annuity_factor)
+        _maybe_chart(ch4, "PV monthly total", mc_res.pv_monthly_total)
 
         st.caption(
             "The MC_Summary sheet in the downloaded workbook contains the same statistics table "
@@ -2865,7 +3022,12 @@ def _render_alm_section() -> None:
         alm_product_type = ProductType(pt_raw)
     except ValueError:
         alm_product_type = ProductType.SPIA
-    liab_label = "Term" if alm_product_type == ProductType.TERM_LIFE else "SPIA"
+    if alm_product_type == ProductType.TERM_LIFE:
+        liab_label = "Term"
+    elif alm_product_type == ProductType.RILA:
+        liab_label = "RILA"
+    else:
+        liab_label = "SPIA"
     st.caption(
         f"Dynamic Treasury ladder + cash versus priced {liab_label} outflows. Earned rate on assets and liability discounting use "
         "the same zero curve + credit spread as **Pricing Run** for consistency. "
