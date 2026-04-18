@@ -14,7 +14,7 @@ mypy==1.13.0
 mkdocs==1.6.1
 mkdocs-material==9.5.49
 mkdocstrings[python]==0.27.0
-pymdown-extensions==10.12
+pymdown-extensions==10.21.2
 
 # Property tests + perf gates + mutation pilot (P4)
 hypothesis==6.122.3
