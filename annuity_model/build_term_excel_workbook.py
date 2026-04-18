@@ -75,14 +75,14 @@ def _fill_mortal_monthly_rpmp(
         qxv = float(
             mort.qx_at_int_age_and_calendar_year(age_int=age_int, calendar_year=calendar_year_start)
         )
-        ws_m.cell(row=r, column=1, value=f"=IF(ROW()-1>{_n_months_cell()},\"\",ROW()-1)")
+        ws_m.cell(row=r, column=1, value=f'=IF(ROW()-1>{_n_months_cell()},"",ROW()-1)')
         ws_m.cell(row=r, column=2, value=int(age_int))
         ws_m.cell(row=r, column=3, value=int(calendar_year_start))
         ws_m.cell(row=r, column=4, value=float(qxv))
     last_data = 1 + n_months
     last_cap = 1 + TERM_PROJ_MAX_ROWS
     for r in range(last_data + 1, last_cap + 1):
-        ws_m.cell(row=r, column=1, value=f"=IF(ROW()-1>{_n_months_cell()},\"\",ROW()-1)")
+        ws_m.cell(row=r, column=1, value=f'=IF(ROW()-1>{_n_months_cell()},"",ROW()-1)')
         for c in (2, 3, 4):
             ws_m.cell(row=r, column=c, value="")
 
@@ -137,10 +137,7 @@ def _qx_lookup_expr(acell: str, mode: Literal["qx_table", "mortal_monthly"]) -> 
             f"{SHEET_QX}!$A$2:$A$50000,0))"
         )
         return clamp_inner.format(inner=inner)
-    inner = (
-        f"INDEX({SHEET_MTH_QX}!$D$2:$D$50000,"
-        f"MATCH({acell},{SHEET_MTH_QX}!$A$2:$A$50000,0))"
-    )
+    inner = f"INDEX({SHEET_MTH_QX}!$D$2:$D$50000," f"MATCH({acell},{SHEET_MTH_QX}!$A$2:$A$50000,0))"
     return clamp_inner.format(inner=inner)
 
 
@@ -150,9 +147,9 @@ def _survival_end_formula(
     qx_e = _qx_lookup_expr(acell, mode)
     p_m = f"EXP(-(-LN(1-{qx_e}))/12)"
     if r == first_row:
-        return f"=IF({acell}=\"\",\"\",{p_m})"
+        return f'=IF({acell}="","",{p_m})'
     prev = f"D{r-1}"
-    return f"=IF({acell}=\"\",\"\",{prev}*{p_m})"
+    return f'=IF({acell}="","",{prev}*{p_m})'
 
 
 def build_term_workbook_from_spec(
@@ -168,9 +165,9 @@ def build_term_workbook_from_spec(
         mortality=spec.mortality,
         horizon_age=spec.horizon_age,
         spread=spec.spread,
-        valuation_year=spec.valuation_year
-        if not isinstance(spec.mortality, sp.MortalityTableQx)
-        else None,
+        valuation_year=(
+            spec.valuation_year if not isinstance(spec.mortality, sp.MortalityTableQx) else None
+        ),
     )
 
     wb = Workbook()
@@ -288,29 +285,35 @@ def build_term_workbook_from_spec(
 
     for r in range(first, last_cap_row + 1):
         a = f"A{r}"
-        ws_pr.cell(row=r, column=1, value=f"=IF(ROW()-3>{nm_ref},\"\",ROW()-3)")
-        ws_pr.cell(row=r, column=2, value=f"=IF({a}=\"\",\"\",{a}/Inputs!$B$6)")
-        ws_pr.cell(row=r, column=3, value=f"=IF({a}=\"\",\"\",Inputs!$B$3+({a}-1)/Inputs!$B$6)")
+        ws_pr.cell(row=r, column=1, value=f'=IF(ROW()-3>{nm_ref},"",ROW()-3)')
+        ws_pr.cell(row=r, column=2, value=f'=IF({a}="","",{a}/Inputs!$B$6)')
+        ws_pr.cell(row=r, column=3, value=f'=IF({a}="","",Inputs!$B$3+({a}-1)/Inputs!$B$6)')
         ws_pr.cell(row=r, column=4, value=_survival_end_formula(r, a, mort_mode, first_row=first))
         if r == first:
-            d_surv_start = f"=IF({a}=\"\",\"\",1)"
+            d_surv_start = f'=IF({a}="","",1)'
         else:
-            d_surv_start = f"=IF({a}=\"\",\"\",D{r-1})"
+            d_surv_start = f'=IF({a}="","",D{r-1})'
         ws_pr.cell(row=r, column=5, value=d_surv_start)
-        ws_pr.cell(row=r, column=6, value=f"=IF({a}=\"\",\"\",MAX(0,MIN(1,E{r}-D{r})))")
-        ws_pr.cell(row=r, column=7, value=(
-            f"=IF({a}=\"\",0,IF(MOD({a},12)=0,{ben}*SUM(OFFSET(F{r},-11,0,12,1)),0))"
-        ))
-        ws_pr.cell(row=r, column=8, value=f"=IF({a}=\"\",0,{prem}*E{r})")
-        ws_pr.cell(row=r, column=9, value=f"=IF({a}=\"\",0,G{r}-H{r})")
-        ws_pr.cell(row=r, column=15, value=f"=IF({a}=\"\",\"\",IFERROR(INDEX({mc_ref},MATCH({a},{RECALC_MONTHLY_CURVE_SHEET}!$A:$A,0)),\"\"))")
-        ws_pr.cell(row=r, column=16, value=f"=IF({a}=\"\",\"\",IF(B{r}>0,-LN(O{r})/B{r},\"\"))")
-        ws_pr.cell(row=r, column=17, value=f"=IF({a}=\"\",0,G{r})")
-        ws_pr.cell(row=r, column=18, value=f"=IF({a}=\"\",0,H{r})")
-        ws_pr.cell(row=r, column=19, value=f"=IF({a}=\"\",0,I{r})")
-        ws_pr.cell(row=r, column=20, value=f"=IF({a}=\"\",0,G{r}*O{r})")
-        ws_pr.cell(row=r, column=21, value=f"=IF({a}=\"\",0,H{r}*O{r})")
-        ws_pr.cell(row=r, column=22, value=f"=IF({a}=\"\",0,I{r}*O{r})")
+        ws_pr.cell(row=r, column=6, value=f'=IF({a}="","",MAX(0,MIN(1,E{r}-D{r})))')
+        ws_pr.cell(
+            row=r,
+            column=7,
+            value=(f'=IF({a}="",0,IF(MOD({a},12)=0,{ben}*SUM(OFFSET(F{r},-11,0,12,1)),0))'),
+        )
+        ws_pr.cell(row=r, column=8, value=f'=IF({a}="",0,{prem}*E{r})')
+        ws_pr.cell(row=r, column=9, value=f'=IF({a}="",0,G{r}-H{r})')
+        ws_pr.cell(
+            row=r,
+            column=15,
+            value=f'=IF({a}="","",IFERROR(INDEX({mc_ref},MATCH({a},{RECALC_MONTHLY_CURVE_SHEET}!$A:$A,0)),""))',
+        )
+        ws_pr.cell(row=r, column=16, value=f'=IF({a}="","",IF(B{r}>0,-LN(O{r})/B{r},""))')
+        ws_pr.cell(row=r, column=17, value=f'=IF({a}="",0,G{r})')
+        ws_pr.cell(row=r, column=18, value=f'=IF({a}="",0,H{r})')
+        ws_pr.cell(row=r, column=19, value=f'=IF({a}="",0,I{r})')
+        ws_pr.cell(row=r, column=20, value=f'=IF({a}="",0,G{r}*O{r})')
+        ws_pr.cell(row=r, column=21, value=f'=IF({a}="",0,H{r}*O{r})')
+        ws_pr.cell(row=r, column=22, value=f'=IF({a}="",0,I{r}*O{r})')
 
     money_cols = (7, 8, 9, 17, 18, 19, 20, 21, 22)
     for r in range(first, last_cap_row + 1):
@@ -367,9 +370,24 @@ def build_term_workbook_from_spec(
     term_rows: list[tuple[str, float, str, str]] = [
         ("PV claims", float(res.pv_benefit), f"={LIABILITY_SHEET_NAME}!X4", "money"),
         ("PV premiums", prem_display, f"={LIABILITY_SHEET_NAME}!X5", "money"),
-        ("PV net (claims − premiums)", float(res.single_premium), f"={LIABILITY_SHEET_NAME}!X7", "money"),
-        ("Actuarial present value (pricing)", float(res.single_premium), f"={LIABILITY_SHEET_NAME}!X8", "money"),
-        ("Σ survival start · discount (annuity-style factor)", float(res.annuity_factor), f"={LIABILITY_SHEET_NAME}!X6", "factor"),
+        (
+            "PV net (claims − premiums)",
+            float(res.single_premium),
+            f"={LIABILITY_SHEET_NAME}!X7",
+            "money",
+        ),
+        (
+            "Actuarial present value (pricing)",
+            float(res.single_premium),
+            f"={LIABILITY_SHEET_NAME}!X8",
+            "money",
+        ),
+        (
+            "Σ survival start · discount (annuity-style factor)",
+            float(res.annuity_factor),
+            f"={LIABILITY_SHEET_NAME}!X6",
+            "factor",
+        ),
     ]
     write_model_check_sheet(
         wb,

@@ -230,7 +230,9 @@ def price_rila_single_premium(
 
     if index_levels_payment is not None:
         if index_scenario_csv_path is not None:
-            raise ValueError("Provide either index_scenario_csv_path or index_levels_payment, not both.")
+            raise ValueError(
+                "Provide either index_scenario_csv_path or index_levels_payment, not both."
+            )
         if index_s0 is None:
             raise ValueError("index_s0 must be provided when index_levels_payment is provided.")
         levels_payment = np.asarray(index_levels_payment, dtype=float)
@@ -242,7 +244,9 @@ def price_rila_single_premium(
     elif index_scenario_csv_path is None:
         s0, levels_payment = sp.flat_index_scenario(n_months)
     else:
-        s0, levels_payment = sp.load_index_scenario_monthly_csv(index_scenario_csv_path, n_months=n_months)
+        s0, levels_payment = sp.load_index_scenario_monthly_csv(
+            index_scenario_csv_path, n_months=n_months
+        )
 
     L = levels_end_by_policy_month(s0=s0, levels_payment=levels_payment)
     claims_rel, av_end_rel, cred_m = _rila_claims_rel_per_premium_dollar(
@@ -251,8 +255,14 @@ def price_rila_single_premium(
         death_prob=death_prob,
     )
 
-    g = sp.monthly_rate_from_annual_inflation(float(expense_annual_inflation)) if expense_annual_inflation else 0.0
-    expense_sched = float(expenses.monthly_expense_dollars) * (1.0 + g) ** np.arange(n_months, dtype=float)
+    g = (
+        sp.monthly_rate_from_annual_inflation(float(expense_annual_inflation))
+        if expense_annual_inflation
+        else 0.0
+    )
+    expense_sched = float(expenses.monthly_expense_dollars) * (1.0 + g) ** np.arange(
+        n_months, dtype=float
+    )
     expected_expense_cashflows = expense_sched * survival
 
     K = float(np.sum(claims_rel * df))
@@ -341,9 +351,7 @@ def liability_path_from_rila_projection(pricing: RILAProjectionResult) -> sp.Lia
 # `run_alm_projection_from_pricing_result` without an isinstance chain.
 from liability_dispatch import register_liability_path_converter  # noqa: E402
 
-register_liability_path_converter(
-    "RILAProjectionResult", liability_path_from_rila_projection
-)
+register_liability_path_converter("RILAProjectionResult", liability_path_from_rila_projection)
 
 
 def price_rila_single_premium_monte_carlo(
@@ -400,8 +408,14 @@ def price_rila_single_premium_monte_carlo(
     if rate >= 1.0:
         raise ValueError("premium_expense_rate must be < 1.")
 
-    g = sp.monthly_rate_from_annual_inflation(float(expense_annual_inflation)) if expense_annual_inflation else 0.0
-    expense_sched = float(expenses.monthly_expense_dollars) * (1.0 + g) ** np.arange(n_months, dtype=float)
+    g = (
+        sp.monthly_rate_from_annual_inflation(float(expense_annual_inflation))
+        if expense_annual_inflation
+        else 0.0
+    )
+    expense_sched = float(expenses.monthly_expense_dollars) * (1.0 + g) ** np.arange(
+        n_months, dtype=float
+    )
     expected_expense_cashflows = expense_sched * survival
     pv_monthly_expenses_single = float(np.sum(expected_expense_cashflows * df))
 

@@ -17,8 +17,12 @@ def test_coerce_numeric_clamps_and_replaces_non_positive() -> None:
     assert coerce_numeric_widget_value("bad", 2025, min_value=1950, max_value=2100) == 2025
     assert coerce_numeric_widget_value(1800, 2025, min_value=1950, max_value=2100) == 1950
     assert coerce_numeric_widget_value(3000, 2025, min_value=1950, max_value=2100) == 2100
-    assert coerce_numeric_widget_value(0.0, 250.0, min_value=0.0, replace_non_positive=True) == 250.0
-    assert coerce_numeric_widget_value(100.0, 250.0, min_value=0.0, replace_non_positive=True) == 100.0
+    assert (
+        coerce_numeric_widget_value(0.0, 250.0, min_value=0.0, replace_non_positive=True) == 250.0
+    )
+    assert (
+        coerce_numeric_widget_value(100.0, 250.0, min_value=0.0, replace_non_positive=True) == 100.0
+    )
 
 
 def test_build_run_form_seed_defaults_matches_expected_keys() -> None:

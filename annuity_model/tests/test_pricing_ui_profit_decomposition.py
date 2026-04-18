@@ -17,7 +17,9 @@ def test_term_profit_decomposition_excludes_spia_indexation_language() -> None:
         pv_monthly_expenses=-70.0,
         single_premium=110.0,
     )
-    contract = tp.TermLifeContract(issue_age=40, sex="male", death_benefit=100_000.0, monthly_premium=50.0)
+    contract = tp.TermLifeContract(
+        issue_age=40, sex="male", death_benefit=100_000.0, monthly_premium=50.0
+    )
 
     rows, _ = _build_profit_decomposition_rows(
         res=result,
@@ -36,7 +38,9 @@ def test_term_profit_decomposition_reconciles_to_net_pv() -> None:
         pv_monthly_expenses=-60.0,
         single_premium=110.0,
     )
-    contract = tp.TermLifeContract(issue_age=40, sex="female", death_benefit=80_000.0, monthly_premium=40.0)
+    contract = tp.TermLifeContract(
+        issue_age=40, sex="female", death_benefit=80_000.0, monthly_premium=40.0
+    )
 
     rows, _ = _build_profit_decomposition_rows(
         res=result,
@@ -60,7 +64,9 @@ def test_spia_profit_decomposition_uses_product_design_effect_label() -> None:
         single_premium=260.0,
     )
     contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=1200.0)
-    expenses = sp.ExpenseAssumptions(policy_expense_dollars=5.0, premium_expense_rate=0.03, monthly_expense_dollars=1.0)
+    expenses = sp.ExpenseAssumptions(
+        policy_expense_dollars=5.0, premium_expense_rate=0.03, monthly_expense_dollars=1.0
+    )
 
     rows, _ = _build_profit_decomposition_rows(
         res=result,
@@ -80,11 +86,23 @@ def test_waterfall_walk_term_like_decreases_and_reconciliation() -> None:
         ("Net PV (claims - premiums)", 110.0, True),
     ]
     df = _build_profit_waterfall_chart_df(rows)
-    assert df.iloc[0]["lo"] == 0.0 and df.iloc[0]["hi"] == 200.0 and df.iloc[0]["bar_color"] == "Total"
+    assert (
+        df.iloc[0]["lo"] == 0.0 and df.iloc[0]["hi"] == 200.0 and df.iloc[0]["bar_color"] == "Total"
+    )
     assert df.iloc[1]["delta"] == -30.0
-    assert df.iloc[1]["start"] == 200.0 and df.iloc[1]["end"] == 170.0 and df.iloc[1]["bar_color"] == "Decrease"
-    assert df.iloc[2]["start"] == 170.0 and df.iloc[2]["end"] == 110.0 and df.iloc[2]["bar_color"] == "Decrease"
-    assert df.iloc[3]["lo"] == 0.0 and df.iloc[3]["hi"] == 110.0 and df.iloc[3]["bar_color"] == "Total"
+    assert (
+        df.iloc[1]["start"] == 200.0
+        and df.iloc[1]["end"] == 170.0
+        and df.iloc[1]["bar_color"] == "Decrease"
+    )
+    assert (
+        df.iloc[2]["start"] == 170.0
+        and df.iloc[2]["end"] == 110.0
+        and df.iloc[2]["bar_color"] == "Decrease"
+    )
+    assert (
+        df.iloc[3]["lo"] == 0.0 and df.iloc[3]["hi"] == 110.0 and df.iloc[3]["bar_color"] == "Total"
+    )
 
 
 def test_waterfall_walk_increase_step_and_signed_delta() -> None:
@@ -109,7 +127,9 @@ def test_spia_profit_decomposition_rows_reconcile_to_single_premium() -> None:
         single_premium=260.0,
     )
     contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=1200.0)
-    expenses = sp.ExpenseAssumptions(policy_expense_dollars=5.0, premium_expense_rate=0.03, monthly_expense_dollars=1.0)
+    expenses = sp.ExpenseAssumptions(
+        policy_expense_dollars=5.0, premium_expense_rate=0.03, monthly_expense_dollars=1.0
+    )
 
     rows, _ = _build_profit_decomposition_rows(
         res=result,

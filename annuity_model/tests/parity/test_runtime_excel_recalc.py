@@ -106,5 +106,9 @@ def test_modelcheck_cells_recalc_to_python_values() -> None:
     assert isinstance(ws["B9"].value, str) and ws["B9"].value.startswith("=")
 
     # Compare recalculated values to Python at the contracted tolerance.
-    np.testing.assert_allclose(cells["ModelCheck!B5"], float(res.pv_benefit), rtol=0.0, atol=MODELCHECK_TOL or 1e-6)
-    np.testing.assert_allclose(cells["ModelCheck!B9"], float(res.annuity_factor), rtol=0.0, atol=MODELCHECK_TOL or 1e-6)
+    np.testing.assert_allclose(
+        cells["ModelCheck!B5"], float(res.pv_benefit), rtol=0.0, atol=MODELCHECK_TOL or 1e-6
+    )
+    np.testing.assert_allclose(
+        cells["ModelCheck!B9"], float(res.annuity_factor), rtol=0.0, atol=MODELCHECK_TOL or 1e-6
+    )

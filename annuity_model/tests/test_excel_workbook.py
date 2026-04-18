@@ -159,9 +159,9 @@ def test_alm_projection_sheet_and_modelcheck_links():
                 v = cell.value
                 if isinstance(v, str) and v.startswith("="):
                     max_formula_len = max(max_formula_len, len(v))
-    assert max_formula_len <= 8192, (
-        f"Excel rejects formulas over 8192 chars (longest was {max_formula_len})"
-    )
+    assert (
+        max_formula_len <= 8192
+    ), f"Excel rejects formulas over 8192 chars (longest was {max_formula_len})"
     wb_cached = load_workbook(io.BytesIO(raw), data_only=True)
     wac = wb_cached[ALM_SHEET_NAME]
     assert wac["C13"].value is not None
@@ -194,8 +194,12 @@ def test_alm_projection_sheet_and_modelcheck_links():
     last_row = dr + int(alm_snap_ds.asset_market_value.shape[0]) - 1
     assert int(ws_alm[f"A{last_row}"].value) == int(alm_snap_ds.month_index[-1]) + 1
     assert int(alm_snap_ds.asset_market_value.shape[0]) == min(ALM_EXCEL_PATH_MONTH_CAP, n_full)
-    assert isinstance(ws_alm[f"C{dr}"].value, str) and str(ws_alm[f"C{dr}"].value).startswith("=SUM(")
-    assert isinstance(ws_alm[f"H{dr}"].value, str) and str(ws_alm[f"H{dr}"].value).startswith(f"={ALM_ENGINE_SHEET}!")
+    assert isinstance(ws_alm[f"C{dr}"].value, str) and str(ws_alm[f"C{dr}"].value).startswith(
+        "=SUM("
+    )
+    assert isinstance(ws_alm[f"H{dr}"].value, str) and str(ws_alm[f"H{dr}"].value).startswith(
+        f"={ALM_ENGINE_SHEET}!"
+    )
     assert isinstance(ws_alm[f"D{dr}"].value, str) and str(ws_alm[f"D{dr}"].value).startswith("=")
     assert isinstance(ws_alm[f"F{dr}"].value, str) and str(ws_alm[f"F{dr}"].value).startswith("=")
     assert isinstance(ws_alm[f"G{dr}"].value, str) and str(ws_alm[f"G{dr}"].value).startswith("=")

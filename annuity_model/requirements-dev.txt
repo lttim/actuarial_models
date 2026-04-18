@@ -6,8 +6,9 @@ pytest==9.0.3
 pytest-html==4.2.0
 
 # Static-analysis / formatter (mirrored by pre-commit + CI)
+# black removed 2026-04: ruff-format is the single source of truth for
+# formatting (black-compatible output, no double-formatter conflict).
 ruff==0.7.4
-black==25.1.0
 mypy==1.13.0
 
 # Documentation site (mkdocs --serve / GitHub Pages deploy)

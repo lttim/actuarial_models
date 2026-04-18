@@ -47,7 +47,11 @@ def discover_tests_metadata() -> list[dict[str, Any]]:
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
             doc = ast.get_docstring(node)
-            desc = doc.strip() if doc else "_(No docstring — add one under the def line in the test file.)_"
+            desc = (
+                doc.strip()
+                if doc
+                else "_(No docstring — add one under the def line in the test file.)_"
+            )
             rows.append(
                 {
                     "name": node.name,
@@ -146,7 +150,9 @@ def parse_junit_results() -> dict[str, dict[str, Any]]:
         messages = [e["message"] for e in entries if e["message"]]
         total_time = None
         try:
-            total_time = str(round(sum(float(e["time_s"]) for e in entries if e["time_s"] is not None), 4))
+            total_time = str(
+                round(sum(float(e["time_s"]) for e in entries if e["time_s"] is not None), 4)
+            )
         except (TypeError, ValueError):
             pass
         out[base] = {
@@ -172,14 +178,18 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
 
     meta = discover_tests_metadata()
     if not meta:
-        st.error(f"Could not find tests at `{TEST_FILE}`. Open the `annuity_model` folder as project root.")
+        st.error(
+            f"Could not find tests at `{TEST_FILE}`. Open the `annuity_model` folder as project root."
+        )
         return
 
     notify = st.session_state.get("last_notify")
     if notify == "pass":
         st.success("Last test run finished with pytest exit code 0 (all executed tests passed).")
     elif notify == "fail":
-        st.warning("Last test run reported failures, errors, or a non-zero pytest exit code. See expanders below.")
+        st.warning(
+            "Last test run reported failures, errors, or a non-zero pytest exit code. See expanders below."
+        )
 
     def _run_clicked() -> None:
         with st.spinner("Running pytest…"):
@@ -197,7 +207,9 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
         )
         b1, b2 = st.columns(2)
         with b1:
-            if st.button("Run all tests", type="primary", use_container_width=True, key="pytest_run_embedded"):
+            if st.button(
+                "Run all tests", type="primary", use_container_width=True, key="pytest_run_embedded"
+            ):
                 _run_clicked()
         with b2:
             st.caption("Setup: `python -m pip install -r requirements-dev.txt`")
@@ -210,7 +222,9 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
             st.markdown(
                 "**First time setup:** in a terminal here, run  \n`python -m pip install -r requirements-dev.txt`"
             )
-            st.markdown("**CLI alternative:** `python -m pytest` or `run_tests_report.bat` for HTML.")
+            st.markdown(
+                "**CLI alternative:** `python -m pytest` or `run_tests_report.bat` for HTML."
+            )
 
     results: dict[str, dict[str, Any]] = st.session_state.get("last_results") or {}
 
@@ -242,10 +256,17 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
             name = m["name"]
             r = results.get(name, {})
             status = r.get("status", "not_run")
-            icon = {"passed": "✅", "failed": "❌", "error": "⚠️", "skipped": "⏭️", "not_run": "⚪"}.get(
-                status, "⚪"
-            )
-            with st.expander(f"{icon} **{name}** — _{status.replace('_', ' ')}_", expanded=(status in ("failed", "error"))):
+            icon = {
+                "passed": "✅",
+                "failed": "❌",
+                "error": "⚠️",
+                "skipped": "⏭️",
+                "not_run": "⚪",
+            }.get(status, "⚪")
+            with st.expander(
+                f"{icon} **{name}** — _{status.replace('_', ' ')}_",
+                expanded=(status in ("failed", "error")),
+            ):
                 st.markdown(m["description"])
                 if r.get("time_s") is not None:
                     st.caption(f"Runtime: {r['time_s']} s")

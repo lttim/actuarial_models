@@ -1,7 +1,7 @@
 # Actuarial Model Parity Contract
 
-**Version:** 1.0  
-**Last updated:** 2026-03  
+**Version:** 1.0
+**Last updated:** 2026-03
 **Applies to:** SPIA ALM projection engine (Python ↔ Excel)
 
 This document is the authoritative source of truth for numerical parity between the Python
@@ -98,9 +98,9 @@ Bond `t_rem` values computed by repeated subtraction of `dt = 1/12` from an init
 WILL differ from `t_rem` values that were reset to the nominal tenor after reinvestment,
 even when both should represent the same time-to-maturity.
 
-**Example (the 2026-03 bug):**  
-- 1Y bond reset to `1.0` at month 24, decremented 11 more times → `0.08333333333333325`  
-- 3Y bond decremented 35 times from `3.0` → `0.08333333333333247`  
+**Example (the 2026-03 bug):**
+- 1Y bond reset to `1.0` at month 24, decremented 11 more times → `0.08333333333333325`
+- 3Y bond decremented 35 times from `3.0` → `0.08333333333333247`
 - Raw difference: `~7.8e-16` — below any economic tolerance but **flips argsort order**
 
 **Rule**: Never use raw `t_rem` comparison for ordering. Always use epsilon-adjusted keys.

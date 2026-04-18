@@ -31,6 +31,7 @@ from build_pricing_excel_workbook import (
     alm_excel_truncate_snapshot,
     inject_alm_projection_formula_cached_values,
 )
+
 # Public aliases for the historically-`_private` helpers. Builders MUST use
 # these names so a future internal rename does not silently break them.
 from build_pricing_excel_workbook import _write_alm_projection_sheet as write_alm_projection_sheet

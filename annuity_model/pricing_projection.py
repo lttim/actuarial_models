@@ -182,7 +182,11 @@ def _benefit_expense_and_index_returns(
     e = np.zeros(n, dtype=float)
     b[0] = float(base_monthly) * (float(levels_payment[0]) / float(s0))
     e[0] = float(monthly_expense)
-    g = monthly_rate_from_annual_inflation(float(expense_annual_inflation)) if expense_annual_inflation else 0.0
+    g = (
+        monthly_rate_from_annual_inflation(float(expense_annual_inflation))
+        if expense_annual_inflation
+        else 0.0
+    )
 
     for k in range(1, n):
         if levels_payment[k - 1] <= 0.0:
@@ -436,10 +440,14 @@ class MortalityTableQx:
 
     def qx_at_int_age(self, age_int: int) -> float:
         if age_int < int(self.ages[0]) or age_int > int(self.ages[-1]):
-            raise ValueError(f"age_int={age_int} outside mortality table range [{self.ages[0]}, {self.ages[-1]}].")
+            raise ValueError(
+                f"age_int={age_int} outside mortality table range [{self.ages[0]}, {self.ages[-1]}]."
+            )
         idx = int(age_int - int(self.ages[0]))
         # This assumes `ages` are contiguous starting at ages[0]. If not contiguous, fall back to lookup.
-        if not np.array_equal(self.ages, np.arange(int(self.ages[0]), int(self.ages[0]) + len(self.ages))):
+        if not np.array_equal(
+            self.ages, np.arange(int(self.ages[0]), int(self.ages[0]) + len(self.ages))
+        ):
             # Non-contiguous: use dictionary-like lookup via search.
             idx_arr = np.where(self.ages == age_int)[0]
             if len(idx_arr) != 1:
@@ -659,14 +667,18 @@ def ensure_mp2016_male_improvement_csv(
         year_index = {y: j for j, y in enumerate(years)}
         i_matrix = np.zeros((len(ages), len(years)), dtype=float)
         for _, row in df.iterrows():
-            i_matrix[age_index[int(row["age"])], year_index[int(row["year"])]] = float(row["improvement_rate"])
+            i_matrix[age_index[int(row["age"])], year_index[int(row["year"])]] = float(
+                row["improvement_rate"]
+            )
         return ages, years, i_matrix
 
     ages, years, i_matrix = load_mp2016_male_improvement_rates_multiplicative(mp2016_xlsx_path)
     rows = []
     for i, age in enumerate(ages):
         for j, year in enumerate(years):
-            rows.append({"age": int(age), "year": int(years[j]), "improvement_rate": float(i_matrix[i, j])})
+            rows.append(
+                {"age": int(age), "year": int(years[j]), "improvement_rate": float(i_matrix[i, j])}
+            )
     pd.DataFrame(rows).to_csv(out_csv_path, index=False)
     return ages, years, i_matrix
 
@@ -695,16 +707,26 @@ class MortalityTableRP2014MP2016:
     def _mp_i(self, age_int: int, calendar_year: int) -> float:
         # Clamp to available ranges (scaffold behavior).
         age_clamped = int(np.clip(age_int, int(self.mp2016_ages[0]), int(self.mp2016_ages[-1])))
-        year_clamped = int(np.clip(calendar_year, int(self.mp2016_years[0]), int(self.mp2016_years[-1])))
+        year_clamped = int(
+            np.clip(calendar_year, int(self.mp2016_years[0]), int(self.mp2016_years[-1]))
+        )
 
         # Find nearest indices (years/ages are expected integer grid).
         age_idx = int(age_clamped - int(self.mp2016_ages[0]))
         year_idx = int(year_clamped - int(self.mp2016_years[0]))
 
         # In case the grid isn't contiguous, fall back to a search.
-        if not np.array_equal(self.mp2016_ages, np.arange(int(self.mp2016_ages[0]), int(self.mp2016_ages[0]) + len(self.mp2016_ages))):
+        if not np.array_equal(
+            self.mp2016_ages,
+            np.arange(int(self.mp2016_ages[0]), int(self.mp2016_ages[0]) + len(self.mp2016_ages)),
+        ):
             age_idx = int(np.where(self.mp2016_ages == age_clamped)[0][0])
-        if not np.array_equal(self.mp2016_years, np.arange(int(self.mp2016_years[0]), int(self.mp2016_years[0]) + len(self.mp2016_years))):
+        if not np.array_equal(
+            self.mp2016_years,
+            np.arange(
+                int(self.mp2016_years[0]), int(self.mp2016_years[0]) + len(self.mp2016_years)
+            ),
+        ):
             year_idx = int(np.where(self.mp2016_years == year_clamped)[0][0])
 
         return float(self.mp2016_i_matrix[age_idx, year_idx])
@@ -824,7 +846,9 @@ class ExpenseAssumptions:
         premium_unit_norm = premium_unit.lower().strip()
         if premium_unit_norm in {"percent", "pct", "%"}:
             # Accept either "0.01" (already decimal) or "1.0" (one percent).
-            premium_rate = premium_expense_rate / 100.0 if premium_expense_rate > 1.0 else premium_expense_rate
+            premium_rate = (
+                premium_expense_rate / 100.0 if premium_expense_rate > 1.0 else premium_expense_rate
+            )
         else:
             premium_rate = premium_expense_rate
 
@@ -842,7 +866,9 @@ class ExpenseAssumptions:
 class SPIAContract:
     issue_age: int
     sex: Literal["male", "female"]
-    benefit_annual: float  # annual analogue; first monthly accrual scales with index S1/S0, then return-indexed
+    benefit_annual: (
+        float  # annual analogue; first monthly accrual scales with index S1/S0, then return-indexed
+    )
     payment_freq_per_year: int = 12
     benefit_timing: Literal["end_of_period"] = "end_of_period"
     payment_cessation: Literal["at_death"] = "at_death"
@@ -872,7 +898,9 @@ class SPIAProjectionResult:
     index_simple_return: np.ndarray  # S_k/S_{k-1} - 1 with S_{-1} := S_0 at issue
     index_log_return: np.ndarray
     index_cumulative_return: np.ndarray  # S_k / S_0 - 1
-    benefit_nominal_scheduled: np.ndarray  # per-payment benefit if alive (before × survival in expected_*)
+    benefit_nominal_scheduled: (
+        np.ndarray
+    )  # per-payment benefit if alive (before × survival in expected_*)
     expense_nominal_scheduled: np.ndarray
     expense_annual_inflation: float
     index_s0: float
@@ -1017,7 +1045,9 @@ def price_spia_single_premium(
 
     if index_levels_payment is not None:
         if index_scenario_csv_path is not None:
-            raise ValueError("Provide either index_scenario_csv_path or index_levels_payment, not both.")
+            raise ValueError(
+                "Provide either index_scenario_csv_path or index_levels_payment, not both."
+            )
         if index_s0 is None:
             raise ValueError("index_s0 must be provided when index_levels_payment is provided.")
         levels_payment = np.asarray(index_levels_payment, dtype=float)
@@ -1029,7 +1059,9 @@ def price_spia_single_premium(
     elif index_scenario_csv_path is None:
         s0, levels_payment = flat_index_scenario(n_months)
     else:
-        s0, levels_payment = load_index_scenario_monthly_csv(index_scenario_csv_path, n_months=n_months)
+        s0, levels_payment = load_index_scenario_monthly_csv(
+            index_scenario_csv_path, n_months=n_months
+        )
 
     ben_sched, exp_sched, simp_ret, log_ret, cumu_ret = _benefit_expense_and_index_returns(
         base_monthly=b_month,
@@ -1053,7 +1085,9 @@ def price_spia_single_premium(
     rate = float(expenses.premium_expense_rate)
     if rate >= 1.0:
         raise ValueError("premium_expense_rate must be < 1.")
-    single_premium = float((float(expenses.policy_expense_dollars) + pv_monthly_total_outflows) / (1.0 - rate))
+    single_premium = float(
+        (float(expenses.policy_expense_dollars) + pv_monthly_total_outflows) / (1.0 - rate)
+    )
 
     # Economic reserve: after payment at t_{i+1}, roll forward PV of remaining expected nominal CFs.
     reserve_times_years = np.concatenate(([0.0], times_years))
@@ -1149,8 +1183,14 @@ def price_spia_single_premium_monte_carlo(
     if rate >= 1.0:
         raise ValueError("premium_expense_rate must be < 1.")
 
-    g = monthly_rate_from_annual_inflation(float(expense_annual_inflation)) if expense_annual_inflation else 0.0
-    expense_sched = float(expenses.monthly_expense_dollars) * (1.0 + g) ** np.arange(n_months, dtype=float)
+    g = (
+        monthly_rate_from_annual_inflation(float(expense_annual_inflation))
+        if expense_annual_inflation
+        else 0.0
+    )
+    expense_sched = float(expenses.monthly_expense_dollars) * (1.0 + g) ** np.arange(
+        n_months, dtype=float
+    )
     pv_monthly_expenses_single = float(np.sum(expense_sched * survival * df))
 
     idx_paths = simulate_index_levels_gbm(
@@ -1303,7 +1343,10 @@ class ALMAssumptions:
             raise ValueError("rebalance_frequency_months must be >= 1.")
         if self.rebalance_policy not in ("full_target", "liquidity_only"):
             raise ValueError("rebalance_policy must be 'full_target' or 'liquidity_only'.")
-        if self.borrowing_policy not in ("borrow_before_selling", "borrow_after_assets_insufficient"):
+        if self.borrowing_policy not in (
+            "borrow_before_selling",
+            "borrow_after_assets_insufficient",
+        ):
             raise ValueError(
                 "borrowing_policy must be 'borrow_before_selling' or 'borrow_after_assets_insufficient'."
             )
@@ -1407,7 +1450,9 @@ def _liability_mac_duration_years_from_path(
     *,
     cashflows: np.ndarray | None = None,
 ) -> float:
-    cf = np.asarray(liability_path.expected_total_cashflows if cashflows is None else cashflows, dtype=float)
+    cf = np.asarray(
+        liability_path.expected_total_cashflows if cashflows is None else cashflows, dtype=float
+    )
     ty = np.asarray(liability_path.times_years, dtype=float)
     if cf.shape != ty.shape:
         raise ValueError("cashflows length must match liability_path.times_years.")
@@ -2097,6 +2142,7 @@ def run_alm_projection_from_pricing_result(
             liability_cashflows=liability_cashflows,
         )
     from liability_dispatch import liability_path_for, registered_typenames
+
     typename = type(pricing).__name__
     if typename not in registered_typenames():
         # Preserve the canonical "pricing must be" wording the public API has
@@ -2161,7 +2207,9 @@ def _example_usage() -> None:
     except FileNotFoundError:
         # Static qx CSV: columns age,qx
         try:
-            mortality = MortalityTableQx.load_qx_csv(DEFAULT_MORTALITY_QX_CSV, age_col="age", qx_col="qx")
+            mortality = MortalityTableQx.load_qx_csv(
+                DEFAULT_MORTALITY_QX_CSV, age_col="age", qx_col="qx"
+            )
         except FileNotFoundError:
             # Synthetic qx: placeholder only.
             ages = np.arange(50, 121, dtype=int)
@@ -2188,6 +2236,7 @@ def _example_usage() -> None:
 
 if __name__ == "__main__":
     from _logging import configure_logging  # noqa: E402
+
     configure_logging()
     _example_usage()
 
@@ -2197,7 +2246,4 @@ if __name__ == "__main__":
 # their own converters at the bottom of their respective modules.
 from liability_dispatch import register_liability_path_converter  # noqa: E402
 
-register_liability_path_converter(
-    "SPIAProjectionResult", liability_path_from_spia_projection
-)
-
+register_liability_path_converter("SPIAProjectionResult", liability_path_from_spia_projection)

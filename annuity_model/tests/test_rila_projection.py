@@ -10,9 +10,15 @@ pytestmark = pytest.mark.product_rila
 
 
 def test_segment_credited_return_respects_cap_floor():
-    assert rp.segment_credited_return(raw=0.2, participation=1.0, cap=0.10, floor=0.0) == pytest.approx(0.10)
-    assert rp.segment_credited_return(raw=-0.5, participation=1.0, cap=0.10, floor=-0.05) == pytest.approx(-0.05)
-    assert rp.segment_credited_return(raw=0.05, participation=0.8, cap=0.10, floor=0.0) == pytest.approx(0.04)
+    assert rp.segment_credited_return(
+        raw=0.2, participation=1.0, cap=0.10, floor=0.0
+    ) == pytest.approx(0.10)
+    assert rp.segment_credited_return(
+        raw=-0.5, participation=1.0, cap=0.10, floor=-0.05
+    ) == pytest.approx(-0.05)
+    assert rp.segment_credited_return(
+        raw=0.05, participation=0.8, cap=0.10, floor=0.0
+    ) == pytest.approx(0.04)
 
 
 def test_flat_index_zero_crediting_scales_premium():
@@ -149,7 +155,9 @@ def test_pricing_infeasible_raises_with_loading_details():
     mort = sp.MortalityTableQx(ages, qx)
     ex = sp.ExpenseAssumptions.load_from_csv("expenses_assumptions_us_placeholders.csv")
     levels = np.asarray(
-        sp.load_index_scenario_monthly_csv("sp500_scenario_projection_monthly.csv", n_months=540)[1],
+        sp.load_index_scenario_monthly_csv("sp500_scenario_projection_monthly.csv", n_months=540)[
+            1
+        ],
         dtype=float,
     )
     with pytest.raises(rp.RILAPricingInfeasibleError) as excinfo:

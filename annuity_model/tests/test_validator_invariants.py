@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from liability_layouts import LIABILITY_LAYOUTS, liability_layout_for
+from liability_layouts import LIABILITY_LAYOUTS
 from product_registry import ProductType, implemented_product_types
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
@@ -125,9 +125,9 @@ def test_no_orphan_layouts() -> None:
     """
     valid_codes = {pt.value for pt in ProductType}
     orphans = set(LIABILITY_LAYOUTS) - valid_codes
-    assert not orphans, (
-        f"LIABILITY_LAYOUTS contains codes that are not ProductType values: {sorted(orphans)}"
-    )
+    assert (
+        not orphans
+    ), f"LIABILITY_LAYOUTS contains codes that are not ProductType values: {sorted(orphans)}"
 
 
 # ---------------------------------------------------------------------------

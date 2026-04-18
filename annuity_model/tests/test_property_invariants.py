@@ -71,8 +71,20 @@ def test_spia_higher_rate_produces_lower_single_premium(benefit_annual: float, r
     qx = np.clip(0.005 + ages * 5e-5, 1e-6, 0.4)
     mort = sp.MortalityTableQx(ages, qx)
     contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=benefit_annual)
-    res_lo = sp.price_spia_single_premium(contract=contract, yield_curve=sp.YieldCurve.from_flat_rate(rate), mortality=mort, horizon_age=95, spread=0.0)
-    res_hi = sp.price_spia_single_premium(contract=contract, yield_curve=sp.YieldCurve.from_flat_rate(rate + 0.01), mortality=mort, horizon_age=95, spread=0.0)
+    res_lo = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=sp.YieldCurve.from_flat_rate(rate),
+        mortality=mort,
+        horizon_age=95,
+        spread=0.0,
+    )
+    res_hi = sp.price_spia_single_premium(
+        contract=contract,
+        yield_curve=sp.YieldCurve.from_flat_rate(rate + 0.01),
+        mortality=mort,
+        horizon_age=95,
+        spread=0.0,
+    )
     assert res_hi.single_premium < res_lo.single_premium
 
 
@@ -126,7 +138,9 @@ def test_term_zero_qx_means_zero_claims(
     participation=st.floats(min_value=0.5, max_value=1.5, allow_nan=False),
 )
 @_FAST_SETTINGS
-def test_rila_credited_return_within_floor_and_cap(raw: float, cap: float, floor: float, participation: float) -> None:
+def test_rila_credited_return_within_floor_and_cap(
+    raw: float, cap: float, floor: float, participation: float
+) -> None:
     """Credited return is bounded by [floor, cap] for any raw input."""
     assume(cap > floor)
     cr = rp.segment_credited_return(raw=raw, participation=participation, cap=cap, floor=floor)
@@ -139,7 +153,9 @@ def test_rila_credited_return_within_floor_and_cap(raw: float, cap: float, floor
     floor=st.floats(min_value=-0.20, max_value=-0.01, allow_nan=False),
 )
 @_FAST_SETTINGS
-def test_rila_credited_return_monotone_in_raw_when_participation_positive(raw: float, cap: float, floor: float) -> None:
+def test_rila_credited_return_monotone_in_raw_when_participation_positive(
+    raw: float, cap: float, floor: float
+) -> None:
     """Increasing raw return cannot decrease credited return (monotonicity)."""
     cr_lo = rp.segment_credited_return(raw=raw, participation=1.0, cap=cap, floor=floor)
     cr_hi = rp.segment_credited_return(raw=raw + 0.01, participation=1.0, cap=cap, floor=floor)

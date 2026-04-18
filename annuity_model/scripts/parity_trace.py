@@ -48,7 +48,15 @@ from tests.parity.excel_formula_sim import (  # noqa: E402
 )
 
 
-def _default_scenario() -> tuple[sp.SPIAContract, sp.YieldCurve, sp.MortalityTableQx, sp.ALMAssumptions, sp.ExpenseAssumptions]:
+def _default_scenario() -> (
+    tuple[
+        sp.SPIAContract,
+        sp.YieldCurve,
+        sp.MortalityTableQx,
+        sp.ALMAssumptions,
+        sp.ExpenseAssumptions,
+    ]
+):
     contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=120_000.0)
     yc = sp.YieldCurve.from_flat_rate(0.045)
     ages = np.arange(0, 121, dtype=int)
@@ -66,7 +74,9 @@ def _default_scenario() -> tuple[sp.SPIAContract, sp.YieldCurve, sp.MortalityTab
     return contract, yc, mort, alm, expenses
 
 
-def _row_for_month(month: int, py_state: dict[str, float], xl_state: dict[str, float]) -> dict[str, object]:
+def _row_for_month(
+    month: int, py_state: dict[str, float], xl_state: dict[str, float]
+) -> dict[str, object]:
     """Build a flat dict row with python, excel, and diff columns."""
     row: dict[str, object] = {"month": month}
     for key, val in py_state.items():
@@ -149,7 +159,9 @@ def export_trace(output_path: Path, *, steps: int, threshold: float) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--output",
         type=Path,

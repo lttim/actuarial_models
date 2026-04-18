@@ -70,21 +70,25 @@ plugins:
             separate_signature: true
 
 nav:
-  - Home: README.md
-  - Glossary: docs/glossary.md
+  # NOTE: paths here are relative to docs_dir (i.e. annuity_model/docs/), so they
+  # MUST NOT include the `docs/` prefix. The repo's root README and the ui/
+  # MIGRATION doc live outside docs_dir; they're surfaced as repo links from
+  # the Home / Architecture pages instead of being mounted into the site nav.
+  - Home: index.md
+  - Glossary: glossary.md
   - Contracts:
-      - SPIA / ALM: docs/model_parity_contract.md
-      - RILA: docs/rila_parity_contract.md
-      - RILA spec: docs/rila_product_spec.md
-      - Release checklist: docs/parity_test_checklist.md
+      - SPIA / ALM: model_parity_contract.md
+      - RILA: rila_parity_contract.md
+      - RILA spec: rila_product_spec.md
+      - Release checklist: parity_test_checklist.md
   - Runbooks:
-      - Investigate parity break: docs/runbooks/investigate_parity_break.md
-      - Debug validator failure: docs/runbooks/debug_validator_failure.md
-      - Regenerate Excel cache: docs/runbooks/regenerate_excel_cache.md
-      - Launcher double-click: docs/runbooks/launcher_double_click.md
-      - Release: docs/runbooks/release.md
+      - Investigate parity break: runbooks/investigate_parity_break.md
+      - Debug validator failure: runbooks/debug_validator_failure.md
+      - Regenerate Excel cache: runbooks/regenerate_excel_cache.md
+      - Launcher double-click: runbooks/launcher_double_click.md
+      - Runtime Excel recalc gate (parked): runbooks/runtime_excel_recalc_gate.md
+      - Release: runbooks/release.md
   - Governance:
-      - CHANGELOG: docs/CHANGELOG.md
-      - Model change log: docs/model_change_log.md
-      - CODEOWNERS rationale: docs/CODEOWNERS_RATIONALE.md
-  - UI migration: ui/MIGRATION.md
+      - CHANGELOG: CHANGELOG.md
+      - Model change log: model_change_log.md
+      - CODEOWNERS rationale: CODEOWNERS_RATIONALE.md

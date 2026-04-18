@@ -77,23 +77,23 @@ def test_pyproject_declares_requires_python() -> None:
 def test_shell_launcher_min_python_matches_pyproject() -> None:
     major, minor = _requires_python_from_pyproject()
     text = SH.read_text(encoding="utf-8")
-    assert f"MIN_PYTHON_MAJOR={major}" in text, (
-        "run_pricing_ui.sh must declare MIN_PYTHON_MAJOR matching pyproject."
-    )
-    assert f"MIN_PYTHON_MINOR={minor}" in text, (
-        "run_pricing_ui.sh must declare MIN_PYTHON_MINOR matching pyproject."
-    )
+    assert (
+        f"MIN_PYTHON_MAJOR={major}" in text
+    ), "run_pricing_ui.sh must declare MIN_PYTHON_MAJOR matching pyproject."
+    assert (
+        f"MIN_PYTHON_MINOR={minor}" in text
+    ), "run_pricing_ui.sh must declare MIN_PYTHON_MINOR matching pyproject."
 
 
 def test_batch_launcher_min_python_matches_pyproject() -> None:
     major, minor = _requires_python_from_pyproject()
     text = BAT.read_text(encoding="utf-8")
-    assert f"MIN_PY_MAJOR={major}" in text, (
-        "run_pricing_ui.bat must declare MIN_PY_MAJOR matching pyproject."
-    )
-    assert f"MIN_PY_MINOR={minor}" in text, (
-        "run_pricing_ui.bat must declare MIN_PY_MINOR matching pyproject."
-    )
+    assert (
+        f"MIN_PY_MAJOR={major}" in text
+    ), "run_pricing_ui.bat must declare MIN_PY_MAJOR matching pyproject."
+    assert (
+        f"MIN_PY_MINOR={minor}" in text
+    ), "run_pricing_ui.bat must declare MIN_PY_MINOR matching pyproject."
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +121,7 @@ def test_shell_launcher_has_required_clause(label: str, pattern: str) -> None:
 
 
 BATCH_REQUIRED_CLAUSES = {
-    "prefers project venv": r'\.venv\\Scripts\\python\.exe',
+    "prefers project venv": r"\.venv\\Scripts\\python\.exe",
     "version guard": r"sys\.version_info\[:2\]\s*>=\s*\(%MIN_PY_MAJOR%,\s*%MIN_PY_MINOR%\)",
     "imports pricing_ui (not just streamlit)": r"import pricing_ui",
     "self-check mode": r"--self-check",
@@ -145,9 +145,7 @@ def test_command_launcher_holds_terminal_on_error() -> None:
         "run_pricing_ui.command must `read` after a non-zero status so the "
         "Terminal window stays open long enough to read the error."
     )
-    assert 'status=$?' in text, (
-        "run_pricing_ui.command must capture the launcher exit status."
-    )
+    assert "status=$?" in text, "run_pricing_ui.command must capture the launcher exit status."
 
 
 # ---------------------------------------------------------------------------

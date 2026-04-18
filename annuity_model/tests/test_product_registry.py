@@ -19,7 +19,9 @@ from product_registry import (
 pytestmark = [pytest.mark.product_spia, pytest.mark.product_term, pytest.mark.product_rila]
 
 
-def _setup_case() -> tuple[sp.SPIAContract, sp.YieldCurve, sp.MortalityTableQx, sp.ExpenseAssumptions]:
+def _setup_case() -> (
+    tuple[sp.SPIAContract, sp.YieldCurve, sp.MortalityTableQx, sp.ExpenseAssumptions]
+):
     contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=100_000.0)
     yc = sp.YieldCurve.from_flat_rate(0.04)
     ages = np.arange(0, 121, dtype=int)
@@ -56,8 +58,12 @@ def test_spia_adapter_price_matches_legacy():
         expense_annual_inflation=0.0,
     )
     assert isinstance(res_adapter, sp.SPIAProjectionResult)
-    np.testing.assert_allclose(res_adapter.expected_total_cashflows, res_legacy.expected_total_cashflows, rtol=0, atol=0)
-    assert float(res_adapter.single_premium) == pytest.approx(float(res_legacy.single_premium), rel=0, abs=0)
+    np.testing.assert_allclose(
+        res_adapter.expected_total_cashflows, res_legacy.expected_total_cashflows, rtol=0, atol=0
+    )
+    assert float(res_adapter.single_premium) == pytest.approx(
+        float(res_legacy.single_premium), rel=0, abs=0
+    )
 
 
 def test_spia_alm_generic_entrypoint_matches_legacy_wrapper():
@@ -96,7 +102,9 @@ def test_spia_alm_generic_entrypoint_matches_legacy_wrapper():
         assumptions=asm,
         initial_asset_market_value=float(pricing.single_premium),
     )
-    np.testing.assert_allclose(generic.asset_market_value, legacy.asset_market_value, rtol=0, atol=0)
+    np.testing.assert_allclose(
+        generic.asset_market_value, legacy.asset_market_value, rtol=0, atol=0
+    )
     np.testing.assert_allclose(generic.liability_pv, legacy.liability_pv, rtol=0, atol=0)
     np.testing.assert_allclose(generic.surplus, legacy.surplus, rtol=0, atol=0)
 
@@ -187,13 +195,17 @@ def test_term_adapter_price_and_dispatch():
         spread=0.0,
         valuation_year=None,
     )
-    np.testing.assert_allclose(res.expected_total_cashflows, direct.expected_total_cashflows, rtol=0, atol=0)
+    np.testing.assert_allclose(
+        res.expected_total_cashflows, direct.expected_total_cashflows, rtol=0, atol=0
+    )
     assert float(res.pv_benefit) == pytest.approx(float(direct.pv_benefit), rel=0, abs=0)
 
 
 def test_term_adapter_monte_carlo_not_available():
     contract, yc, mort, ex = _setup_case()
-    term_contract = tp.TermLifeContract(issue_age=contract.issue_age, sex=contract.sex, death_benefit=250_000.0)
+    term_contract = tp.TermLifeContract(
+        issue_age=contract.issue_age, sex=contract.sex, death_benefit=250_000.0
+    )
     adapter = get_product_adapter(ProductType.TERM_LIFE)
     with pytest.raises(NotImplementedError):
         adapter.price_monte_carlo(
@@ -226,7 +238,9 @@ def test_term_contract_ui_config_defaults():
 
 def test_mortality_mode_label_helper_has_expected_values():
     assert get_mortality_mode_label("synthetic") == "Synthetic (demo, wide age range)"
-    assert get_mortality_mode_label("us_ssa_2015_period").startswith("US SSA 2015 period life table")
+    assert get_mortality_mode_label("us_ssa_2015_period").startswith(
+        "US SSA 2015 period life table"
+    )
     assert get_mortality_mode_label("unknown_mode_key") == "unknown_mode_key"
 
 
@@ -244,7 +258,12 @@ def test_pricing_metrics_for_spia_product():
         expense_annual_inflation=0.0,
     )
     metrics = get_pricing_metrics(ProductType.SPIA, res)
-    assert tuple(m.label for m in metrics) == ("Single premium", "PV benefit", "PV monthly expenses", "Annuity factor")
+    assert tuple(m.label for m in metrics) == (
+        "Single premium",
+        "PV benefit",
+        "PV monthly expenses",
+        "Annuity factor",
+    )
     assert tuple(m.is_money for m in metrics) == (True, True, True, False)
     assert metrics[0].value == pytest.approx(float(res.single_premium), rel=0, abs=0)
 
@@ -354,5 +373,9 @@ def test_rila_adapter_price_matches_direct():
         index_scenario_csv_path=None,
         expense_annual_inflation=0.0,
     )
-    np.testing.assert_allclose(res_adapter.expected_total_cashflows, res_direct.expected_total_cashflows, rtol=0, atol=0)
-    assert float(res_adapter.single_premium) == pytest.approx(float(res_direct.single_premium), rel=0, abs=0)
+    np.testing.assert_allclose(
+        res_adapter.expected_total_cashflows, res_direct.expected_total_cashflows, rtol=0, atol=0
+    )
+    assert float(res_adapter.single_premium) == pytest.approx(
+        float(res_direct.single_premium), rel=0, abs=0
+    )

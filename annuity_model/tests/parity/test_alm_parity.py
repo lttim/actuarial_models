@@ -84,7 +84,9 @@ def _build_standard_buckets():
     return asm, np.array(weights), buckets
 
 
-def _init_portfolio(aum: float, w: np.ndarray, buckets: list, yc: sp.YieldCurve, spread: float = 0.0):
+def _init_portfolio(
+    aum: float, w: np.ndarray, buckets: list, yc: sp.YieldCurve, spread: float = 0.0
+):
     n_b = len(buckets) - 1
     nominal_tenors = np.array([float(b.tenor_years) for b in buckets[1:]])
     faces = np.zeros(n_b)
@@ -124,8 +126,13 @@ def _run_full_sim(
 
         if np.any(matured):
             cash, faces = sp._alm_micro_reinvest_pro_rata(
-                cash=cash, faces=faces, t_rem=t_rem, w=w,
-                yield_curve=yc, spread=spread, nominal_tenors=nominal_tenors,
+                cash=cash,
+                faces=faces,
+                t_rem=t_rem,
+                w=w,
+                yield_curve=yc,
+                spread=spread,
+                nominal_tenors=nominal_tenors,
             )
             df = _df_rem(yc, t_rem, spread)
             mv = faces * df
@@ -137,8 +144,12 @@ def _run_full_sim(
                 cash, faces = excel_disinvest_shortest_first(cash, faces, t_rem, df, need)
             else:
                 cash, faces = sp._alm_disinvest(
-                    cash=cash, faces=faces, t_rem=t_rem,
-                    yield_curve=yc, spread=spread, need=need,
+                    cash=cash,
+                    faces=faces,
+                    t_rem=t_rem,
+                    yield_curve=yc,
+                    spread=spread,
+                    need=need,
                     rule="shortest_first",
                 )
             df = _df_rem(yc, t_rem, spread)
@@ -201,8 +212,12 @@ def test_disinvest_no_double_sell_equal_tenor_buckets():
 
     # Bond 0 must be reduced; bond 1 must be unchanged
     assert faces_result[0] < faces[0], "Bond 0 (lower index) should be liquidated"
-    np.testing.assert_allclose(faces_result[1], faces[1], atol=TOL_DOLLAR,
-                               err_msg="Bond 1 must NOT be touched (lower t_rem but higher index)")
+    np.testing.assert_allclose(
+        faces_result[1],
+        faces[1],
+        atol=TOL_DOLLAR,
+        err_msg="Bond 1 must NOT be touched (lower t_rem but higher index)",
+    )
 
     # Cash must be restored to >= 0
     assert cash_result >= -TOL_DOLLAR, f"Cash after disinvest should be >= 0, got {cash_result}"
@@ -210,8 +225,12 @@ def test_disinvest_no_double_sell_equal_tenor_buckets():
     # Total MV must be preserved (sell at market = cash neutral)
     mv_before = np.sum(faces * df) - need  # net: started with -need cash
     mv_after = cash_result + np.sum(faces_result * _df_rem(yc, t_rem))
-    np.testing.assert_allclose(mv_before, mv_after, atol=TOL_DOLLAR,
-                               err_msg="Total MV must be conserved through disinvestment")
+    np.testing.assert_allclose(
+        mv_before,
+        mv_after,
+        atol=TOL_DOLLAR,
+        err_msg="Total MV must be conserved through disinvestment",
+    )
 
 
 @pytest.mark.regression
@@ -236,8 +255,9 @@ def test_excel_disinvest_no_double_sell_equal_tenor_buckets():
     cash_result, faces_result = excel_disinvest_shortest_first(-need, faces.copy(), t_rem, df, need)
 
     assert faces_result[0] < faces[0], "Excel sim: bond 0 should be liquidated"
-    np.testing.assert_allclose(faces_result[1], faces[1], atol=TOL_DOLLAR,
-                               err_msg="Excel sim: bond 1 must NOT be touched")
+    np.testing.assert_allclose(
+        faces_result[1], faces[1], atol=TOL_DOLLAR, err_msg="Excel sim: bond 1 must NOT be touched"
+    )
     assert cash_result >= -TOL_DOLLAR
 
 
@@ -250,22 +270,33 @@ def test_disinvest_tie_break_lowest_index_wins():
     need = 5_000.0
 
     cash_py, faces_py = sp._alm_disinvest(
-        cash=-need, faces=faces.copy(), t_rem=t_rem,
-        yield_curve=yc, spread=0.0, need=need, rule="shortest_first",
+        cash=-need,
+        faces=faces.copy(),
+        t_rem=t_rem,
+        yield_curve=yc,
+        spread=0.0,
+        need=need,
+        rule="shortest_first",
     )
     cash_xl, faces_xl = excel_disinvest_shortest_first(-need, faces.copy(), t_rem, df, need)
 
     # Both engines must sell from bond 0 (lower index), not bond 1
     assert faces_py[0] < faces[0], "Python: bond 0 must be sold first"
-    np.testing.assert_allclose(faces_py[1], faces[1], atol=TOL_DOLLAR,
-                               err_msg="Python: bond 1 must not be touched")
+    np.testing.assert_allclose(
+        faces_py[1], faces[1], atol=TOL_DOLLAR, err_msg="Python: bond 1 must not be touched"
+    )
     assert faces_xl[0] < faces[0], "Excel: bond 0 must be sold first"
-    np.testing.assert_allclose(faces_xl[1], faces[1], atol=TOL_DOLLAR,
-                               err_msg="Excel: bond 1 must not be touched")
+    np.testing.assert_allclose(
+        faces_xl[1], faces[1], atol=TOL_DOLLAR, err_msg="Excel: bond 1 must not be touched"
+    )
 
     # Both engines must agree with each other
-    np.testing.assert_allclose(faces_py, faces_xl, atol=TOL_DOLLAR,
-                               err_msg="Python and Excel must agree on post-disinvest faces")
+    np.testing.assert_allclose(
+        faces_py,
+        faces_xl,
+        atol=TOL_DOLLAR,
+        err_msg="Python and Excel must agree on post-disinvest faces",
+    )
 
 
 def test_disinvest_genuinely_different_tenors_sells_shortest():
@@ -277,8 +308,13 @@ def test_disinvest_genuinely_different_tenors_sells_shortest():
     need = 3_000.0
 
     _, faces_py = sp._alm_disinvest(
-        cash=-need, faces=faces.copy(), t_rem=t_rem,
-        yield_curve=yc, spread=0.0, need=need, rule="shortest_first",
+        cash=-need,
+        faces=faces.copy(),
+        t_rem=t_rem,
+        yield_curve=yc,
+        spread=0.0,
+        need=need,
+        rule="shortest_first",
     )
     _, faces_xl = excel_disinvest_shortest_first(-need, faces.copy(), t_rem, df, need)
 
@@ -323,12 +359,16 @@ def test_near_tie_perturbations_still_pick_lowest_index(delta: float):
 
     assert faces_py[0] < faces[0], "Python should disinvest from lowest-index near-tie bucket"
     np.testing.assert_allclose(
-        faces_py[1], faces[1], atol=TOL_DOLLAR,
+        faces_py[1],
+        faces[1],
+        atol=TOL_DOLLAR,
         err_msg="Python should not touch higher-index near-tie bucket",
     )
     assert faces_xl[0] < faces[0], "Excel sim should disinvest from lowest-index near-tie bucket"
     np.testing.assert_allclose(
-        faces_xl[1], faces[1], atol=TOL_DOLLAR,
+        faces_xl[1],
+        faces[1],
+        atol=TOL_DOLLAR,
         err_msg="Excel sim should not touch higher-index near-tie bucket",
     )
 
@@ -338,11 +378,14 @@ def test_near_tie_perturbations_still_pick_lowest_index(delta: float):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("flat_rate,aum,annual_benefit", [
-    (0.03, 2_000_000.0, 60_000.0),   # no disinvestment needed
-    (0.04, 1_800_000.0, 80_000.0),   # light disinvestment
-    (0.037, 2_222_430.0, 100_000.0), # tie-break scenario (reproduces 2026-03 bug)
-])
+@pytest.mark.parametrize(
+    "flat_rate,aum,annual_benefit",
+    [
+        (0.03, 2_000_000.0, 60_000.0),  # no disinvestment needed
+        (0.04, 1_800_000.0, 80_000.0),  # light disinvestment
+        (0.037, 2_222_430.0, 100_000.0),  # tie-break scenario (reproduces 2026-03 bug)
+    ],
+)
 def test_alm_60month_parity_python_vs_excel(flat_rate, aum, annual_benefit):
     """Full 60-month step-by-step parity: Python _alm_disinvest vs Excel formula sim.
 
@@ -362,15 +405,21 @@ def test_alm_60month_parity_python_vs_excel(flat_rate, aum, annual_benefit):
 
     for m in range(60):
         np.testing.assert_allclose(
-            py_cash[m], xl_cash[m], atol=TOL_DOLLAR,
+            py_cash[m],
+            xl_cash[m],
+            atol=TOL_DOLLAR,
             err_msg=f"Cash mismatch at month {m+1}: Python={py_cash[m]:.6f}, Excel={xl_cash[m]:.6f}",
         )
         np.testing.assert_allclose(
-            py_mv[m], xl_mv[m], atol=TOL_DOLLAR,
+            py_mv[m],
+            xl_mv[m],
+            atol=TOL_DOLLAR,
             err_msg=f"Total MV mismatch at month {m+1}: Python={py_mv[m]:.6f}, Excel={xl_mv[m]:.6f}",
         )
         np.testing.assert_allclose(
-            py_face[m], xl_face[m], atol=TOL_DOLLAR,
+            py_face[m],
+            xl_face[m],
+            atol=TOL_DOLLAR,
             err_msg=f"Face array mismatch at month {m+1}",
         )
 
@@ -437,7 +486,9 @@ def test_spia_liability_adapter_path_preserves_alm_results():
         assumptions=asm,
         initial_asset_market_value=float(pricing.single_premium),
     )
-    np.testing.assert_allclose(legacy.asset_market_value, via_path.asset_market_value, atol=TOL_DOLLAR)
+    np.testing.assert_allclose(
+        legacy.asset_market_value, via_path.asset_market_value, atol=TOL_DOLLAR
+    )
     np.testing.assert_allclose(legacy.liability_pv, via_path.liability_pv, atol=TOL_DOLLAR)
     np.testing.assert_allclose(legacy.surplus, via_path.surplus, atol=TOL_DOLLAR)
 
@@ -509,7 +560,11 @@ def test_reinvest_pro_rata_parity_python_vs_excel():
 
     df_xl = _df_rem(yc, t_rem)
     xsr, gaps, gap_sum, _ = _excel_reinvest_inputs(
-        cash=cash, faces=faces, t_rem=t_rem, w=w, df=df_xl,
+        cash=cash,
+        faces=faces,
+        t_rem=t_rem,
+        w=w,
+        df=df_xl,
     )
     xl_cash, xl_faces, _ = excel_reinvest_pro_rata(
         cash=cash,
@@ -523,10 +578,18 @@ def test_reinvest_pro_rata_parity_python_vs_excel():
         gap_sum=gap_sum,
     )
 
-    np.testing.assert_allclose(py_cash, xl_cash, atol=TOL_DOLLAR,
-                               err_msg=f"Reinvest cash mismatch: py={py_cash:.6f}, xl={xl_cash:.6f}")
-    np.testing.assert_allclose(py_faces, xl_faces, atol=TOL_DOLLAR,
-                               err_msg="Reinvest face vector mismatch (Python vs Excel sim)")
+    np.testing.assert_allclose(
+        py_cash,
+        xl_cash,
+        atol=TOL_DOLLAR,
+        err_msg=f"Reinvest cash mismatch: py={py_cash:.6f}, xl={xl_cash:.6f}",
+    )
+    np.testing.assert_allclose(
+        py_faces,
+        xl_faces,
+        atol=TOL_DOLLAR,
+        err_msg="Reinvest face vector mismatch (Python vs Excel sim)",
+    )
 
 
 def test_reinvest_pro_rata_no_op_when_no_excess():
@@ -541,15 +604,31 @@ def test_reinvest_pro_rata_no_op_when_no_excess():
     faces = (w[1:] * aum) / df0
 
     py_cash, py_faces = sp._alm_micro_reinvest_pro_rata(
-        cash=cash, faces=faces.copy(), t_rem=t_rem.copy(), w=w,
-        yield_curve=yc, spread=0.0, nominal_tenors=nominal_tenors,
+        cash=cash,
+        faces=faces.copy(),
+        t_rem=t_rem.copy(),
+        w=w,
+        yield_curve=yc,
+        spread=0.0,
+        nominal_tenors=nominal_tenors,
     )
     xsr, gaps, gap_sum, _ = _excel_reinvest_inputs(
-        cash=cash, faces=faces, t_rem=t_rem, w=w, df=df0,
+        cash=cash,
+        faces=faces,
+        t_rem=t_rem,
+        w=w,
+        df=df0,
     )
     xl_cash, xl_faces, _ = excel_reinvest_pro_rata(
-        cash=cash, faces=faces.copy(), t_rem=t_rem.copy(), df=df0, w=w,
-        nominal_tenors=nominal_tenors, xsr=xsr, gaps=gaps, gap_sum=gap_sum,
+        cash=cash,
+        faces=faces.copy(),
+        t_rem=t_rem.copy(),
+        df=df0,
+        w=w,
+        nominal_tenors=nominal_tenors,
+        xsr=xsr,
+        gaps=gaps,
+        gap_sum=gap_sum,
     )
 
     np.testing.assert_allclose(py_cash, cash, atol=TOL_DOLLAR)

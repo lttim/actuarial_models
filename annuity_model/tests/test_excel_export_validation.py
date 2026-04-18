@@ -369,8 +369,7 @@ def test_validator_flags_cross_sheet_indirect_reference_to_empty_column():
     issues = validate_workbook(wb)
     msgs = " | ".join(i.message for i in issues)
     assert "S" in msgs and "Other" in msgs, (
-        "validator must catch INDIRECT-built references to a missing column; got: "
-        + repr(issues)
+        "validator must catch INDIRECT-built references to a missing column; got: " + repr(issues)
     )
 
 

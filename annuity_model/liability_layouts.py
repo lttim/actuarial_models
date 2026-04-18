@@ -25,8 +25,8 @@ Adding a new product (FIA, VA-GLWB, ...) means one entry in
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 
 @dataclass(frozen=True, slots=True)

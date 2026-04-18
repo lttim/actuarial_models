@@ -84,10 +84,12 @@ def excel_disinvest_shortest_first(
             break
 
         # Epsilon-adjusted tenor for each bucket; depleted buckets get sentinel 999
-        trnk = np.array([
-            t_rem[k] + (k + 1) * EXCEL_DISINVEST_EPSILON if f0[k] > 1e-9 else 999.0
-            for k in range(nb)
-        ])
+        trnk = np.array(
+            [
+                t_rem[k] + (k + 1) * EXCEL_DISINVEST_EPSILON if f0[k] > 1e-9 else 999.0
+                for k in range(nb)
+            ]
+        )
         tmin = float(np.min(trnk))
 
         sells = np.zeros(nb)

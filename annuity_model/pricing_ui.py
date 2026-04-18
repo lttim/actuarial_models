@@ -294,7 +294,9 @@ def _serialize_array(arr: Any, *, include_full: bool, max_points: int = 250) -> 
     }
 
 
-def _contract_to_dict(contract: sp.SPIAContract | tp.TermLifeContract | rp.RILAContract) -> dict[str, Any]:
+def _contract_to_dict(
+    contract: sp.SPIAContract | tp.TermLifeContract | rp.RILAContract,
+) -> dict[str, Any]:
     out: dict[str, Any] = {
         "issue_age": int(contract.issue_age),
         "sex": str(contract.sex),
@@ -349,19 +351,27 @@ def _pricing_result_to_dict(
         "annuity_factor": float(res.annuity_factor),
         "times_years": _serialize_array(res.times_years, include_full=include_full),
         "months": _serialize_array(res.months, include_full=include_full),
-        "expected_total_cashflows": _serialize_array(res.expected_total_cashflows, include_full=include_full),
+        "expected_total_cashflows": _serialize_array(
+            res.expected_total_cashflows, include_full=include_full
+        ),
         "economic_reserve": _serialize_array(res.economic_reserve, include_full=include_full),
         "survival_to_payment": _serialize_array(res.survival_to_payment, include_full=include_full),
         # Index / inflation scaffolding (needed for full Before/After diagnostics).
         "index_s0": float(res.index_s0),
-        "index_level_at_payment": _serialize_array(res.index_level_at_payment, include_full=include_full),
+        "index_level_at_payment": _serialize_array(
+            res.index_level_at_payment, include_full=include_full
+        ),
         "index_simple_return": _serialize_array(res.index_simple_return, include_full=include_full),
         "index_log_return": _serialize_array(res.index_log_return, include_full=include_full),
-        "index_cumulative_return": _serialize_array(res.index_cumulative_return, include_full=include_full),
+        "index_cumulative_return": _serialize_array(
+            res.index_cumulative_return, include_full=include_full
+        ),
     }
 
 
-def _alm_result_to_dict(alm: sp.ALMResult, asm: sp.ALMAssumptions | None, *, include_buckets: bool, include_full: bool) -> dict[str, Any]:
+def _alm_result_to_dict(
+    alm: sp.ALMResult, asm: sp.ALMAssumptions | None, *, include_buckets: bool, include_full: bool
+) -> dict[str, Any]:
     out: dict[str, Any] = {
         "assumptions": None,
         "month_index": _serialize_array(alm.month_index, include_full=True),
@@ -370,7 +380,9 @@ def _alm_result_to_dict(alm: sp.ALMResult, asm: sp.ALMAssumptions | None, *, inc
         "liability_pv": _serialize_array(alm.liability_pv, include_full=include_full),
         "surplus": _serialize_array(alm.surplus, include_full=include_full),
         "funding_ratio": _serialize_array(alm.funding_ratio, include_full=include_full),
-        "liquidity_buffer_months": _serialize_array(alm.liquidity_buffer_months, include_full=include_full),
+        "liquidity_buffer_months": _serialize_array(
+            alm.liquidity_buffer_months, include_full=include_full
+        ),
         "borrowing_balance": _serialize_array(alm.borrowing_balance, include_full=include_full),
         "pv01_assets": float(alm.pv01_assets),
         "pv01_liabilities": float(alm.pv01_liabilities),
@@ -404,7 +416,10 @@ def _alm_assumptions_to_dict(asm: sp.ALMAssumptions) -> dict[str, Any]:
         "borrowing_rate_annual": float(asm.borrowing_rate_annual),
         "liquidity_near_liquid_years": float(asm.liquidity_near_liquid_years),
         "allocation": {
-            "buckets": [{"name": b.name, "tenor_years": float(b.tenor_years)} for b in asm.allocation.buckets],
+            "buckets": [
+                {"name": b.name, "tenor_years": float(b.tenor_years)}
+                for b in asm.allocation.buckets
+            ],
             "weights": _serialize_array(asm.allocation.weights, include_full=True),
         },
     }
@@ -428,27 +443,53 @@ def _whatif_result_to_dict(
             "single_premium": float(base_res.single_premium),
             "pv_benefit": float(base_res.pv_benefit),
             "pv_monthly_expenses": float(base_res.pv_monthly_expenses),
-            "economic_reserve_issue": float(base_res.economic_reserve[0]) if base_res.economic_reserve.size else None,
+            "economic_reserve_issue": (
+                float(base_res.economic_reserve[0]) if base_res.economic_reserve.size else None
+            ),
             "times_years": _serialize_array(base_res.times_years, include_full=include_full),
-            "economic_reserve": _serialize_array(base_res.economic_reserve, include_full=include_full),
+            "economic_reserve": _serialize_array(
+                base_res.economic_reserve, include_full=include_full
+            ),
             "index_s0": float(base_res.index_s0),
-            "index_level_at_payment": _serialize_array(base_res.index_level_at_payment, include_full=include_full),
-            "index_simple_return": _serialize_array(base_res.index_simple_return, include_full=include_full),
-            "index_log_return": _serialize_array(base_res.index_log_return, include_full=include_full),
-            "index_cumulative_return": _serialize_array(base_res.index_cumulative_return, include_full=include_full),
+            "index_level_at_payment": _serialize_array(
+                base_res.index_level_at_payment, include_full=include_full
+            ),
+            "index_simple_return": _serialize_array(
+                base_res.index_simple_return, include_full=include_full
+            ),
+            "index_log_return": _serialize_array(
+                base_res.index_log_return, include_full=include_full
+            ),
+            "index_cumulative_return": _serialize_array(
+                base_res.index_cumulative_return, include_full=include_full
+            ),
         },
         "after": {
             "single_premium": float(shocked_res.single_premium),
             "pv_benefit": float(shocked_res.pv_benefit),
             "pv_monthly_expenses": float(shocked_res.pv_monthly_expenses),
-            "economic_reserve_issue": float(shocked_res.economic_reserve[0]) if shocked_res.economic_reserve.size else None,
+            "economic_reserve_issue": (
+                float(shocked_res.economic_reserve[0])
+                if shocked_res.economic_reserve.size
+                else None
+            ),
             "times_years": _serialize_array(shocked_res.times_years, include_full=include_full),
-            "economic_reserve": _serialize_array(shocked_res.economic_reserve, include_full=include_full),
+            "economic_reserve": _serialize_array(
+                shocked_res.economic_reserve, include_full=include_full
+            ),
             "index_s0": float(shocked_res.index_s0),
-            "index_level_at_payment": _serialize_array(shocked_res.index_level_at_payment, include_full=include_full),
-            "index_simple_return": _serialize_array(shocked_res.index_simple_return, include_full=include_full),
-            "index_log_return": _serialize_array(shocked_res.index_log_return, include_full=include_full),
-            "index_cumulative_return": _serialize_array(shocked_res.index_cumulative_return, include_full=include_full),
+            "index_level_at_payment": _serialize_array(
+                shocked_res.index_level_at_payment, include_full=include_full
+            ),
+            "index_simple_return": _serialize_array(
+                shocked_res.index_simple_return, include_full=include_full
+            ),
+            "index_log_return": _serialize_array(
+                shocked_res.index_log_return, include_full=include_full
+            ),
+            "index_cumulative_return": _serialize_array(
+                shocked_res.index_cumulative_return, include_full=include_full
+            ),
         },
         "tail_risk_mc": {
             "baseline": {
@@ -469,12 +510,16 @@ def _whatif_result_to_dict(
     }
     if alm_base is not None:
         # Always include bucket time series for diagnostics completeness.
-        out["alm_base"] = _alm_result_to_dict(alm_base, asm, include_buckets=True, include_full=include_full)
+        out["alm_base"] = _alm_result_to_dict(
+            alm_base, asm, include_buckets=True, include_full=include_full
+        )
     else:
         out["alm_base"] = None
     if alm_after is not None:
         # Always include bucket time series for diagnostics completeness.
-        out["alm_after"] = _alm_result_to_dict(alm_after, asm, include_buckets=True, include_full=include_full)
+        out["alm_after"] = _alm_result_to_dict(
+            alm_after, asm, include_buckets=True, include_full=include_full
+        )
     else:
         out["alm_after"] = None
     return out
@@ -624,11 +669,16 @@ SECTION_ORDER: list[str] = [
     "tests",
 ]
 
+
 def _dynamic_overview_features() -> list[str]:
     options = list(product_options_for_ui())
     available_products = ", ".join(product_label(p) for p in options) if options else "None"
-    mc_products = [product_label(p) for p in options if get_product_capabilities(p).supports_monte_carlo]
-    econ_products = [product_label(p) for p in options if get_product_capabilities(p).supports_economic_scenario]
+    mc_products = [
+        product_label(p) for p in options if get_product_capabilities(p).supports_monte_carlo
+    ]
+    econ_products = [
+        product_label(p) for p in options if get_product_capabilities(p).supports_economic_scenario
+    ]
     return [
         f"Supported product run types: {available_products}.",
         "Run-time pricing dispatch is centralized in the product registry adapters.",
@@ -647,7 +697,9 @@ def _seed_run_form_state_from_last_inputs() -> None:
     meta = st.session_state.get("pricing_meta") or {}
     saved_inputs = st.session_state.get("pricing_run_inputs") or {}
     product_default = str(
-        st.session_state.get("pricing_product_type", meta.get("product_type", ProductType.SPIA.value))
+        st.session_state.get(
+            "pricing_product_type", meta.get("product_type", ProductType.SPIA.value)
+        )
     )
     try:
         default_product_type = ProductType(product_default)
@@ -767,7 +819,10 @@ def _build_mortality(
             raise ValueError("US SSA 2015 period mortality is currently scoped to Term Life.")
         raw = pd.read_csv(io.StringIO(_SSA_2015_PERIOD_QX_CSV))
         qx_col = "male_qx" if sex == "male" else "female_qx"
-        return sp.MortalityTableQx(raw["age"].to_numpy(dtype=int), raw[qx_col].to_numpy(dtype=float)), False
+        return (
+            sp.MortalityTableQx(raw["age"].to_numpy(dtype=int), raw[qx_col].to_numpy(dtype=float)),
+            False,
+        )
     if mode == "synthetic":
         return _minimal_mortality(), False
     if mode == "qx_csv":
@@ -807,7 +862,9 @@ def _render_overview() -> None:
 
     st.subheader("Workspace sections")
     section_labels = [SECTION_LABELS[k] for k in SECTION_ORDER if k != "overview"]
-    st.markdown("Use the sidebar to navigate: " + " | ".join(f"**{name}**" for name in section_labels) + ".")
+    st.markdown(
+        "Use the sidebar to navigate: " + " | ".join(f"**{name}**" for name in section_labels) + "."
+    )
 
 
 def _result_dataframe(
@@ -859,12 +916,18 @@ def _render_pricing_run_charts(
     )
 
     st.markdown("**Economic reserve** (benefit + monthly expense, PV roll-forward)")
-    st.line_chart(pd.DataFrame({"age": ages_r, "reserve": np.rint(res.economic_reserve)}).set_index("age"))
+    st.line_chart(
+        pd.DataFrame({"age": ages_r, "reserve": np.rint(res.economic_reserve)}).set_index("age")
+    )
 
     if product_type != ProductType.TERM_LIFE and not isinstance(expenses, sp.ExpenseAssumptions):
-        st.warning("Profit decomposition unavailable: pricing expense assumptions were not found in session state.")
+        st.warning(
+            "Profit decomposition unavailable: pricing expense assumptions were not found in session state."
+        )
     else:
-        _render_profit_decomposition_chart(res, contract, expenses=expenses, product_type=product_type)
+        _render_profit_decomposition_chart(
+            res, contract, expenses=expenses, product_type=product_type
+        )
 
 
 def _build_profit_waterfall_chart_df(rows: list[tuple[str, float, bool]]) -> pd.DataFrame:
@@ -926,7 +989,9 @@ def _build_profit_waterfall_chart_df(rows: list[tuple[str, float, bool]]) -> pd.
 
 
 def _altair_profit_waterfall_chart(df: pd.DataFrame) -> alt.Chart:
-    color_scale = alt.Scale(domain=["Total", "Increase", "Decrease"], range=["#1f77b4", "#2ca02c", "#d62728"])
+    color_scale = alt.Scale(
+        domain=["Total", "Increase", "Decrease"], range=["#1f77b4", "#2ca02c", "#d62728"]
+    )
     bars = (
         alt.Chart(df)
         .mark_bar(size=36)
@@ -971,7 +1036,9 @@ def _render_profit_decomposition_chart(
 
     wf_df = _build_profit_waterfall_chart_df(rows)
     st.altair_chart(_altair_profit_waterfall_chart(wf_df), use_container_width=True)
-    st.caption("Blue = subtotal / reconciliation pillars from zero; green = upward step; red = downward step (table amount).")
+    st.caption(
+        "Blue = subtotal / reconciliation pillars from zero; green = upward step; red = downward step (table amount)."
+    )
 
     table = pd.DataFrame([{"Component": label, "Amount ($)": val} for label, val, _ in rows])
     table_display = _round_for_visuals(table)
@@ -1012,14 +1079,22 @@ def _build_profit_decomposition_rows(
         n_months = int(res.months.size)
         level_benefit_certain_undisc = float(b_month * n_months)
         level_benefit_mort_undisc = float(np.sum(b_month * res.survival_to_payment))
-        level_benefit_mort_disc = float(np.sum(b_month * res.survival_to_payment * res.discount_factors))
+        level_benefit_mort_disc = float(
+            np.sum(b_month * res.survival_to_payment * res.discount_factors)
+        )
 
         mortality_effect = level_benefit_mort_undisc - level_benefit_certain_undisc
         discounting_effect = level_benefit_mort_disc - level_benefit_mort_undisc
         benefit_design_effect = float(res.pv_benefit - level_benefit_mort_disc)
-        issue_expense = float(expenses.policy_expense_dollars) if isinstance(expenses, sp.ExpenseAssumptions) else 0.0
+        issue_expense = (
+            float(expenses.policy_expense_dollars)
+            if isinstance(expenses, sp.ExpenseAssumptions)
+            else 0.0
+        )
         expense_component = issue_expense + float(res.pv_monthly_expenses)
-        margin_component = float(res.single_premium - (res.pv_benefit + res.pv_monthly_expenses + issue_expense))
+        margin_component = float(
+            res.single_premium - (res.pv_benefit + res.pv_monthly_expenses + issue_expense)
+        )
         rows = [
             ("Undiscounted level benefits (certain life)", level_benefit_certain_undisc, True),
             ("Mortality effect", mortality_effect, False),
@@ -1037,7 +1112,11 @@ def _build_profit_decomposition_rows(
         return rows, caption
 
     # Generic fallback for future products where detailed decomposition may differ.
-    issue_expense = float(expenses.policy_expense_dollars) if isinstance(expenses, sp.ExpenseAssumptions) else 0.0
+    issue_expense = (
+        float(expenses.policy_expense_dollars)
+        if isinstance(expenses, sp.ExpenseAssumptions)
+        else 0.0
+    )
     monthly_component = float(res.pv_monthly_expenses)
     rows = [
         ("PV benefits", float(res.pv_benefit), True),
@@ -1117,7 +1196,9 @@ def _deterministic_index_levels_from_regime(
     return float(s0) * np.exp(float(annual_drift) * months * dt)
 
 
-def _render_impact_metric(label: str, before_val: float, after_val: float, money: bool = True) -> None:
+def _render_impact_metric(
+    label: str, before_val: float, after_val: float, money: bool = True
+) -> None:
     delta = float(after_val - before_val)
     if money:
         st.metric(label, f"${after_val:,.0f}", delta=f"${delta:,.0f}")
@@ -1289,7 +1370,10 @@ def _render_what_if_studio() -> None:
     base_curve = ctx.get("yield_curve")
     base_mort = ctx.get("mortality")
     base_expenses = ctx.get("expenses")
-    if not isinstance(base_expenses, sp.ExpenseAssumptions) and product_type == ProductType.TERM_LIFE:
+    if (
+        not isinstance(base_expenses, sp.ExpenseAssumptions)
+        and product_type == ProductType.TERM_LIFE
+    ):
         base_expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
 
     if (
@@ -1303,13 +1387,19 @@ def _render_what_if_studio() -> None:
         return
 
     if product_type == ProductType.RILA:
-        st.info("What-if Analysis is not yet wired for RILA in this release; use Pricing Run and ALM with deterministic scenarios.")
+        st.info(
+            "What-if Analysis is not yet wired for RILA in this release; use Pricing Run and ALM with deterministic scenarios."
+        )
         return
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        rate_shift_bps = st.slider("Rates shift (bps)", min_value=-300, max_value=300, value=0, step=5)
-        spread_shift_bps = st.slider("Credit spread shift (bps)", min_value=-300, max_value=300, value=0, step=5)
+        rate_shift_bps = st.slider(
+            "Rates shift (bps)", min_value=-300, max_value=300, value=0, step=5
+        )
+        spread_shift_bps = st.slider(
+            "Credit spread shift (bps)", min_value=-300, max_value=300, value=0, step=5
+        )
     with c2:
         longevity_improvement_pct = st.slider(
             "Longevity improvement shock (%)",
@@ -1330,14 +1420,18 @@ def _render_what_if_studio() -> None:
         mc_sims = 800
         term_monthly_premium_mult = 1.0
         if product_type == ProductType.SPIA:
-            expense_ratio_mult = st.slider("Expense ratio multiplier", min_value=0.50, max_value=2.00, value=1.00, step=0.05)
+            expense_ratio_mult = st.slider(
+                "Expense ratio multiplier", min_value=0.50, max_value=2.00, value=1.00, step=0.05
+            )
             equity_regime = st.selectbox(
                 "Equity regime",
                 options=["defensive", "base", "bullish", "stressed"],
                 index=1,
                 format_func=lambda x: x.capitalize(),
             )
-            mc_sims = st.slider("Tail-risk MC simulations", min_value=200, max_value=5000, value=800, step=200)
+            mc_sims = st.slider(
+                "Tail-risk MC simulations", min_value=200, max_value=5000, value=800, step=200
+            )
         elif product_type == ProductType.TERM_LIFE:
             term_monthly_premium_mult = st.slider(
                 "Monthly premium multiplier",
@@ -1397,9 +1491,13 @@ def _render_what_if_studio() -> None:
         shocked_curve = _shock_yield_curve(base_curve, float(rate_shift_bps))
         shocked_mort = _shock_mortality(base_mort, float(longevity_improvement_pct))
         shocked_expenses = sp.ExpenseAssumptions(
-            policy_expense_dollars=float(base_expenses.policy_expense_dollars) * float(expense_ratio_mult),
-            premium_expense_rate=min(0.99, float(base_expenses.premium_expense_rate) * float(expense_ratio_mult)),
-            monthly_expense_dollars=float(base_expenses.monthly_expense_dollars) * float(expense_ratio_mult),
+            policy_expense_dollars=float(base_expenses.policy_expense_dollars)
+            * float(expense_ratio_mult),
+            premium_expense_rate=min(
+                0.99, float(base_expenses.premium_expense_rate) * float(expense_ratio_mult)
+            ),
+            monthly_expense_dollars=float(base_expenses.monthly_expense_dollars)
+            * float(expense_ratio_mult),
         )
         shocked_infl = max(-0.99, base_infl + float(inflation_shift_pct) / 100.0)
         shocked_spread = base_spread + float(spread_shift_bps) / 10000.0
@@ -1451,8 +1549,14 @@ def _render_what_if_studio() -> None:
             else:
                 # Scale regime drifts/vols relative to the regime mapping's "base" so the meaning
                 # of defensive/bullish/stressed stays consistent even if the Pricing Run used different MC inputs.
-                drift_mc = base_drift * (drift_map / drift_base_map) if abs(drift_base_map) > 1e-15 else base_drift
-                vol_mc = base_vol * (vol_map / vol_base_map) if abs(vol_base_map) > 1e-15 else base_vol
+                drift_mc = (
+                    base_drift * (drift_map / drift_base_map)
+                    if abs(drift_base_map) > 1e-15
+                    else base_drift
+                )
+                vol_mc = (
+                    base_vol * (vol_map / vol_base_map) if abs(vol_base_map) > 1e-15 else base_vol
+                )
 
             shocked_res = sp.price_spia_single_premium(
                 contract=base_contract,
@@ -1466,7 +1570,9 @@ def _render_what_if_studio() -> None:
                 index_levels_payment=idx_levels,
                 expense_annual_inflation=shocked_infl,
             )
-        elif product_type == ProductType.TERM_LIFE and isinstance(base_contract, tp.TermLifeContract):
+        elif product_type == ProductType.TERM_LIFE and isinstance(
+            base_contract, tp.TermLifeContract
+        ):
             shocked_res = compute_what_if_term_shocked_pricing(
                 base_contract=base_contract,
                 yield_curve=shocked_curve,
@@ -1477,7 +1583,9 @@ def _render_what_if_studio() -> None:
                 term_monthly_premium_mult=float(term_monthly_premium_mult),
             )
         else:
-            raise ValueError(f"What-if analysis is not implemented for product type: {product_type.value}")
+            raise ValueError(
+                f"What-if analysis is not implemented for product type: {product_type.value}"
+            )
         vy = int(valuation_year) if valuation_year is not None else None
         if product_type == ProductType.SPIA:
             baseline_key = (
@@ -1565,7 +1673,11 @@ def _render_what_if_studio() -> None:
                 aum_wf = st.session_state.get("alm_last_initial_asset_market_value")
                 if aum_wf is None:
                     aum_wf = st.session_state.get("alm_current_initial_asset_market_value")
-                aum_wf_use = float(aum_wf) if isinstance(aum_wf, (int, float, np.floating)) else float(base_res.single_premium)
+                aum_wf_use = (
+                    float(aum_wf)
+                    if isinstance(aum_wf, (int, float, np.floating))
+                    else float(base_res.single_premium)
+                )
                 alm_whatif_base = _run_alm_from_session_pricing(
                     pricing=base_res,
                     yield_curve=base_curve,
@@ -1628,13 +1740,27 @@ def _render_what_if_studio() -> None:
     st.subheader("Before vs after vs impact")
     m1, m2, m3, m4 = st.columns(4)
     with m1:
-        _render_impact_metric("Single premium", float(base_res.single_premium), float(shocked_res.single_premium), money=True)
+        _render_impact_metric(
+            "Single premium",
+            float(base_res.single_premium),
+            float(shocked_res.single_premium),
+            money=True,
+        )
     with m2:
-        base_margin = float(base_res.single_premium - (base_res.pv_benefit + base_res.pv_monthly_expenses))
-        shocked_margin = float(shocked_res.single_premium - (shocked_res.pv_benefit + shocked_res.pv_monthly_expenses))
+        base_margin = float(
+            base_res.single_premium - (base_res.pv_benefit + base_res.pv_monthly_expenses)
+        )
+        shocked_margin = float(
+            shocked_res.single_premium - (shocked_res.pv_benefit + shocked_res.pv_monthly_expenses)
+        )
         _render_impact_metric("Margin", base_margin, shocked_margin, money=True)
     with m3:
-        _render_impact_metric("Reserve at issue", float(base_res.economic_reserve[0]), float(shocked_res.economic_reserve[0]), money=True)
+        _render_impact_metric(
+            "Reserve at issue",
+            float(base_res.economic_reserve[0]),
+            float(shocked_res.economic_reserve[0]),
+            money=True,
+        )
     with m4:
         if baseline_mc is not None and shocked_mc is not None:
             _render_impact_metric(
@@ -1644,19 +1770,26 @@ def _render_what_if_studio() -> None:
                 money=True,
             )
         else:
-            _render_impact_metric("PV benefit", float(base_res.pv_benefit), float(shocked_res.pv_benefit), money=True)
+            _render_impact_metric(
+                "PV benefit", float(base_res.pv_benefit), float(shocked_res.pv_benefit), money=True
+            )
 
     compare_df = pd.DataFrame(
         {
             "Metric": ["Single premium", "Margin", "Reserve at issue"],
             "Before": [
                 float(base_res.single_premium),
-                float(base_res.single_premium - (base_res.pv_benefit + base_res.pv_monthly_expenses)),
+                float(
+                    base_res.single_premium - (base_res.pv_benefit + base_res.pv_monthly_expenses)
+                ),
                 float(base_res.economic_reserve[0]),
             ],
             "After": [
                 float(shocked_res.single_premium),
-                float(shocked_res.single_premium - (shocked_res.pv_benefit + shocked_res.pv_monthly_expenses)),
+                float(
+                    shocked_res.single_premium
+                    - (shocked_res.pv_benefit + shocked_res.pv_monthly_expenses)
+                ),
                 float(shocked_res.economic_reserve[0]),
             ],
         }
@@ -1709,14 +1842,18 @@ def _render_what_if_studio() -> None:
             mids_b = 0.5 * (edges_b[:-1] + edges_b[1:])
             mids_b_disp = np.rint(mids_b).astype(int)
             bin_labels_b = [f"{int(v):,}" for v in mids_b_disp]
-            df_b = pd.DataFrame({"bin": bin_labels_b, "count_before": counts_b.astype(int)}).set_index("bin")
+            df_b = pd.DataFrame(
+                {"bin": bin_labels_b, "count_before": counts_b.astype(int)}
+            ).set_index("bin")
             st.bar_chart(_round_for_visuals(df_b))
         with c2:
             counts_a, edges_a = np.histogram(shocked_mc.single_premium, bins=35)
             mids_a = 0.5 * (edges_a[:-1] + edges_a[1:])
             mids_a_disp = np.rint(mids_a).astype(int)
             bin_labels_a = [f"{int(v):,}" for v in mids_a_disp]
-            df_a = pd.DataFrame({"bin": bin_labels_a, "count_after": counts_a.astype(int)}).set_index("bin")
+            df_a = pd.DataFrame(
+                {"bin": bin_labels_a, "count_after": counts_a.astype(int)}
+            ).set_index("bin")
             st.bar_chart(_round_for_visuals(df_a))
 
     if alm_whatif_base is not None and alm_whatif_after is not None:
@@ -1734,7 +1871,11 @@ def _render_what_if_studio() -> None:
             return {
                 "fr_m1": float(r.funding_ratio[0]) if r.funding_ratio.size else float("nan"),
                 "surp_m1": float(r.surplus[0]) if r.surplus.size else float("nan"),
-                "liq_m1": float(r.liquidity_buffer_months[0]) if r.liquidity_buffer_months.size else float("nan"),
+                "liq_m1": (
+                    float(r.liquidity_buffer_months[0])
+                    if r.liquidity_buffer_months.size
+                    else float("nan")
+                ),
                 "pv01_net": float(r.pv01_net),
                 "dur_gap": float(r.duration_gap),
             }
@@ -1771,9 +1912,9 @@ def _render_what_if_studio() -> None:
         alm_show[["Before", "After", "Impact"]] = alm_show[["Before", "After", "Impact"]].round(4)
         money_rows = alm_show["Metric"].isin(["Surplus ($)", "PV01 net ($ per 1bp)"])
         if bool(money_rows.any()):
-            alm_show.loc[money_rows, ["Before", "After", "Impact"]] = alm_show.loc[
-                money_rows, ["Before", "After", "Impact"]
-            ].round(0).astype(int)
+            alm_show.loc[money_rows, ["Before", "After", "Impact"]] = (
+                alm_show.loc[money_rows, ["Before", "After", "Impact"]].round(0).astype(int)
+            )
         st.dataframe(alm_show, use_container_width=True, hide_index=True)
 
         age_alm = np.round((base_contract.issue_age + _alm_b.times_years).astype(float), 2)
@@ -1792,7 +1933,9 @@ def _render_what_if_studio() -> None:
         )
         st.markdown("**Surplus path**")
         sur_disp = _round_for_visuals(sur_cmp)
-        sur_disp[["Surplus before", "Surplus after"]] = sur_disp[["Surplus before", "Surplus after"]].astype(int)
+        sur_disp[["Surplus before", "Surplus after"]] = sur_disp[
+            ["Surplus before", "Surplus after"]
+        ].astype(int)
         st.line_chart(sur_disp)
 
         st.markdown("**PV assets and liabilities**")
@@ -1820,14 +1963,22 @@ def _render_what_if_studio() -> None:
             asm_krd_wf = asm_whatif_used if isinstance(asm_whatif_used, sp.ALMAssumptions) else None
             if asm_krd_wf is not None:
                 key_tenors = np.array(
-                    [float(b.tenor_years) for b in asm_krd_wf.allocation.buckets if float(b.tenor_years) > 1e-12],
+                    [
+                        float(b.tenor_years)
+                        for b in asm_krd_wf.allocation.buckets
+                        if float(b.tenor_years) > 1e-12
+                    ],
                     dtype=float,
                 )
                 if key_tenors.size > 0:
                     a0_wf = st.session_state.get("alm_last_initial_asset_market_value")
                     if not isinstance(a0_wf, (int, float, np.floating)):
                         a0_wf = st.session_state.get("alm_current_initial_asset_market_value")
-                    a0 = float(a0_wf) if isinstance(a0_wf, (int, float, np.floating)) else float(base_res.single_premium)
+                    a0 = (
+                        float(a0_wf)
+                        if isinstance(a0_wf, (int, float, np.floating))
+                        else float(base_res.single_premium)
+                    )
 
                     def _compute_krd_set(
                         *,
@@ -1845,7 +1996,14 @@ def _render_what_if_studio() -> None:
                         df0_asset = curve_asset.discount_factors(bond_tenors, spread=spread_use)
                         target_mv_bonds = w_use[1:] * a0
                         bond_faces = np.where(df0_asset > 1e-15, target_mv_bonds / df0_asset, 0.0)
-                        l0 = float(np.sum(cashflows_use * curve_liab.discount_factors(base_res.times_years, spread=spread_use)))
+                        l0 = float(
+                            np.sum(
+                                cashflows_use
+                                * curve_liab.discount_factors(
+                                    base_res.times_years, spread=spread_use
+                                )
+                            )
+                        )
                         net0 = max(1e-9, a0 - l0)
                         out_rows: list[dict[str, float | str]] = []
                         for kt in key_tenors:
@@ -1861,8 +2019,19 @@ def _render_what_if_studio() -> None:
                                 key_tenors_years=key_tenors,
                                 bump_bps=1.0,
                             )
-                            a_b = float(w_use[0] * a0 + np.sum(bond_faces * ca_b.discount_factors(bond_tenors, spread=spread_use)))
-                            l_b = float(np.sum(cashflows_use * cl_b.discount_factors(base_res.times_years, spread=spread_use)))
+                            a_b = float(
+                                w_use[0] * a0
+                                + np.sum(
+                                    bond_faces
+                                    * ca_b.discount_factors(bond_tenors, spread=spread_use)
+                                )
+                            )
+                            l_b = float(
+                                np.sum(
+                                    cashflows_use
+                                    * cl_b.discount_factors(base_res.times_years, spread=spread_use)
+                                )
+                            )
                             out_rows.extend(
                                 [
                                     {
@@ -1896,7 +2065,9 @@ def _render_what_if_studio() -> None:
                             curve_liab=base_curve,
                             curve_asset=base_curve,
                             spread_use=float(base_spread),
-                            cashflows_use=np.asarray(base_res.expected_total_cashflows, dtype=float),
+                            cashflows_use=np.asarray(
+                                base_res.expected_total_cashflows, dtype=float
+                            ),
                             scenario_label="Before",
                         )
                     )
@@ -1909,7 +2080,9 @@ def _render_what_if_studio() -> None:
                             scenario_label="After",
                         )
                     )
-                    krd_wf_df = pd.DataFrame(krd_rows).sort_values(["Series", "Tenor years", "Scenario"])
+                    krd_wf_df = pd.DataFrame(krd_rows).sort_values(
+                        ["Series", "Tenor years", "Scenario"]
+                    )
                     tenor_order = [f"{float(t):g}Y" for t in np.sort(np.unique(key_tenors))]
                     series_order = ["Assets KRD", "Liabilities KRD", "Surplus KRD"]
                     # Faceted specs often render with a narrow default plot width in Streamlit (squished left,
@@ -1921,12 +2094,20 @@ def _render_what_if_studio() -> None:
                         axis=alt.Axis(labelAngle=0, labelPadding=4),
                     )
 
-                    def _wf_krd_panel(subtitle: str, df_sub: pd.DataFrame, *, show_legend: bool) -> alt.Chart:
+                    def _wf_krd_panel(
+                        subtitle: str, df_sub: pd.DataFrame, *, show_legend: bool
+                    ) -> alt.Chart:
                         color_enc = alt.Color(
                             "Scenario:N",
                             sort=["Before", "After"],
-                            scale=alt.Scale(domain=["Before", "After"], range=["#4c78a8", "#f58518"]),
-                            legend=alt.Legend(orient="top", direction="horizontal") if show_legend else None,
+                            scale=alt.Scale(
+                                domain=["Before", "After"], range=["#4c78a8", "#f58518"]
+                            ),
+                            legend=(
+                                alt.Legend(orient="top", direction="horizontal")
+                                if show_legend
+                                else None
+                            ),
                         )
                         return (
                             alt.Chart(df_sub)
@@ -2012,7 +2193,9 @@ def _render_run_and_results() -> None:
     )
     selected_product = ProductType(selected_product)
     last_product_raw = st.session_state.get("_run_last_product_type")
-    switched_product = last_product_raw is not None and str(last_product_raw) != selected_product.value
+    switched_product = (
+        last_product_raw is not None and str(last_product_raw) != selected_product.value
+    )
     _normalize_run_state_for_selected_product(
         st.session_state,
         selected_product=selected_product,
@@ -2025,7 +2208,9 @@ def _render_run_and_results() -> None:
 
     with st.expander("Contract", expanded=True):
         c1, c2, c3 = st.columns(3)
-        issue_age = run_number_input("Issue age", "run_issue_age", default=65, min_value=0, max_value=120, step=1)
+        issue_age = run_number_input(
+            "Issue age", "run_issue_age", default=65, min_value=0, max_value=120, step=1
+        )
         sex = c2.selectbox("Sex (metadata)", options=["male", "female"], key="run_sex")
         if selected_product == ProductType.TERM_LIFE:
             term_ui = get_term_contract_ui_config()
@@ -2037,12 +2222,18 @@ def _render_run_and_results() -> None:
                 step=10_000.0,
             )
             t1, t2, t3 = st.columns(3)
-            term_choice = t1.selectbox("Term length", options=list(term_ui.term_length_options), key="run_term_length")
+            term_choice = t1.selectbox(
+                "Term length", options=list(term_ui.term_length_options), key="run_term_length"
+            )
             premium_mode_choice = t2.selectbox(
-                "Premium mode", options=list(term_ui.premium_mode_options), key="run_term_premium_mode"
+                "Premium mode",
+                options=list(term_ui.premium_mode_options),
+                key="run_term_premium_mode",
             )
             benefit_timing_choice = t3.selectbox(
-                "Benefit timing", options=list(term_ui.benefit_timing_options), key="run_term_benefit_timing"
+                "Benefit timing",
+                options=list(term_ui.benefit_timing_options),
+                key="run_term_benefit_timing",
             )
             monthly_premium = run_number_input(
                 "Monthly premium ($)",
@@ -2103,7 +2294,11 @@ def _render_run_and_results() -> None:
                 )
         else:
             benefit_annual = run_number_input(
-                "Annual benefit ($)", "run_spia_benefit_annual", default=100_000.0, min_value=0.0, step=1_000.0
+                "Annual benefit ($)",
+                "run_spia_benefit_annual",
+                default=100_000.0,
+                min_value=0.0,
+                step=1_000.0,
             )
             term_choice = "n/a"
             premium_mode_choice = "n/a"
@@ -2142,7 +2337,9 @@ def _render_run_and_results() -> None:
         else:
             par_csv = st.text_input("Par yield CSV path", key="run_par_csv")
             coupon_freq = int(
-                run_number_input("Coupon payments per year", "run_coupon_freq", default=2, min_value=1, step=1)
+                run_number_input(
+                    "Coupon payments per year", "run_coupon_freq", default=2, min_value=1, step=1
+                )
             )
 
     with st.expander("Mortality", expanded=True):
@@ -2168,7 +2365,9 @@ def _render_run_and_results() -> None:
         if m_mode == "qx_csv":
             qx_csv = st.text_input("q_x CSV (columns age, qx)", key="run_qx_csv")
         elif m_mode == "rp2014_mp2016":
-            st.caption("SOA workbooks are optional if matching CSV extracts already exist beside the xlsx paths.")
+            st.caption(
+                "SOA workbooks are optional if matching CSV extracts already exist beside the xlsx paths."
+            )
             if not str(st.session_state.get("run_rp_xlsx", "")).strip():
                 st.session_state["run_rp_xlsx"] = sp.DEFAULT_RP2014_XLSX
             if not str(st.session_state.get("run_rp_out", "")).strip():
@@ -2182,7 +2381,9 @@ def _render_run_and_results() -> None:
             mp_xlsx = st.text_input("MP-2016 xlsx", key="run_mp_xlsx")
             mp_out = st.text_input("MP-2016 improvement cache CSV", key="run_mp_out")
         elif m_mode == "us_ssa_2015_period":
-            st.caption("Source: SSA actuarial life table (US Social Security area population), period year 2015.")
+            st.caption(
+                "Source: SSA actuarial life table (US Social Security area population), period year 2015."
+            )
 
     with st.expander("Expenses & valuation", expanded=True):
         _exp_opts = ("csv", "manual")
@@ -2201,7 +2402,9 @@ def _render_run_and_results() -> None:
         if expense_mode == "csv":
             expenses_csv = st.text_input("Expenses CSV path", key="run_expenses_csv")
         else:
-            pol = float(run_number_input("Policy expense at issue ($)", "run_policy_expense", default=0.0))
+            pol = float(
+                run_number_input("Policy expense at issue ($)", "run_policy_expense", default=0.0)
+            )
             prem_pct = float(
                 run_number_input(
                     "Premium expense (% of single premium)",
@@ -2213,7 +2416,9 @@ def _render_run_and_results() -> None:
                 )
             )
             monthly_ex = float(
-                run_number_input("Monthly expense while alive ($)", "run_monthly_expense", default=0.0)
+                run_number_input(
+                    "Monthly expense while alive ($)", "run_monthly_expense", default=0.0
+                )
             )
         valuation_year = run_number_input(
             "Valuation year (calendar)",
@@ -2224,9 +2429,15 @@ def _render_run_and_results() -> None:
             help="Used for RP+MP calendar-year mortality; ignored for static/synthetic q_x.",
         )
         horizon_age = run_number_input(
-            "Horizon age (stop monthly grid)", "run_horizon_age", default=110, min_value=1, max_value=130
+            "Horizon age (stop monthly grid)",
+            "run_horizon_age",
+            default=110,
+            min_value=1,
+            max_value=130,
         )
-        spread = run_number_input("Credit spread added to zero rate", "run_spread", default=0.0, format="%.4f")
+        spread = run_number_input(
+            "Credit spread added to zero rate", "run_spread", default=0.0, format="%.4f"
+        )
 
     product_caps = get_product_capabilities(selected_product)
     can_use_economic_scenario = bool(product_caps.supports_economic_scenario)
@@ -2274,10 +2485,20 @@ def _render_run_and_results() -> None:
                 key="run_mc_enable",
             )
             mc_n_sims = run_number_input(
-                "Number of simulations", "run_mc_n_sims", default=100, min_value=100, max_value=20000, step=100
+                "Number of simulations",
+                "run_mc_n_sims",
+                default=100,
+                min_value=100,
+                max_value=20000,
+                step=100,
             )
             mc_seed = run_number_input(
-                "Random seed", "run_mc_seed", default=42, min_value=0, max_value=2_147_483_647, step=1
+                "Random seed",
+                "run_mc_seed",
+                default=42,
+                min_value=0,
+                max_value=2_147_483_647,
+                step=1,
             )
             mc_drift_pct = run_number_input(
                 "Annual drift (%)",
@@ -2294,9 +2515,16 @@ def _render_run_and_results() -> None:
                 ),
             )
             mc_vol_pct = run_number_input(
-                "Annual volatility (%)", "run_mc_vol_pct", default=15.0, min_value=0.0, max_value=200.0, step=0.1
+                "Annual volatility (%)",
+                "run_mc_vol_pct",
+                default=15.0,
+                min_value=0.0,
+                max_value=200.0,
+                step=0.1,
             )
-            mc_s0 = run_number_input("Initial index level (S0)", "run_mc_s0", default=100.0, min_value=0.01, step=1.0)
+            mc_s0 = run_number_input(
+                "Initial index level (S0)", "run_mc_s0", default=100.0, min_value=0.01, step=1.0
+            )
 
     _is_implemented_product = selected_product in (
         ProductType.SPIA,
@@ -2375,7 +2603,9 @@ def _render_run_and_results() -> None:
                 expenses_used = expenses_arg
             else:
                 try:
-                    expenses_used = sp.ExpenseAssumptions.load_from_csv(str(_resolve_path(expenses_csv)))
+                    expenses_used = sp.ExpenseAssumptions.load_from_csv(
+                        str(_resolve_path(expenses_csv))
+                    )
                 except (FileNotFoundError, ValueError, KeyError):
                     expenses_used = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
 
@@ -2519,7 +2749,11 @@ def _render_run_and_results() -> None:
         meta = st.session_state.get("pricing_meta") or {}
 
         product_raw = str(meta.get("product_type", ProductType.SPIA.value))
-        product_type = ProductType(product_raw) if product_raw in {p.value for p in ProductType} else ProductType.SPIA
+        product_type = (
+            ProductType(product_raw)
+            if product_raw in {p.value for p in ProductType}
+            else ProductType.SPIA
+        )
         m1, m2, m3, m4 = st.columns(4)
         metrics = get_pricing_metrics(product_type, res)
         for col, metric in zip((m1, m2, m3, m4), metrics):
@@ -2729,7 +2963,9 @@ def _alm_modelcheck_key_assets_surplus_df(
 
 def _render_excel_replicator() -> None:
     st.header("Excel Replicator")
-    st.caption("Download the formula workbook and review parity metrics aligned with the workbook ModelCheck sheet.")
+    st.caption(
+        "Download the formula workbook and review parity metrics aligned with the workbook ModelCheck sheet."
+    )
 
     res = st.session_state.get("pricing_res")
     contract_state = st.session_state.get("pricing_contract")
@@ -2739,7 +2975,11 @@ def _render_excel_replicator() -> None:
 
     meta = st.session_state.get("pricing_meta") or {}
     product_raw = str(meta.get("product_type", ProductType.SPIA.value))
-    product_type = ProductType(product_raw) if product_raw in {p.value for p in ProductType} else ProductType.SPIA
+    product_type = (
+        ProductType(product_raw)
+        if product_raw in {p.value for p in ProductType}
+        else ProductType.SPIA
+    )
 
     _ensure_excel_workbook_includes_current_alm()
 
@@ -2766,7 +3006,9 @@ def _render_excel_replicator() -> None:
             {
                 "Metric": "PV monthly total (ben+exp)",
                 "Python snapshot": float(res.pv_benefit + res.pv_monthly_expenses),
-                "Expected Excel value (after recalc)": float(res.pv_benefit + res.pv_monthly_expenses),
+                "Expected Excel value (after recalc)": float(
+                    res.pv_benefit + res.pv_monthly_expenses
+                ),
                 "Difference (Excel - Python)": 0.0,
             },
             {
@@ -2881,9 +3123,16 @@ def _render_excel_replicator() -> None:
             finite = a[np.isfinite(a)]
             if finite.size == 0:
                 stat_rows.append(
-                    {"Metric": name, "Mean": float("nan"), "Std Dev": float("nan"),
-                     "P5": float("nan"), "P25": float("nan"), "Median": float("nan"),
-                     "P75": float("nan"), "P95": float("nan")}
+                    {
+                        "Metric": name,
+                        "Mean": float("nan"),
+                        "Std Dev": float("nan"),
+                        "P5": float("nan"),
+                        "P25": float("nan"),
+                        "Median": float("nan"),
+                        "P75": float("nan"),
+                        "P95": float("nan"),
+                    }
                 )
                 continue
             stat_rows.append(
@@ -2967,7 +3216,9 @@ def _render_excel_replicator() -> None:
                 icon="✅",
             )
         else:
-            st.info("This workbook file does not yet include **ALM_Projection** — run ALM, then return here to refresh the download.")
+            st.info(
+                "This workbook file does not yet include **ALM_Projection** — run ALM, then return here to refresh the download."
+            )
         suffix_parts: list[str] = []
         if xlsx_has_mc:
             suffix_parts.append("MC_Summary")
@@ -3019,11 +3270,7 @@ def _render_alm_section() -> None:
         "Rebalancing uses a drift band versus target weights on the review months you choose."
     )
 
-    if (
-        res is None
-        or contract_state is None
-        or not isinstance(yc, sp.YieldCurve)
-    ):
+    if res is None or contract_state is None or not isinstance(yc, sp.YieldCurve):
         st.info("Run **Pricing Run** first. ALM anchors on that liability path, curve, and spread.")
         return
 
@@ -3049,7 +3296,9 @@ def _render_alm_section() -> None:
                 step=1,
             )
     else:
-        st.caption("MC scenario selection is unavailable because Pricing Run MC inputs are missing.")
+        st.caption(
+            "MC scenario selection is unavailable because Pricing Run MC inputs are missing."
+        )
 
     base_spec = sp.alm_default_allocation_spec()
     n_bk = len(base_spec.buckets)
@@ -3099,7 +3348,9 @@ def _render_alm_section() -> None:
         if s <= 0.0:
             st.error("Allocation must include positive weights.")
         elif abs(s - 1.0) > 1e-3 and not norm_run:
-            st.warning(f"Weights currently sum to {s * 100:.2f}%. Enable normalization or adjust inputs.")
+            st.warning(
+                f"Weights currently sum to {s * 100:.2f}%. Enable normalization or adjust inputs."
+            )
         elif abs(s - 1.0) > 1e-3 and norm_run:
             st.info(f"Weights sum to {s * 100:.2f}% — will scale to 100% on run.")
 
@@ -3144,7 +3395,11 @@ def _render_alm_section() -> None:
                 disabled=not is_scenario_linked,
             )
             # Logical default: 1Y curve+spread plus 100 bps floor at 3%.
-            df_t = float(yc.discount_factors(np.array([float(borrow_rate_tenor)], dtype=float), spread=spr)[0])
+            df_t = float(
+                yc.discount_factors(np.array([float(borrow_rate_tenor)], dtype=float), spread=spr)[
+                    0
+                ]
+            )
             base_t = -np.log(max(df_t, 1e-15)) / float(borrow_rate_tenor)
             borrow_rate_default_pct = float(max(0.03, base_t + 0.01) * 100.0)
             borrow_spread_bps = st.number_input(
@@ -3250,7 +3505,10 @@ def _render_alm_section() -> None:
         )
     opt_objective = st.selectbox(
         "Optimization objective",
-        options=["Balanced mix (diversified weights)", "Match liability KRD by tenor (fast screen + ALM)"],
+        options=[
+            "Balanced mix (diversified weights)",
+            "Match liability KRD by tenor (fast screen + ALM)",
+        ],
         index=0,
         help=(
             "Balanced mix scores weights for diversification vs targets, then runs ALM on each candidate until caps. "
@@ -3353,13 +3611,15 @@ def _render_alm_section() -> None:
                 bond_ten = np.clip(tenors[1:], 1e-9, None)
                 for cash_w in [0.0, 0.05, 0.10, 0.20]:
                     for tilt in [-1.0, -0.5, 0.0, 0.5, 1.0]:
-                        wb = bond_ten ** tilt
+                        wb = bond_ten**tilt
                         wb = wb / float(np.sum(wb))
                         w_try = np.concatenate(([cash_w], (1.0 - cash_w) * wb))
                         candidates.append(w_try)
                 # Explicitly include near-even spreads to accelerate convergence to diversified mixes.
                 for cash_w in [0.0, 0.05, 0.10]:
-                    wb_even = np.full(n_assets - 1, (1.0 - cash_w) / float(max(1, n_assets - 1)), dtype=float)
+                    wb_even = np.full(
+                        n_assets - 1, (1.0 - cash_w) / float(max(1, n_assets - 1)), dtype=float
+                    )
                     candidates.append(np.concatenate(([cash_w], wb_even)))
 
                 # Runtime guardrails to avoid very long runs on large horizons.
@@ -3387,12 +3647,18 @@ def _render_alm_section() -> None:
                         candidates.append(rng.dirichlet(alpha))
 
                 key_tenors_opt = np.array(
-                    [float(b.tenor_years) for b in base_spec.buckets[1:] if float(b.tenor_years) > 1e-12],
+                    [
+                        float(b.tenor_years)
+                        for b in base_spec.buckets[1:]
+                        if float(b.tenor_years) > 1e-12
+                    ],
                     dtype=float,
                 )
                 bond_tenors_opt = key_tenors_opt.copy()
 
-                tenor_axis = np.array([float(b.tenor_years) for b in base_spec.buckets], dtype=float)
+                tenor_axis = np.array(
+                    [float(b.tenor_years) for b in base_spec.buckets], dtype=float
+                )
                 target_tenor = float(np.median(tenor_axis[1:])) if tenor_axis.size > 1 else 0.0
                 best_score = float("inf")
                 best_end_surplus = -float("inf")
@@ -3406,7 +3672,9 @@ def _render_alm_section() -> None:
                 start_t = time.perf_counter()
                 eval_count = 0
 
-                def _run_one_alm_candidate(w_try: np.ndarray, *, objective_score: float | None) -> None:
+                def _run_one_alm_candidate(
+                    w_try: np.ndarray, *, objective_score: float | None
+                ) -> None:
                     nonlocal best_score, best_end_surplus, best_w, best_out, eval_count
                     nonlocal best_min_surplus, best_fallback_w, best_fallback_out, best_krd_mismatch
                     w_norm = np.asarray(w_try, dtype=float)
@@ -3454,9 +3722,8 @@ def _render_alm_section() -> None:
                     end_surplus = float(out_try.surplus[-1])
                     if opt_krd_match:
                         sc = float(objective_score) if objective_score is not None else float("inf")
-                        if (
-                            sc < best_score - 1e-15
-                            or (abs(sc - best_score) <= 1e-15 and end_surplus > best_end_surplus)
+                        if sc < best_score - 1e-15 or (
+                            abs(sc - best_score) <= 1e-15 and end_surplus > best_end_surplus
                         ):
                             best_score = sc
                             best_end_surplus = end_surplus
@@ -3486,9 +3753,8 @@ def _render_alm_section() -> None:
                         + 0.35 * long_penalty
                         + 0.25 * concentration_penalty
                     )
-                    if (
-                        score < best_score - 1e-12
-                        or (abs(score - best_score) <= 1e-12 and end_surplus > best_end_surplus)
+                    if score < best_score - 1e-12 or (
+                        abs(score - best_score) <= 1e-12 and end_surplus > best_end_surplus
                     ):
                         best_score = score
                         best_end_surplus = end_surplus
@@ -3521,7 +3787,9 @@ def _render_alm_section() -> None:
                                 bond_tenors_opt,
                                 key_tenors_opt,
                             )
-                            return float(sp.key_rate_duration_hedge_mismatch_score(ak, liab_krd_vec))
+                            return float(
+                                sp.key_rate_duration_hedge_mismatch_score(ak, liab_krd_vec)
+                            )
 
                         stage1_n = min(len(candidates), max(520, int(opt_samples) * 2 + 120))
                         krd_scored: list[tuple[float, np.ndarray]] = []
@@ -3557,7 +3825,10 @@ def _render_alm_section() -> None:
                             w_anchor = krd_scored[rank][1]
                             conc = 35.0 + 12.0 * float(rank)
                             for _ in range(72):
-                                alpha_loc = np.maximum(np.asarray(w_anchor, dtype=float), 1e-4) * conc + 0.06
+                                alpha_loc = (
+                                    np.maximum(np.asarray(w_anchor, dtype=float), 1e-4) * conc
+                                    + 0.06
+                                )
                                 w_loc = rng.dirichlet(alpha_loc)
                                 krd_scored.append((_analytical_krd_mismatch(w_loc), w_loc))
 
@@ -3593,9 +3864,13 @@ def _render_alm_section() -> None:
                             "(cashflows, borrowing policy/rate, rebalance policy, and curve)."
                         )
                     else:
-                        st.session_state["alm_alloc_pending"] = np.asarray(best_fallback_w, dtype=float).tolist()
+                        st.session_state["alm_alloc_pending"] = np.asarray(
+                            best_fallback_w, dtype=float
+                        ).tolist()
                         asm_best = sp.ALMAssumptions(
-                            allocation=sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=best_fallback_w),
+                            allocation=sp.ALMAllocationSpec(
+                                buckets=base_spec.buckets, weights=best_fallback_w
+                            ),
                             rebalance_band=float(band_pct) / 100.0,
                             rebalance_frequency_months=int(freq_m),
                             reinvest_rule=reinvest,  # type: ignore[arg-type]
@@ -3611,7 +3886,9 @@ def _render_alm_section() -> None:
                         st.session_state["alm_last"] = best_fallback_out
                         st.session_state["alm_last_assumptions"] = asm_best
                         st.session_state["alm_last_initial_asset_market_value"] = float(aum0)
-                        st.session_state["alm_last_pricing_run_id"] = st.session_state.get("pricing_run_id")
+                        st.session_state["alm_last_pricing_run_id"] = st.session_state.get(
+                            "pricing_run_id"
+                        )
                         _invalidate_diagnostics_export()
                         _refresh_pricing_excel_workbook_in_session()
                         st.session_state["alm_opt_notice"] = {
@@ -3641,7 +3918,9 @@ def _render_alm_section() -> None:
                     st.session_state["alm_last"] = best_out
                     st.session_state["alm_last_assumptions"] = asm_best
                     st.session_state["alm_last_initial_asset_market_value"] = float(aum0)
-                    st.session_state["alm_last_pricing_run_id"] = st.session_state.get("pricing_run_id")
+                    st.session_state["alm_last_pricing_run_id"] = st.session_state.get(
+                        "pricing_run_id"
+                    )
                     _invalidate_diagnostics_export()
                     _refresh_pricing_excel_workbook_in_session()
                     if opt_krd_match:
@@ -3665,7 +3944,11 @@ def _render_alm_section() -> None:
                 st.caption(
                     f"Optimization evaluated {eval_count} ALM projection(s) "
                     f"(cap {max_eval}, time budget {time_budget_sec:.0f}s)."
-                    + (" KRD mode ranks weights analytically first, then ALM-checks only the best few." if opt_krd_match else "")
+                    + (
+                        " KRD mode ranks weights analytically first, then ALM-checks only the best few."
+                        if opt_krd_match
+                        else ""
+                    )
                 )
             except Exception as ex:
                 st.error(f"ALM optimization failed: {ex!r}")
@@ -3687,7 +3970,11 @@ def _render_alm_section() -> None:
         with m4:
             st.metric("Duration gap (y)", f"{float(last.duration_gap):.2f}")
         with m5:
-            lb0 = float(last.liquidity_buffer_months[0]) if last.liquidity_buffer_months.size else float("nan")
+            lb0 = (
+                float(last.liquidity_buffer_months[0])
+                if last.liquidity_buffer_months.size
+                else float("nan")
+            )
             st.metric("Liquidity buffer (mo)", f"{lb0:.2f}")
 
         st.subheader("Paths (attained age)")
@@ -3722,11 +4009,15 @@ def _render_alm_section() -> None:
         else:
             bucket_specs = list(base_spec.buckets)
         # Keep all ALM legends/series in logical tenor order: cash, then shortest to longest tenor.
-        order_idx = sorted(range(len(bucket_specs)), key=lambda i: float(bucket_specs[i].tenor_years))
+        order_idx = sorted(
+            range(len(bucket_specs)), key=lambda i: float(bucket_specs[i].tenor_years)
+        )
         ordered_specs = [bucket_specs[i] for i in order_idx]
         ordered_names = [b.name for b in ordered_specs]
 
-        bucket_df_raw = pd.DataFrame(last.bucket_asset_mv.T, columns=[b.name for b in bucket_specs], index=age_ax)
+        bucket_df_raw = pd.DataFrame(
+            last.bucket_asset_mv.T, columns=[b.name for b in bucket_specs], index=age_ax
+        )
         bucket_df = bucket_df_raw.reindex(columns=ordered_names)
         st.markdown("**Bucket market values**")
         bucket_mv_long = (
@@ -3734,7 +4025,9 @@ def _render_alm_section() -> None:
             .rename(columns={"index": "Attained age"})
             .melt(id_vars=["Attained age"], var_name="Asset type", value_name="Bucket market value")
         )
-        bucket_mv_long["Asset type"] = pd.Categorical(bucket_mv_long["Asset type"], categories=ordered_names, ordered=True)
+        bucket_mv_long["Asset type"] = pd.Categorical(
+            bucket_mv_long["Asset type"], categories=ordered_names, ordered=True
+        )
         bucket_mv_chart = (
             alt.Chart(bucket_mv_long)
             .mark_line()
@@ -3745,7 +4038,9 @@ def _render_alm_section() -> None:
                     "Asset type:N",
                     title="Asset type",
                     sort=ordered_names,
-                    legend=alt.Legend(orient="top", direction="horizontal", columns=len(ordered_names)),
+                    legend=alt.Legend(
+                        orient="top", direction="horizontal", columns=len(ordered_names)
+                    ),
                 ),
                 order=alt.Order("Asset type:N", sort="ascending"),
                 tooltip=[
@@ -3759,14 +4054,18 @@ def _render_alm_section() -> None:
         st.altair_chart(bucket_mv_chart.interactive(), use_container_width=True)
 
         st.markdown("##### Portfolio composition by asset type (%)")
-        aum_series = pd.Series(last.asset_market_value, index=age_ax, dtype=float).replace(0.0, np.nan)
+        aum_series = pd.Series(last.asset_market_value, index=age_ax, dtype=float).replace(
+            0.0, np.nan
+        )
         weight_pct_df = bucket_df.div(aum_series, axis=0).fillna(0.0) * 100.0
         comp_df = (
             weight_pct_df.reset_index()
             .rename(columns={"index": "Attained age"})
             .melt(id_vars=["Attained age"], var_name="Asset type", value_name="Portfolio share (%)")
         )
-        comp_df["Asset type"] = pd.Categorical(comp_df["Asset type"], categories=ordered_names, ordered=True)
+        comp_df["Asset type"] = pd.Categorical(
+            comp_df["Asset type"], categories=ordered_names, ordered=True
+        )
         comp_chart = (
             alt.Chart(comp_df)
             .mark_area()
@@ -3782,7 +4081,9 @@ def _render_alm_section() -> None:
                     "Asset type:N",
                     title="Asset type",
                     sort=ordered_names,
-                    legend=alt.Legend(orient="top", direction="horizontal", columns=len(ordered_names)),
+                    legend=alt.Legend(
+                        orient="top", direction="horizontal", columns=len(ordered_names)
+                    ),
                 ),
                 order=alt.Order("Asset type:N", sort="ascending"),
             )
@@ -3831,7 +4132,9 @@ def _render_alm_section() -> None:
         )
         kpi_tbl_show = kpi_tbl.copy()
         kpi_tbl_show["PV01 assets"] = kpi_tbl_show["PV01 assets"].map(lambda x: f"{x:,.0f}")
-        kpi_tbl_show["PV01 liabilities"] = kpi_tbl_show["PV01 liabilities"].map(lambda x: f"{x:,.0f}")
+        kpi_tbl_show["PV01 liabilities"] = kpi_tbl_show["PV01 liabilities"].map(
+            lambda x: f"{x:,.0f}"
+        )
         kpi_tbl_show["Mac duration assets"] = kpi_tbl_show["Mac duration assets"].round(4)
         kpi_tbl_show["Mac duration liabilities"] = kpi_tbl_show["Mac duration liabilities"].round(4)
         st.dataframe(kpi_tbl_show, use_container_width=True, hide_index=True)
@@ -3839,37 +4142,54 @@ def _render_alm_section() -> None:
         st.markdown("##### Key rate duration by tenor (1 bp localized bump)")
         try:
             pricing_for_krd = _build_pricing_for_selected_scenario()
-            key_tenors = np.array([float(b.tenor_years) for b in ordered_specs if float(b.tenor_years) > 1e-12], dtype=float)
+            key_tenors = np.array(
+                [float(b.tenor_years) for b in ordered_specs if float(b.tenor_years) > 1e-12],
+                dtype=float,
+            )
             if key_tenors.size > 0:
-                asm_krd = asm_vis if isinstance(asm_vis, sp.ALMAssumptions) else sp.ALMAssumptions(
-                    allocation=sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=ws),
-                    rebalance_band=float(band_pct) / 100.0,
-                    rebalance_frequency_months=int(freq_m),
-                    reinvest_rule=reinvest,  # type: ignore[arg-type]
-                    disinvest_rule=disinvest,  # type: ignore[arg-type]
-                    rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
-                    borrowing_policy=borrow_policy,  # type: ignore[arg-type]
-                    borrowing_rate_mode=borrow_rate_mode,  # type: ignore[arg-type]
-                    borrowing_rate_tenor_years=float(borrow_rate_tenor),
-                    borrowing_spread_annual=float(borrow_spread_bps) / 10000.0,
-                    borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
-                    liquidity_near_liquid_years=float(near_liq_y),
+                asm_krd = (
+                    asm_vis
+                    if isinstance(asm_vis, sp.ALMAssumptions)
+                    else sp.ALMAssumptions(
+                        allocation=sp.ALMAllocationSpec(buckets=base_spec.buckets, weights=ws),
+                        rebalance_band=float(band_pct) / 100.0,
+                        rebalance_frequency_months=int(freq_m),
+                        reinvest_rule=reinvest,  # type: ignore[arg-type]
+                        disinvest_rule=disinvest,  # type: ignore[arg-type]
+                        rebalance_policy=rebalance_policy,  # type: ignore[arg-type]
+                        borrowing_policy=borrow_policy,  # type: ignore[arg-type]
+                        borrowing_rate_mode=borrow_rate_mode,  # type: ignore[arg-type]
+                        borrowing_rate_tenor_years=float(borrow_rate_tenor),
+                        borrowing_spread_annual=float(borrow_spread_bps) / 10000.0,
+                        borrowing_rate_annual=float(borrow_rate_pct) / 100.0,
+                        liquidity_near_liquid_years=float(near_liq_y),
+                    )
                 )
                 a0 = float(aum0)
                 base_cf = np.asarray(pricing_for_krd.expected_total_cashflows, dtype=float)
-                l0 = float(np.sum(base_cf * yc.discount_factors(pricing_for_krd.times_years, spread=spr)))
+                l0 = float(
+                    np.sum(base_cf * yc.discount_factors(pricing_for_krd.times_years, spread=spr))
+                )
                 net0 = max(1e-9, a0 - l0)
                 w_krd = np.asarray(asm_krd.allocation.weights, dtype=float)
-                bond_tenors = np.array([float(b.tenor_years) for b in asm_krd.allocation.buckets[1:]], dtype=float)
+                bond_tenors = np.array(
+                    [float(b.tenor_years) for b in asm_krd.allocation.buckets[1:]], dtype=float
+                )
                 df0_bonds = yc.discount_factors(bond_tenors, spread=spr)
                 target_mv_bonds = w_krd[1:] * a0
                 bond_faces = np.where(df0_bonds > 1e-15, target_mv_bonds / df0_bonds, 0.0)
                 rows: list[dict[str, float | str]] = []
                 for kt in key_tenors:
-                    yc_b = _key_rate_bump_curve(yc, key_tenor_years=float(kt), key_tenors_years=key_tenors, bump_bps=1.0)
+                    yc_b = _key_rate_bump_curve(
+                        yc, key_tenor_years=float(kt), key_tenors_years=key_tenors, bump_bps=1.0
+                    )
                     dfb_bonds = yc_b.discount_factors(bond_tenors, spread=spr)
                     a_b = float(w_krd[0] * a0 + np.sum(bond_faces * dfb_bonds))
-                    l_b = float(np.sum(base_cf * yc_b.discount_factors(pricing_for_krd.times_years, spread=spr)))
+                    l_b = float(
+                        np.sum(
+                            base_cf * yc_b.discount_factors(pricing_for_krd.times_years, spread=spr)
+                        )
+                    )
                     rows.append(
                         {
                             "Tenor": f"{kt:g}Y",
@@ -3886,7 +4206,9 @@ def _render_alm_section() -> None:
                     var_name="Series",
                     value_name="Key rate duration",
                 )
-                krd_bars_df = krd_long[krd_long["Series"].isin(["Assets KRD", "Liabilities KRD"])].copy()
+                krd_bars_df = krd_long[
+                    krd_long["Series"].isin(["Assets KRD", "Liabilities KRD"])
+                ].copy()
                 krd_surplus_df = krd_long[krd_long["Series"] == "Surplus KRD"].copy()
                 tenor_order = krd_df["Tenor"].tolist()
 
@@ -3926,7 +4248,9 @@ def _render_alm_section() -> None:
                 )
 
                 st.altair_chart(
-                    alt.layer(bars, surplus_line).resolve_scale(y="independent").properties(height=320),
+                    alt.layer(bars, surplus_line)
+                    .resolve_scale(y="independent")
+                    .properties(height=320),
                     use_container_width=True,
                 )
                 st.caption(
@@ -3986,13 +4310,23 @@ def main() -> None:
                         "horizon_age": pricing_excel_context.get("horizon_age"),
                         "valuation_year": pricing_excel_context.get("valuation_year"),
                         "spread": pricing_excel_context.get("spread"),
-                        "yield_curve": _yield_curve_to_dict(ctx_yc) if isinstance(ctx_yc, sp.YieldCurve) else None,
+                        "yield_curve": (
+                            _yield_curve_to_dict(ctx_yc)
+                            if isinstance(ctx_yc, sp.YieldCurve)
+                            else None
+                        ),
                         "mortality": _mortality_to_dict(ctx_mort) if ctx_mort is not None else None,
                         "expenses": (
                             {
-                                "policy_expense_dollars": float(getattr(ctx_exp, "policy_expense_dollars", float("nan"))),
-                                "premium_expense_rate": float(getattr(ctx_exp, "premium_expense_rate", float("nan"))),
-                                "monthly_expense_dollars": float(getattr(ctx_exp, "monthly_expense_dollars", float("nan"))),
+                                "policy_expense_dollars": float(
+                                    getattr(ctx_exp, "policy_expense_dollars", float("nan"))
+                                ),
+                                "premium_expense_rate": float(
+                                    getattr(ctx_exp, "premium_expense_rate", float("nan"))
+                                ),
+                                "monthly_expense_dollars": float(
+                                    getattr(ctx_exp, "monthly_expense_dollars", float("nan"))
+                                ),
                             }
                             if isinstance(ctx_exp, sp.ExpenseAssumptions)
                             else None
@@ -4000,7 +4334,9 @@ def main() -> None:
                         "yield_mode": pricing_excel_context.get("yield_mode"),
                         "mortality_mode": pricing_excel_context.get("mortality_mode"),
                         "expense_mode": pricing_excel_context.get("expense_mode"),
-                        "expense_annual_inflation": pricing_excel_context.get("expense_annual_inflation"),
+                        "expense_annual_inflation": pricing_excel_context.get(
+                            "expense_annual_inflation"
+                        ),
                     },
                     "alm": None,
                     "alm_current": None,
@@ -4014,14 +4350,20 @@ def main() -> None:
                 if isinstance(alm_last, sp.ALMResult) and alm_run_id == current_pricing_run_id:
                     payload["alm"] = _alm_result_to_dict(
                         alm_last,
-                        alm_last_assumptions if isinstance(alm_last_assumptions, sp.ALMAssumptions) else None,
+                        (
+                            alm_last_assumptions
+                            if isinstance(alm_last_assumptions, sp.ALMAssumptions)
+                            else None
+                        ),
                         include_buckets=include_alm_buckets,
                         include_full=include_full_paths,
                     )
 
                 if isinstance(alm_current_assumptions, sp.ALMAssumptions):
                     payload["alm_current"] = {
-                        "initial_asset_market_value": float(alm_current_aum0) if alm_current_aum0 is not None else None,
+                        "initial_asset_market_value": (
+                            float(alm_current_aum0) if alm_current_aum0 is not None else None
+                        ),
                         "assumptions": _alm_assumptions_to_dict(alm_current_assumptions),
                     }
 
@@ -4055,20 +4397,30 @@ def main() -> None:
                         shocked_mc=what_if_shocked_mc,
                         whatif_params={
                             **what_if_params,
-                            "shocked_curve": _yield_curve_to_dict(what_if_shocked_curve)
-                            if isinstance(what_if_shocked_curve, sp.YieldCurve)
-                            else None,
-                            "shocked_mortality": _mortality_to_dict(what_if_shocked_mortality)
-                            if what_if_shocked_mortality is not None
-                            else None,
+                            "shocked_curve": (
+                                _yield_curve_to_dict(what_if_shocked_curve)
+                                if isinstance(what_if_shocked_curve, sp.YieldCurve)
+                                else None
+                            ),
+                            "shocked_mortality": (
+                                _mortality_to_dict(what_if_shocked_mortality)
+                                if what_if_shocked_mortality is not None
+                                else None
+                            ),
                         },
                         alm_base=what_if_alm_base,
                         alm_after=what_if_alm_after,
-                        asm=what_if_alm_assumptions if isinstance(what_if_alm_assumptions, sp.ALMAssumptions) else None,
+                        asm=(
+                            what_if_alm_assumptions
+                            if isinstance(what_if_alm_assumptions, sp.ALMAssumptions)
+                            else None
+                        ),
                         include_full=include_full_paths,
                     )
 
-                st.session_state["diagnostics_json_bytes"] = json.dumps(payload, default=str, ensure_ascii=False, indent=2).encode("utf-8")
+                st.session_state["diagnostics_json_bytes"] = json.dumps(
+                    payload, default=str, ensure_ascii=False, indent=2
+                ).encode("utf-8")
                 st.session_state["diagnostics_json_filename"] = (
                     f"pricing_diagnostics_{_dt.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
                 )

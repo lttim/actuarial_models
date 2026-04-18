@@ -16,12 +16,13 @@ import pytest
 
 pytest.importorskip("pytest_benchmark")
 
+from openpyxl import load_workbook
+
 import pricing_projection as sp
 import rila_projection as rp
 from build_pricing_excel_workbook import build_workbook_from_spec, excel_spec_from_launcher
 from build_rila_excel_workbook import build_rila_workbook_from_spec, rila_excel_spec_from_launcher
 from excel_workbook_validator import validate_workbook_or_raise
-from openpyxl import load_workbook
 
 pytestmark = [pytest.mark.slow]
 
@@ -62,14 +63,25 @@ def _rila_inputs():
 def _spia_spec(horizon_age: int = 90):
     contract, yc, mort, expenses = _spia_inputs()
     res = sp.price_spia_single_premium(
-        contract=contract, yield_curve=yc, mortality=mort,
-        horizon_age=horizon_age, spread=0.0,
-        expenses=expenses, expense_annual_inflation=0.0,
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        spread=0.0,
+        expenses=expenses,
+        expense_annual_inflation=0.0,
     )
     spec = excel_spec_from_launcher(
-        contract=contract, yield_curve=yc, mortality=mort, horizon_age=horizon_age,
-        spread=0.0, valuation_year=2025, expenses=expenses,
-        yield_mode_label="flat", mortality_mode_label="synthetic", expense_mode_label="manual",
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        spread=0.0,
+        valuation_year=2025,
+        expenses=expenses,
+        yield_mode_label="flat",
+        mortality_mode_label="synthetic",
+        expense_mode_label="manual",
         index_s0=float(res.index_s0),
         index_levels_at_payment=res.index_level_at_payment,
         expense_annual_inflation=0.0,
@@ -90,11 +102,19 @@ def test_spia_workbook_build_under_budget(benchmark) -> None:
 def test_rila_workbook_build_under_budget(benchmark) -> None:
     contract, yc, mort, expenses, levels = _rila_inputs()
     spec = rila_excel_spec_from_launcher(
-        contract=contract, yield_curve=yc, mortality=mort, horizon_age=90,
-        spread=0.0, valuation_year=2025, expenses=expenses,
-        yield_mode_label="flat", mortality_mode_label="synthetic",
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=90,
+        spread=0.0,
+        valuation_year=2025,
+        expenses=expenses,
+        yield_mode_label="flat",
+        mortality_mode_label="synthetic",
         expense_mode_label="manual",
-        index_s0=100.0, index_levels_at_payment=levels, expense_annual_inflation=0.0,
+        index_s0=100.0,
+        index_levels_at_payment=levels,
+        expense_annual_inflation=0.0,
     )
 
     blob = benchmark(build_rila_workbook_from_spec, spec)

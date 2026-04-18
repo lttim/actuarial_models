@@ -183,6 +183,7 @@ class ExcelWorkbookValidationError(ValueError):
 # Tokenizer
 # ---------------------------------------------------------------------------
 
+
 def _strip_outer_eq(formula: str) -> str:
     return formula[1:] if formula.startswith("=") else formula
 
@@ -228,7 +229,7 @@ def _strip_strings_and_brackets(formula: str) -> str:
       walking the formula character by character in pure Python.
     * Build the output as a single ``"".join(parts)`` of slices + replacement spaces.
     """
-    if "\"" not in formula and "[" not in formula:
+    if '"' not in formula and "[" not in formula:
         # Hot path: most formulas have no quoted strings or table-style brackets and can
         # be returned as-is without any allocation.
         return formula
@@ -237,12 +238,12 @@ def _strip_strings_and_brackets(formula: str) -> str:
     n = len(formula)
     while i < n:
         ch = formula[i]
-        if ch == "\"":
+        if ch == '"':
             # Find the matching closing quote, treating "" as escape.
             j = i + 1
             while j < n:
-                if formula[j] == "\"":
-                    if j + 1 < n and formula[j + 1] == "\"":
+                if formula[j] == '"':
+                    if j + 1 < n and formula[j + 1] == '"':
                         j += 2
                         continue
                     break
@@ -259,7 +260,7 @@ def _strip_strings_and_brackets(formula: str) -> str:
         else:
             # Append a contiguous run of "safe" characters (no quotes/brackets) at once.
             j = i
-            while j < n and formula[j] != "\"" and formula[j] != "[":
+            while j < n and formula[j] != '"' and formula[j] != "[":
                 j += 1
             out.append(formula[i:j])
             i = j
@@ -383,6 +384,7 @@ def _split_top_level_args(formula_inner: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def validate_formula(
     sheet: str,
@@ -579,9 +581,7 @@ def _check_cross_sheet_columns(
         present = populated[ref_sheet]
         missing = [c for c in cols if c not in present]
         if missing:
-            range_label = (
-                f"{col_a}" if col_b is None or col_b == col_a else f"{col_a}:{col_b}"
-            )
+            range_label = f"{col_a}" if col_b is None or col_b == col_a else f"{col_a}:{col_b}"
             issues.append(
                 FormulaIssue(
                     sheet=sheet,
@@ -650,9 +650,7 @@ def validate_workbook(workbook: object) -> list[FormulaIssue]:
                 continue
             body = _strip_outer_eq(v)
             stripped = _strip_strings_and_brackets(body)
-            cell_issues = list(
-                validate_formula(sheet, cell.coordinate, v, _stripped=stripped)
-            )
+            cell_issues = list(validate_formula(sheet, cell.coordinate, v, _stripped=stripped))
             cell_issues.extend(
                 _check_cross_sheet_columns(
                     sheet=sheet,

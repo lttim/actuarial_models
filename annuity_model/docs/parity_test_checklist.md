@@ -7,7 +7,7 @@ Use this checklist before every merge to main and every product release.
 ## Before every merge (PR gate)
 
 - [ ] Run the canonical "before completing any task" gates from
-      [annuity_model/AGENTS.md](../AGENTS.md#before-completing-any-task----canonical-gates)
+      [annuity_model/AGENTS.md](https://github.com/lttim/actuarial_models/blob/main/annuity_model/AGENTS.md#before-completing-any-task----canonical-gates)
       — all four must exit 0.
 - [ ] No new ad-hoc tolerances added in code; new tolerances land in
       `parity_constants.py` AND go through `model_change_log.md`.

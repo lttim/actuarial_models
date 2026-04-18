@@ -98,7 +98,9 @@ def price_term_life_level_monthly(
     for year_end_m in range(12, n_months + 1, 12):
         start = year_end_m - 12
         end = year_end_m
-        claim_cf[year_end_m - 1] = float(contract.death_benefit * np.sum(death_prob_month[start:end]))
+        claim_cf[year_end_m - 1] = float(
+            contract.death_benefit * np.sum(death_prob_month[start:end])
+        )
 
     premium_cf = np.full(n_months, float(contract.monthly_premium), dtype=float) * survival_start
     expected_total = claim_cf - premium_cf
@@ -162,6 +164,4 @@ def liability_path_from_term_projection(pricing: TermLifeProjectionResult) -> sp
 # `run_alm_projection_from_pricing_result` without an isinstance chain.
 from liability_dispatch import register_liability_path_converter  # noqa: E402
 
-register_liability_path_converter(
-    "TermLifeProjectionResult", liability_path_from_term_projection
-)
+register_liability_path_converter("TermLifeProjectionResult", liability_path_from_term_projection)

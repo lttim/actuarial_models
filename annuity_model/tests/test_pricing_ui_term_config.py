@@ -53,4 +53,3 @@ def test_term_default_mortality_uses_ssa_sex_specific_qx() -> None:
     assert male.qx_at_int_age(65) > female.qx_at_int_age(65)
     assert np.isclose(float(male.qx_at_int_age(65)), 0.015967, atol=1e-12)
     assert np.isclose(float(female.qx_at_int_age(65)), 0.009794, atol=1e-12)
-

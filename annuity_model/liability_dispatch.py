@@ -14,7 +14,8 @@ module and registering their converter -- no edits to the core engine.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 # Type signature: pricing_result -> LiabilityPath. Kept untyped here to
 # avoid pulling in pricing_projection at module load time (LiabilityPath
@@ -24,9 +25,7 @@ LiabilityPathConverter = Callable[[Any], Any]
 _REGISTRY: dict[str, LiabilityPathConverter] = {}
 
 
-def register_liability_path_converter(
-    typename: str, converter: LiabilityPathConverter
-) -> None:
+def register_liability_path_converter(typename: str, converter: LiabilityPathConverter) -> None:
     """Register a converter for a pricing-result class.
 
     Parameters

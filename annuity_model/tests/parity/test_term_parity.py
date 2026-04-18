@@ -16,7 +16,9 @@ pytestmark = [pytest.mark.parity, pytest.mark.product_term]
 
 
 def _setup_case() -> tuple[tp.TermLifeContract, sp.YieldCurve, sp.MortalityTableQx]:
-    contract = tp.TermLifeContract(issue_age=45, sex="male", death_benefit=250_000.0, monthly_premium=250.0, term_years=20)
+    contract = tp.TermLifeContract(
+        issue_age=45, sex="male", death_benefit=250_000.0, monthly_premium=250.0, term_years=20
+    )
     yc = sp.YieldCurve.from_flat_rate(0.04)
     ages = np.arange(0, 121, dtype=int)
     qx = np.full_like(ages, 0.01, dtype=float)
@@ -116,8 +118,12 @@ def test_term_workbook_modelcheck_reconciles_zero_difference():
     ex_claims = float(np.sum(res.expected_claim_cashflows * res.discount_factors))
     ex_prem = float(np.sum(res.expected_premium_cashflows * res.discount_factors))
     ex_net = float(np.sum(res.expected_total_cashflows * res.discount_factors))
-    np.testing.assert_allclose(float(ws_mc["B5"].value), ex_claims, rtol=0.0, atol=TERM_MODELCHECK_TOL)
-    np.testing.assert_allclose(float(ws_mc["B6"].value), ex_prem, rtol=0.0, atol=TERM_MODELCHECK_TOL)
+    np.testing.assert_allclose(
+        float(ws_mc["B5"].value), ex_claims, rtol=0.0, atol=TERM_MODELCHECK_TOL
+    )
+    np.testing.assert_allclose(
+        float(ws_mc["B6"].value), ex_prem, rtol=0.0, atol=TERM_MODELCHECK_TOL
+    )
     np.testing.assert_allclose(float(ws_mc["B7"].value), ex_net, rtol=0.0, atol=TERM_MODELCHECK_TOL)
     np.testing.assert_allclose(ex_net, ex_claims - ex_prem, rtol=0.0, atol=TERM_MODELCHECK_TOL)
 

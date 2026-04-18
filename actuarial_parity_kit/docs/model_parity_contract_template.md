@@ -1,7 +1,7 @@
 # Actuarial Model Parity Contract
 
-**Version:** 1.0  
-**Last updated:** [DATE]  
+**Version:** 1.0
+**Last updated:** [DATE]
 **Applies to:** [PRODUCT] [ENGINE] (Python ↔ Excel)
 
 This document is the authoritative source of truth for numerical parity between the Python

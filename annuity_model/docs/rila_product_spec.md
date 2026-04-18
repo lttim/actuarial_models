@@ -1,6 +1,6 @@
 # RILA product specification (v1 — accumulation)
 
-**Status:** Signed specification for model implementation (Python + Excel parity).  
+**Status:** Signed specification for model implementation (Python + Excel parity).
 **Scope:** Registered index-linked annuity — **accumulation only** (no GLWB, no ratchets, no multi-segment ladders with overlapping renewals).
 
 ## Contract
@@ -30,8 +30,8 @@ Months without a segment anniversary only apply the monthly fee to `AV`.
 ## Pricing
 
 - **Relative account:** simulate with initial `AV = 1` through the scenario to obtain monthly **expected death benefits** per $1 premium: `claim_k = death_prob_k * AV_k`.
-- Let `K = Σ claim_k * DF(t_k)`. With SPIA-style expenses:  
-  `premium = (policy_expense + pv_maintenance_expenses + K) / (1 - premium_expense_rate)`  
+- Let `K = Σ claim_k * DF(t_k)`. With SPIA-style expenses:
+  `premium = (policy_expense + pv_maintenance_expenses + K) / (1 - premium_expense_rate)`
   when `K < 1 - rate` and denominator positive.
 - Scale cashflows and reserves by `premium` for reporting.
 

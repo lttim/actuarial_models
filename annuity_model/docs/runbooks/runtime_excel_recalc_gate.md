@@ -5,8 +5,8 @@
 **Parked** since 2026-04-18.
 
 The dev dep `xlcalculator==0.5.0` is commented out in
-[`requirements-dev.txt`](../../requirements-dev.txt) and
-[`tests/parity/test_runtime_excel_recalc.py`](../../tests/parity/test_runtime_excel_recalc.py)
+[`annuity_model/requirements-dev.txt`](https://github.com/lttim/actuarial_models/blob/main/annuity_model/requirements-dev.txt)
+and [`tests/parity/test_runtime_excel_recalc.py`](https://github.com/lttim/actuarial_models/blob/main/annuity_model/tests/parity/test_runtime_excel_recalc.py)
 self-skips via `pytest.importorskip("xlcalculator")`. The full parity gate
 (static formula simulation in `tests/parity/excel_formula_sim.py` plus the
 AST-walking validator in `excel_workbook_validator.py`) is unaffected.
@@ -15,7 +15,8 @@ AST-walking validator in `excel_workbook_validator.py`) is unaffected.
 
 `xlcalculator==0.5.0` (latest on PyPI as of 2026-04) transitively depends on
 `yearfrac<2`, which is incompatible with the pinned `numpy==2.4.4` in
-[`requirements.lock`](../../requirements.lock). The first push of the P0-P4
+[`annuity_model/requirements.lock`](https://github.com/lttim/actuarial_models/blob/main/annuity_model/requirements.lock).
+The first push of the P0-P4
 hardening commit failed `ci.yml` and `docs.yml` at the dependency-install step
 with `ResolutionImpossible`. Locally the conflict was masked because the dev
 venv was created before `xlcalculator` was added, so `pip install` had never
@@ -42,7 +43,7 @@ been re-run against the dev requirements.
 
 When one of the above unblocks:
 
-1. Re-add the dep to [`requirements-dev.txt`](../../requirements-dev.txt):
+1. Re-add the dep to [`annuity_model/requirements-dev.txt`](https://github.com/lttim/actuarial_models/blob/main/annuity_model/requirements-dev.txt):
 
    ```text
    xlcalculator==<new version>     # OR

@@ -55,4 +55,6 @@ def build_product_workbook(
             alm_snapshot=alm_snapshot,
             alm_assumptions=alm_assumptions,
         )
-    raise NotImplementedError(f"Workbook builder is not implemented for product '{product_type.value}'.")
+    raise NotImplementedError(
+        f"Workbook builder is not implemented for product '{product_type.value}'."
+    )

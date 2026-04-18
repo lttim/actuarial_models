@@ -14,7 +14,9 @@ from pathlib import Path
 import numpy as np
 
 
-def write_scenario_csv(out_path: Path, n_months: int, *, seed: int = 42, s0: float = 5000.0) -> None:
+def write_scenario_csv(
+    out_path: Path, n_months: int, *, seed: int = 42, s0: float = 5000.0
+) -> None:
     rng = np.random.default_rng(seed)
     levels = np.zeros(n_months + 1, dtype=float)
     levels[0] = s0
@@ -22,7 +24,9 @@ def write_scenario_csv(out_path: Path, n_months: int, *, seed: int = 42, s0: flo
     mu_m = 0.08 / 12.0
     sig_m = 0.16 / (12.0**0.5)
     for k in range(1, n_months + 1):
-        levels[k] = levels[k - 1] * float(np.exp(mu_m - 0.5 * sig_m**2 + sig_m * rng.standard_normal()))
+        levels[k] = levels[k - 1] * float(
+            np.exp(mu_m - 0.5 * sig_m**2 + sig_m * rng.standard_normal())
+        )
 
     lines = ["month,sp500_level"]
     for m, v in enumerate(levels.tolist()):

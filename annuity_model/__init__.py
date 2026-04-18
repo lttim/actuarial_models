@@ -19,6 +19,23 @@ Quick reference:
 
 from __future__ import annotations
 
+# Logging -----------------------------------------------------------------
+from _logging import configure_logging, get_logger
+
+# Excel pipeline -----------------------------------------------------------
+from excel_workbook_validator import (
+    ExcelWorkbookValidationError,
+    FormulaIssue,
+    validate_formula,
+    validate_workbook,
+    validate_workbook_or_raise,
+)
+from liability_layouts import (
+    LIABILITY_LAYOUTS,
+    LiabilityLayout,
+    liability_layout_for,
+)
+
 # Engine surface -----------------------------------------------------------
 from pricing_projection import (
     ALMAllocationSpec,
@@ -35,30 +52,6 @@ from pricing_projection import (
     run_alm_projection_from_liability_path,
     run_alm_projection_from_pricing_result,
 )
-from rila_projection import (
-    RILAContract,
-    liability_path_from_rila_projection,
-    price_rila_single_premium,
-)
-from term_projection import (
-    TermLifeContract,
-    liability_path_from_term_projection,
-    price_term_life_level_monthly,
-)
-
-# Excel pipeline -----------------------------------------------------------
-from excel_workbook_validator import (
-    ExcelWorkbookValidationError,
-    FormulaIssue,
-    validate_formula,
-    validate_workbook,
-    validate_workbook_or_raise,
-)
-from liability_layouts import (
-    LIABILITY_LAYOUTS,
-    LiabilityLayout,
-    liability_layout_for,
-)
 from product_excel import build_product_workbook
 
 # Product registry --------------------------------------------------------
@@ -71,9 +64,16 @@ from product_registry import (
     product_label,
     product_options_for_ui,
 )
-
-# Logging -----------------------------------------------------------------
-from _logging import configure_logging, get_logger
+from rila_projection import (
+    RILAContract,
+    liability_path_from_rila_projection,
+    price_rila_single_premium,
+)
+from term_projection import (
+    TermLifeContract,
+    liability_path_from_term_projection,
+    price_term_life_level_monthly,
+)
 
 __all__ = [
     "ALMAllocationSpec",

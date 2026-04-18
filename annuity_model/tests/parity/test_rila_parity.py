@@ -15,7 +15,9 @@ from parity_constants import RILA_AV_TOL, RILA_PV_TOL
 pytestmark = [pytest.mark.parity, pytest.mark.product_rila]
 
 
-def _setup_case() -> tuple[rp.RILAContract, sp.YieldCurve, sp.MortalityTableQx, sp.ExpenseAssumptions]:
+def _setup_case() -> (
+    tuple[rp.RILAContract, sp.YieldCurve, sp.MortalityTableQx, sp.ExpenseAssumptions]
+):
     contract = rp.RILAContract(
         issue_age=55,
         sex="male",
@@ -90,7 +92,9 @@ def test_rila_workbook_modelcheck_reconciles_zero_difference():
     np.testing.assert_allclose(float(ws_mc["B5"].value), pv_b, rtol=0.0, atol=RILA_PV_TOL)
     np.testing.assert_allclose(float(ws_mc["B6"].value), pv_e, rtol=0.0, atol=RILA_PV_TOL)
     np.testing.assert_allclose(float(ws_mc["B7"].value), pv_t, rtol=0.0, atol=RILA_PV_TOL)
-    np.testing.assert_allclose(float(ws_mc["B8"].value), float(res.single_premium), rtol=0.0, atol=RILA_PV_TOL)
+    np.testing.assert_allclose(
+        float(ws_mc["B8"].value), float(res.single_premium), rtol=0.0, atol=RILA_PV_TOL
+    )
 
 
 def test_rila_account_value_matches_formula_track_month_12():

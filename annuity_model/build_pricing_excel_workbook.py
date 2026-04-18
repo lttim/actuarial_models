@@ -209,9 +209,16 @@ def mc_excel_snapshot_from_result(
         finite = a[np.isfinite(a)]
         if finite.size == 0:
             rows.append(
-                {"Metric": name, "Mean": float("nan"), "Std Dev": float("nan"),
-                 "P5": float("nan"), "P25": float("nan"), "Median": float("nan"),
-                 "P75": float("nan"), "P95": float("nan")}
+                {
+                    "Metric": name,
+                    "Mean": float("nan"),
+                    "Std Dev": float("nan"),
+                    "P5": float("nan"),
+                    "P25": float("nan"),
+                    "Median": float("nan"),
+                    "P75": float("nan"),
+                    "P95": float("nan"),
+                }
             )
             continue
         rows.append(
@@ -262,7 +269,9 @@ class ExcelBuildSpec:
     yield_curve_df: pd.DataFrame  # columns: maturity_years, zero_rate
     mortality_excel_mode: Literal["rp_mp", "static"]  # static = no MP layer (synthetic or qx CSV)
     base_qx_df: pd.DataFrame  # columns: age, qx
-    mp_improvement_long_df: pd.DataFrame | None  # columns: age, year, improvement_rate (long); None if static
+    mp_improvement_long_df: (
+        pd.DataFrame | None
+    )  # columns: age, year, improvement_rate (long); None if static
     policy_expense_dollars: float
     premium_expense_rate: float  # decimal, e.g. 0.02 for 2%
     monthly_expense_dollars: float
@@ -330,13 +339,19 @@ def excel_spec_from_launcher(
 
     if isinstance(mortality, sp.MortalityTableRP2014MP2016):
         base_qx_df = pd.DataFrame(
-            {"age": np.asarray(mortality.base_qx_2014.ages, dtype=int), "qx": np.asarray(mortality.base_qx_2014.qx, dtype=float)}
+            {
+                "age": np.asarray(mortality.base_qx_2014.ages, dtype=int),
+                "qx": np.asarray(mortality.base_qx_2014.qx, dtype=float),
+            }
         )
         mp_long = _mp_table_to_long_df(mortality)
         excel_mort = "rp_mp"
     else:
         base_qx_df = pd.DataFrame(
-            {"age": np.asarray(mortality.ages, dtype=int), "qx": np.asarray(mortality.qx, dtype=float)}
+            {
+                "age": np.asarray(mortality.ages, dtype=int),
+                "qx": np.asarray(mortality.qx, dtype=float),
+            }
         )
         mp_long = None
         excel_mort = "static"
@@ -414,10 +429,18 @@ def _write_inputs(ws, spec: ExcelBuildSpec) -> None:
     ws["D4"] = "Rates are decimals unless labeled otherwise."
     ws["D5"] = "Valuation date: 12/31 of Valuation Year (RP+MP path)."
     ws["D6"] = "Mortality Excel Mode: rp_mp uses MP-2016 sums; static uses Base Qx only."
-    ws["D7"] = "Discount factors use log-linear interpolation on DF nodes (matches Python YieldCurve)."
-    ws["D8"] = "Benefits: return indexation from IndexScenario; expenses: monthly CPI-style from B17."
-    ws["D9"] = "Changing horizon/issue age does not auto-resize sheets; regenerate from the launcher."
-    ws["D10"] = "Spread B9 is added to zero rates. Negative B9 lowers discount yields and raises PV—must match launcher."
+    ws["D7"] = (
+        "Discount factors use log-linear interpolation on DF nodes (matches Python YieldCurve)."
+    )
+    ws["D8"] = (
+        "Benefits: return indexation from IndexScenario; expenses: monthly CPI-style from B17."
+    )
+    ws["D9"] = (
+        "Changing horizon/issue age does not auto-resize sheets; regenerate from the launcher."
+    )
+    ws["D10"] = (
+        "Spread B9 is added to zero rates. Negative B9 lowers discount yields and raises PV—must match launcher."
+    )
     ws["D11"] = (
         f"See ModelCheck: Python snapshot vs {LIABILITY_SHEET_NAME}! formulas; large |Difference| means inputs/recalc issues."
     )
@@ -507,7 +530,7 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
             ws[f"N{r}"] = f"=N{r-1}*M{r}"
 
         ws[f"O{r}"] = f'=IFERROR(INDEX(MonthlyCurve!$L:$L,MATCH(A{r},MonthlyCurve!$A:$A,0)),"")'
-        ws[f"P{r}"] = f"=IF(B{r}>0,-LN(O{r})/B{r},\"\")"
+        ws[f"P{r}"] = f'=IF(B{r}>0,-LN(O{r})/B{r},"")'
         ws[f"Q{r}"] = f"=G{r}*N{r}"
         ws[f"R{r}"] = f"=H{r}*N{r}"
         ws[f"S{r}"] = f"=Q{r}+R{r}"
@@ -566,11 +589,11 @@ def _alm_liability_pv_cell_formula(
             f"(got {liability_total_col!r}, {liability_discount_col!r})."
         )
     return (
-        f'=IF(INDEX({sh}!${df}:${df},3+A{r})<=0,NA(),'
-        f'IF(4+A{r}>{pl},0,'
+        f"=IF(INDEX({sh}!${df}:${df},3+A{r})<=0,NA(),"
+        f"IF(4+A{r}>{pl},0,"
         f'SUMPRODUCT(INDIRECT("{sh}!{cf}" & (4+A{r}) & ":{cf}{pl}"),'
         f'INDIRECT("{sh}!{df}" & (4+A{r}) & ":{df}{pl}"))'
-        f'/INDEX({sh}!${df}:${df},3+A{r})))'
+        f"/INDEX({sh}!${df}:${df},3+A{r})))"
     )
 
 
@@ -619,7 +642,9 @@ def _write_alm_projection_sheet(
     period_end_m = [int(snap.month_index[i]) + 1 for i in range(n)]
     nm = int(n_months)
     if period_end_m[-1] > nm or period_end_m[0] < 1:
-        raise ValueError(f"Invalid ALM month range in snapshot: {period_end_m[0]}..{period_end_m[-1]}")
+        raise ValueError(
+            f"Invalid ALM month range in snapshot: {period_end_m[0]}..{period_end_m[-1]}"
+        )
     ws_eng = wb.create_sheet(ALM_ENGINE_SHEET)
     layout = write_alm_engine_sheet(
         ws_eng,
@@ -662,7 +687,9 @@ def _write_alm_projection_sheet(
     ws["A6"], ws["B6"] = "Liability Macaulay duration (y)", float(snap.duration_liabilities_mac)
     ws["A7"], ws["B7"] = "PV01 net ($/bp) (issue-time)", float(snap.pv01_net)
     ws["A9"] = "Target allocation (issue)"
-    alloc_txt = "; ".join(f"{snap.bucket_names[i]} {snap.weights[i]:.2%}" for i in range(len(snap.bucket_names)))
+    alloc_txt = "; ".join(
+        f"{snap.bucket_names[i]} {snap.weights[i]:.2%}" for i in range(len(snap.bucket_names))
+    )
     ws["B9"] = alloc_txt
 
     header_row = ALM_PROJECTION_FIRST_DATA_ROW - 1
@@ -690,7 +717,7 @@ def _write_alm_projection_sheet(
             row=r,
             column=2,
             value=(
-                f'=IFERROR(INDEX({LIABILITY_SHEET_NAME}!$C:$C,'
+                f"=IFERROR(INDEX({LIABILITY_SHEET_NAME}!$C:$C,"
                 f'MATCH(A{r},{LIABILITY_SHEET_NAME}!$A:$A,0)),"")'
             ),
         )
@@ -708,7 +735,7 @@ def _write_alm_projection_sheet(
         )
         ws.cell(row=r, column=5, value=f"={ALM_ENGINE_SHEET}!{debt_letter}{r_eng}")
         ws.cell(row=r, column=6, value=f"=C{r}-D{r}-E{r}")
-        ws.cell(row=r, column=7, value=f'=IF((D{r}+E{r})>0,C{r}/(D{r}+E{r}),0)')
+        ws.cell(row=r, column=7, value=f"=IF((D{r}+E{r})>0,C{r}/(D{r}+E{r}),0)")
         for b in range(n_b):
             if b == 0:
                 ref = f"{ALM_ENGINE_SHEET}!{mv0_letter}{r_eng}"
@@ -734,7 +761,9 @@ def _write_alm_projection_sheet(
     for c in range(3, 8 + n_b + 1):
         ws.column_dimensions[get_column_letter(c)].width = 14
 
-    return ALMDashboardLayout(header_row=header_row, first_data_row=first_data, last_data_row=last_data)
+    return ALMDashboardLayout(
+        header_row=header_row, first_data_row=first_data, last_data_row=last_data
+    )
 
 
 def _write_mc_summary_sheet(wb: Workbook, mc: MCExcelSnapshot) -> None:
@@ -818,7 +847,9 @@ def _write_model_check_sheet(
 ) -> None:
     """Embed Python pricing outputs next to Liabilities summary formulas; optional ALM row checks vs ALM_Projection."""
     ws = wb.create_sheet("ModelCheck")
-    ws["A1"] = sheet_title or f"Python snapshot vs Excel ({LIABILITY_SHEET_NAME}; optional ALM_Projection)"
+    ws["A1"] = (
+        sheet_title or f"Python snapshot vs Excel ({LIABILITY_SHEET_NAME}; optional ALM_Projection)"
+    )
     ws["A1"].font = Font(bold=True, size=12)
     ws["A2"] = subtitle or (
         "Column B is the Python snapshot at export. Column C points at workbook formulas or embedded ALM cells; "
@@ -836,8 +867,18 @@ def _write_model_check_sheet(
     if pricing_rows is None:
         pricing_rows = [
             ("PV benefits", snap.pv_benefit, f"={LIABILITY_SHEET_NAME}!X4", "money"),
-            ("PV monthly expenses", snap.pv_monthly_expenses, f"={LIABILITY_SHEET_NAME}!X5", "money"),
-            ("PV monthly total (ben+exp)", snap.pv_monthly_total, f"={LIABILITY_SHEET_NAME}!X7", "money"),
+            (
+                "PV monthly expenses",
+                snap.pv_monthly_expenses,
+                f"={LIABILITY_SHEET_NAME}!X5",
+                "money",
+            ),
+            (
+                "PV monthly total (ben+exp)",
+                snap.pv_monthly_total,
+                f"={LIABILITY_SHEET_NAME}!X7",
+                "money",
+            ),
             ("Single premium", snap.single_premium, f"={LIABILITY_SHEET_NAME}!X8", "money"),
             ("Annuity factor", snap.annuity_factor, f"={LIABILITY_SHEET_NAME}!X6", "factor"),
         ]
@@ -878,14 +919,21 @@ def _write_model_check_sheet(
         f0 = float(a0 / denom0) if denom0 > 1e-12 else float("nan")
 
         ws.merge_cells(f"A{row_idx}:D{row_idx}")
-        ws.cell(row=row_idx, column=1, value="ALM checks (ALM_Projection sheet)").font = Font(bold=True)
+        ws.cell(row=row_idx, column=1, value="ALM checks (ALM_Projection sheet)").font = Font(
+            bold=True
+        )
         row_idx += 1
 
         min_rng = f"=MIN({sh}!F{dr}:F{lr})"
         sur0 = f"={sh}!C{dr}-{sh}!D{dr}-{sh}!E{dr}"
         sur_end = f"={sh}!C{lr}-{sh}!D{lr}-{sh}!E{lr}"
         alm_rows: list[tuple[str, float, str, str]] = [
-            ("ALM initial AUM (meta)", float(alm_snapshot.initial_asset_market_value), f"={sh}!B3", "money"),
+            (
+                "ALM initial AUM (meta)",
+                float(alm_snapshot.initial_asset_market_value),
+                f"={sh}!B3",
+                "money",
+            ),
             ("ALM asset MV (month 1 on sheet)", a0, f"={sh}!C{dr}", "money"),
             ("ALM liability PV (month 1 on sheet)", l0, f"={sh}!D{dr}", "money"),
             ("ALM surplus (month 1 on sheet)", s0, sur0, "money"),
@@ -1105,7 +1153,9 @@ def build_workbook_from_spec(
     alm_snap_for_book: ALMExcelSnapshot | None = None
     if alm_snapshot is not None:
         if alm_assumptions is None:
-            raise ValueError("alm_assumptions is required when alm_snapshot is provided (Excel ladder paramaters).")
+            raise ValueError(
+                "alm_assumptions is required when alm_snapshot is provided (Excel ladder paramaters)."
+            )
         alm_snap_for_book = alm_excel_downsample_snapshot(alm_snapshot, int(alm_engine_step_months))
         alm_snap_for_book = alm_excel_truncate_snapshot(alm_snap_for_book, alm_excel_path_month_cap)
         # Liability column letters live in liability_layouts.LIABILITY_LAYOUTS;
@@ -1114,6 +1164,7 @@ def build_workbook_from_spec(
         # We pass the string code rather than ProductType to avoid a
         # registry/builder import cycle.
         from liability_layouts import liability_layout_for
+
         _spia_layout = liability_layout_for("spia")
         alm_layout = _write_alm_projection_sheet(
             wb,

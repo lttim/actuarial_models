@@ -89,12 +89,12 @@ def test_simulate_index_levels_gbm_one_step_logreturn_moments_match_theory():
     # Monte Carlo SE for variance ≈ sigma_lr^2 * sqrt(2/(n-1))
     se_var = theoretical_var * math.sqrt(2.0 / (n_sims - 1))
 
-    assert abs(sample_mean - theoretical_mean) < 5.0 * se_mean, (
-        f"Log-return mean {sample_mean:.6f} too far from theory {theoretical_mean:.6f}"
-    )
-    assert abs(sample_var - theoretical_var) < 5.0 * se_var, (
-        f"Log-return variance {sample_var:.6f} too far from theory {theoretical_var:.6f}"
-    )
+    assert (
+        abs(sample_mean - theoretical_mean) < 5.0 * se_mean
+    ), f"Log-return mean {sample_mean:.6f} too far from theory {theoretical_mean:.6f}"
+    assert (
+        abs(sample_var - theoretical_var) < 5.0 * se_var
+    ), f"Log-return variance {sample_var:.6f} too far from theory {theoretical_var:.6f}"
 
 
 def test_simulate_index_levels_gbm_logreturn_variance_scales_with_time():
@@ -114,26 +114,38 @@ def test_simulate_index_levels_gbm_logreturn_variance_scales_with_time():
     var_6 = float(np.var(log_ret_6, ddof=1))
     ratio = var_6 / var_1
     # Expect ratio ≈ 6; allow 5% relative tolerance for Monte Carlo noise
-    assert abs(ratio - 6.0) / 6.0 < 0.05, f"Variance ratio month-6/month-1 is {ratio:.4f}, expected ~6.0"
+    assert (
+        abs(ratio - 6.0) / 6.0 < 0.05
+    ), f"Variance ratio month-6/month-1 is {ratio:.4f}, expected ~6.0"
 
 
 def test_simulate_index_levels_gbm_is_seed_reproducible():
     """Monte Carlo path generation should be exactly reproducible for a fixed seed."""
-    p1 = sp.simulate_index_levels_gbm(n_sims=4, n_months=12, seed=123, annual_drift=0.05, annual_vol=0.2, s0=100.0)
-    p2 = sp.simulate_index_levels_gbm(n_sims=4, n_months=12, seed=123, annual_drift=0.05, annual_vol=0.2, s0=100.0)
+    p1 = sp.simulate_index_levels_gbm(
+        n_sims=4, n_months=12, seed=123, annual_drift=0.05, annual_vol=0.2, s0=100.0
+    )
+    p2 = sp.simulate_index_levels_gbm(
+        n_sims=4, n_months=12, seed=123, annual_drift=0.05, annual_vol=0.2, s0=100.0
+    )
     np.testing.assert_allclose(p1, p2, rtol=0.0, atol=0.0)
 
 
 def test_simulate_index_levels_gbm_different_seeds_produce_different_paths():
     """Two different seeds must produce statistically distinct path arrays (not bit-identical)."""
-    p1 = sp.simulate_index_levels_gbm(n_sims=10, n_months=12, seed=1, annual_drift=0.05, annual_vol=0.2, s0=100.0)
-    p2 = sp.simulate_index_levels_gbm(n_sims=10, n_months=12, seed=2, annual_drift=0.05, annual_vol=0.2, s0=100.0)
+    p1 = sp.simulate_index_levels_gbm(
+        n_sims=10, n_months=12, seed=1, annual_drift=0.05, annual_vol=0.2, s0=100.0
+    )
+    p2 = sp.simulate_index_levels_gbm(
+        n_sims=10, n_months=12, seed=2, annual_drift=0.05, annual_vol=0.2, s0=100.0
+    )
     assert not np.allclose(p1, p2), "Paths from different seeds should not be identical"
 
 
 def test_simulate_index_levels_gbm_zero_vol_has_common_deterministic_path():
     """With zero volatility, all simulations follow the same deterministic drift path."""
-    paths = sp.simulate_index_levels_gbm(n_sims=3, n_months=6, seed=7, annual_drift=0.12, annual_vol=0.0, s0=100.0)
+    paths = sp.simulate_index_levels_gbm(
+        n_sims=3, n_months=6, seed=7, annual_drift=0.12, annual_vol=0.0, s0=100.0
+    )
     np.testing.assert_allclose(paths[0], paths[1], rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(paths[1], paths[2], rtol=1e-12, atol=1e-12)
     assert paths[0, 1] == pytest.approx(100.0 * math.exp(0.12 / 12.0), rel=1e-12)
@@ -155,10 +167,17 @@ def test_price_spia_monte_carlo_quantiles_are_ordered():
         s0=100.0,
         expense_annual_inflation=0.0,
     )
-    assert mc.premium_p05 <= mc.premium_median <= mc.premium_p95, (
-        f"Quantile order violated: p05={mc.premium_p05:.2f} median={mc.premium_median:.2f} p95={mc.premium_p95:.2f}"
-    )
-    for attr in ("premium_mean", "premium_median", "premium_p05", "premium_p95", "pv_benefit_mean", "pv_total_mean"):
+    assert (
+        mc.premium_p05 <= mc.premium_median <= mc.premium_p95
+    ), f"Quantile order violated: p05={mc.premium_p05:.2f} median={mc.premium_median:.2f} p95={mc.premium_p95:.2f}"
+    for attr in (
+        "premium_mean",
+        "premium_median",
+        "premium_p05",
+        "premium_p95",
+        "pv_benefit_mean",
+        "pv_total_mean",
+    ):
         val = getattr(mc, attr)
         assert math.isfinite(val), f"{attr}={val} is not finite"
 
@@ -204,9 +223,9 @@ def test_price_spia_monte_carlo_different_seed_changes_results():
     )
     mc1 = sp.price_spia_single_premium_monte_carlo(**common, seed=11)
     mc2 = sp.price_spia_single_premium_monte_carlo(**common, seed=99)
-    assert not np.array_equal(mc1.single_premium, mc2.single_premium), (
-        "Premium arrays from different seeds should not be identical"
-    )
+    assert not np.array_equal(
+        mc1.single_premium, mc2.single_premium
+    ), "Premium arrays from different seeds should not be identical"
 
 
 def test_price_spia_monte_carlo_matches_manual_path_loop():
@@ -275,9 +294,9 @@ def test_price_spia_monte_carlo_higher_vol_increases_distribution_width():
 
     spread_low = mc_low_vol.premium_p95 - mc_low_vol.premium_p05
     spread_high = mc_high_vol.premium_p95 - mc_high_vol.premium_p05
-    assert spread_high > spread_low, (
-        f"Higher vol should widen p95-p05 spread: low_vol_spread={spread_low:.2f}, high_vol_spread={spread_high:.2f}"
-    )
+    assert (
+        spread_high > spread_low
+    ), f"Higher vol should widen p95-p05 spread: low_vol_spread={spread_low:.2f}, high_vol_spread={spread_high:.2f}"
 
 
 def test_price_spia_monte_carlo_zero_vol_matches_deterministic_mean():
@@ -535,7 +554,9 @@ def test_price_spia_premium_load_formula():
     contract = sp.SPIAContract(issue_age=65, sex="male", benefit_annual=60_000.0)
     yc = sp.YieldCurve.from_flat_rate(0.03)
     mort = _minimal_mortality()
-    ex = sp.ExpenseAssumptions(policy_expense_dollars=200.0, premium_expense_rate=0.1, monthly_expense_dollars=0.0)
+    ex = sp.ExpenseAssumptions(
+        policy_expense_dollars=200.0, premium_expense_rate=0.1, monthly_expense_dollars=0.0
+    )
     res = sp.price_spia_single_premium(
         contract=contract,
         yield_curve=yc,
@@ -688,7 +709,9 @@ def test_flat_index_zero_inflation_matches_level_benefits():
     b0 = contract.benefit_annual / 12.0
     af = float(np.sum(res.survival_to_payment * res.discount_factors))
     assert res.pv_benefit == pytest.approx(b0 * af, rel=1e-9)
-    np.testing.assert_allclose(res.benefit_nominal_scheduled, np.full_like(res.benefit_nominal_scheduled, b0))
+    np.testing.assert_allclose(
+        res.benefit_nominal_scheduled, np.full_like(res.benefit_nominal_scheduled, b0)
+    )
     assert np.max(np.abs(res.index_simple_return)) < 1e-12
 
 
@@ -855,7 +878,9 @@ def test_run_alm_projection_from_pricing_result_dispatches_spia_and_term():
     alm_u = sp.run_alm_projection_from_pricing_result(
         pricing=spia_res, yield_curve=yc2, spread=0.0, assumptions=asm
     )
-    alm_direct = sp.run_alm_projection(pricing=spia_res, yield_curve=yc2, spread=0.0, assumptions=asm)
+    alm_direct = sp.run_alm_projection(
+        pricing=spia_res, yield_curve=yc2, spread=0.0, assumptions=asm
+    )
     np.testing.assert_allclose(alm_u.surplus, alm_direct.surplus, rtol=0.0, atol=1e-9)
 
     rila_c = rp.RILAContract(
@@ -1015,7 +1040,9 @@ def test_liability_pv_cashflows_length_guard():
 
 
 def test_yield_curve_twist_rejects_empty_curve():
-    empty = sp.YieldCurve(maturities_years=np.array([], dtype=float), zero_rates=np.array([], dtype=float))
+    empty = sp.YieldCurve(
+        maturities_years=np.array([], dtype=float), zero_rates=np.array([], dtype=float)
+    )
     with pytest.raises(ValueError, match="non-empty"):
         sp.yield_curve_twist_linear_bps(empty, bps_short=1.0, bps_long=2.0)
 
@@ -1143,7 +1170,9 @@ def test_alm_borrowing_policy_changes_sales_behavior():
         liability_cashflows=cf,
     )
     # Borrow-first should preserve bond MV better in early month and show positive borrowing balance.
-    assert float(np.sum(out_borrow_first.bucket_asset_mv[1:, 0])) >= float(np.sum(out_sell_first.bucket_asset_mv[1:, 0]))
+    assert float(np.sum(out_borrow_first.bucket_asset_mv[1:, 0])) >= float(
+        np.sum(out_sell_first.bucket_asset_mv[1:, 0])
+    )
     assert float(out_borrow_first.borrowing_balance[0]) >= 0.0
 
 
@@ -1241,4 +1270,3 @@ def test_alm_scenario_linked_borrow_rate_respects_selected_tenor():
         liability_cashflows=cf,
     )
     assert float(out_long.borrowing_balance[1]) > float(out_short.borrowing_balance[1])
-

@@ -52,17 +52,38 @@ class _JsonLineFormatter(logging.Formatter):
     callers to format them into the message string.
     """
 
-    _RESERVED = frozenset({
-        "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
-        "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
-        "created", "msecs", "relativeCreated", "thread", "threadName",
-        "processName", "process", "message", "asctime", "taskName",
-    })
+    _RESERVED = frozenset(
+        {
+            "name",
+            "msg",
+            "args",
+            "levelname",
+            "levelno",
+            "pathname",
+            "filename",
+            "module",
+            "exc_info",
+            "exc_text",
+            "stack_info",
+            "lineno",
+            "funcName",
+            "created",
+            "msecs",
+            "relativeCreated",
+            "thread",
+            "threadName",
+            "processName",
+            "process",
+            "message",
+            "asctime",
+            "taskName",
+        }
+    )
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(record.created))
-                  + f".{int(record.msecs):03d}Z",
+            + f".{int(record.msecs):03d}Z",
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),
@@ -136,10 +157,12 @@ def configure_logging(
     if chosen_fmt == "json":
         handler.setFormatter(_JsonLineFormatter())
     else:
-        handler.setFormatter(logging.Formatter(
-            fmt="%(asctime)s %(levelname)-7s %(name)s :: %(message)s",
-            datefmt="%H:%M:%S",
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                fmt="%(asctime)s %(levelname)-7s %(name)s :: %(message)s",
+                datefmt="%H:%M:%S",
+            )
+        )
     base.addHandler(handler)
 
     # Per-logger overrides via env: ANNUITY_MODEL_LOG_PRICING_PROJECTION=DEBUG
@@ -148,7 +171,7 @@ def configure_logging(
             continue
         if env_key in (_ENV_LEVEL, _ENV_FORMAT):
             continue
-        suffix = env_key[len(_ENV_PER_LOGGER_PREFIX):].lower()
+        suffix = env_key[len(_ENV_PER_LOGGER_PREFIX) :].lower()
         if not suffix:
             continue
         logging.getLogger(f"{_LOGGER_PREFIX}.{suffix}").setLevel(_resolve_level(env_val))

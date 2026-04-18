@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -470,11 +471,21 @@ _PRODUCT_DISPLAY_NAME: dict[ProductType, str] = {
 }
 
 _PRODUCT_CAPABILITIES: dict[ProductType, ProductCapabilities] = {
-    ProductType.SPIA: ProductCapabilities(supports_economic_scenario=True, supports_monte_carlo=True),
-    ProductType.TERM_LIFE: ProductCapabilities(supports_economic_scenario=False, supports_monte_carlo=False),
-    ProductType.RILA: ProductCapabilities(supports_economic_scenario=True, supports_monte_carlo=True),
-    ProductType.WHOLE_LIFE: ProductCapabilities(supports_economic_scenario=False, supports_monte_carlo=False),
-    ProductType.VARIABLE_ANNUITY: ProductCapabilities(supports_economic_scenario=True, supports_monte_carlo=True),
+    ProductType.SPIA: ProductCapabilities(
+        supports_economic_scenario=True, supports_monte_carlo=True
+    ),
+    ProductType.TERM_LIFE: ProductCapabilities(
+        supports_economic_scenario=False, supports_monte_carlo=False
+    ),
+    ProductType.RILA: ProductCapabilities(
+        supports_economic_scenario=True, supports_monte_carlo=True
+    ),
+    ProductType.WHOLE_LIFE: ProductCapabilities(
+        supports_economic_scenario=False, supports_monte_carlo=False
+    ),
+    ProductType.VARIABLE_ANNUITY: ProductCapabilities(
+        supports_economic_scenario=True, supports_monte_carlo=True
+    ),
 }
 
 _PRODUCT_MORTALITY_MODE_OPTIONS: dict[ProductType, tuple[str, ...]] = {
@@ -558,9 +569,7 @@ def get_product_adapter(product_type: ProductType) -> ProductAdapter:
     """
     adapter = _PRODUCT_ADAPTERS.get(product_type)
     if adapter is None:
-        raise NotImplementedError(
-            f"{_PRODUCT_DISPLAY_NAME[product_type]} is not implemented yet."
-        )
+        raise NotImplementedError(f"{_PRODUCT_DISPLAY_NAME[product_type]} is not implemented yet.")
     return adapter
 
 
@@ -574,7 +583,13 @@ def implemented_product_types() -> tuple[ProductType, ...]:
 
 
 def product_options_for_ui() -> list[ProductType]:
-    return [ProductType.SPIA, ProductType.TERM_LIFE, ProductType.RILA, ProductType.WHOLE_LIFE, ProductType.VARIABLE_ANNUITY]
+    return [
+        ProductType.SPIA,
+        ProductType.TERM_LIFE,
+        ProductType.RILA,
+        ProductType.WHOLE_LIFE,
+        ProductType.VARIABLE_ANNUITY,
+    ]
 
 
 def product_label(product_type: ProductType) -> str:
@@ -605,7 +620,9 @@ def _spia_pricing_metrics(result: Any) -> tuple[PricingMetric, ...]:
     return (
         PricingMetric(label="Single premium", value=float(result.single_premium), is_money=True),
         PricingMetric(label="PV benefit", value=float(result.pv_benefit), is_money=True),
-        PricingMetric(label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True),
+        PricingMetric(
+            label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True
+        ),
         PricingMetric(label="Annuity factor", value=float(result.annuity_factor), is_money=False),
     )
 
@@ -614,7 +631,9 @@ def _rila_pricing_metrics(result: Any) -> tuple[PricingMetric, ...]:
     return (
         PricingMetric(label="Single premium", value=float(result.single_premium), is_money=True),
         PricingMetric(label="PV benefit (claims)", value=float(result.pv_benefit), is_money=True),
-        PricingMetric(label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True),
+        PricingMetric(
+            label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True
+        ),
         PricingMetric(label="Annuity factor", value=float(result.annuity_factor), is_money=False),
     )
 

@@ -223,9 +223,7 @@ def build_rila(*, with_alm: bool = False, label: str = "rila") -> Path:
         alm_snap = alm_excel_snapshot_from_result(
             alm_result, asm, initial_asset_market_value=float(res.single_premium)
         )
-        raw = build_rila_workbook_from_spec(
-            spec, alm_assumptions=asm, alm_snapshot=alm_snap
-        )
+        raw = build_rila_workbook_from_spec(spec, alm_assumptions=asm, alm_snapshot=alm_snap)
     else:
         raw = build_rila_workbook_from_spec(spec)
 

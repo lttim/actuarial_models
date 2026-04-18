@@ -55,8 +55,18 @@ _SPIA_ROWS: tuple[tuple[str, str, str, str], ...] = (
     ("Discount factor (DF)", "TOL_DF", "Dimensionless", ""),
     ("Reinvest amount (dmv)", "TOL_DOLLAR", "USD", ""),
     ("ModelCheck snapshot", "MODELCHECK_TOL", "USD", "Exact match required"),
-    ("Disinvest tie-break threshold (Excel)", "EXCEL_DISINVEST_THRESHOLD", "Dimensionless", "Half the inter-bucket epsilon"),
-    ("Per-bucket epsilon (Python / Excel)", "EXCEL_DISINVEST_EPSILON", "Dimensionless", "k * eps (Py) / (k+1) * eps (Excel)"),
+    (
+        "Disinvest tie-break threshold (Excel)",
+        "EXCEL_DISINVEST_THRESHOLD",
+        "Dimensionless",
+        "Half the inter-bucket epsilon",
+    ),
+    (
+        "Per-bucket epsilon (Python / Excel)",
+        "EXCEL_DISINVEST_EPSILON",
+        "Dimensionless",
+        "k * eps (Py) / (k+1) * eps (Excel)",
+    ),
 )
 
 _RILA_ROWS: tuple[tuple[str, str, str, str], ...] = (
@@ -133,7 +143,9 @@ def _process(path: Path, new_block: str, *, check: bool) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--check",
         action="store_true",

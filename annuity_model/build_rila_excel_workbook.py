@@ -77,15 +77,17 @@ def _fill_mortal_monthly_rpmp(
         age_start = issue_age + m_index * dt
         age_int = int(math.floor(age_start))
         calendar_year_start = valuation_year + 1 + (m_index // 12)
-        qxv = float(mort.qx_at_int_age_and_calendar_year(age_int=age_int, calendar_year=calendar_year_start))
-        ws_m.cell(row=r, column=1, value=f"=IF(ROW()-1>{_n_months_cell()},\"\",ROW()-1)")
+        qxv = float(
+            mort.qx_at_int_age_and_calendar_year(age_int=age_int, calendar_year=calendar_year_start)
+        )
+        ws_m.cell(row=r, column=1, value=f'=IF(ROW()-1>{_n_months_cell()},"",ROW()-1)')
         ws_m.cell(row=r, column=2, value=int(age_int))
         ws_m.cell(row=r, column=3, value=int(calendar_year_start))
         ws_m.cell(row=r, column=4, value=float(qxv))
     last_data = 1 + n_months
     last_cap = 1 + RILA_PROJ_MAX_ROWS
     for r in range(last_data + 1, last_cap + 1):
-        ws_m.cell(row=r, column=1, value=f"=IF(ROW()-1>{_n_months_cell()},\"\",ROW()-1)")
+        ws_m.cell(row=r, column=1, value=f'=IF(ROW()-1>{_n_months_cell()},"",ROW()-1)')
         for c in (2, 3, 4):
             ws_m.cell(row=r, column=c, value="")
 
@@ -109,9 +111,9 @@ def _survival_end_formula(
     qx_e = _qx_lookup_expr(acell, mode)
     p_m = f"EXP(-(-LN(1-{qx_e}))/12)"
     if r == first_row:
-        return f"=IF({acell}=\"\",\"\",{p_m})"
+        return f'=IF({acell}="","",{p_m})'
     prev = f"D{r-1}"
-    return f"=IF({acell}=\"\",\"\",{prev}*{p_m})"
+    return f'=IF({acell}="","",{prev}*{p_m})'
 
 
 @dataclass(frozen=True)
@@ -180,7 +182,9 @@ def build_rila_workbook_from_spec(
         mortality=spec.mortality,
         horizon_age=spec.horizon_age,
         spread=spec.spread,
-        valuation_year=spec.valuation_year if not isinstance(spec.mortality, sp.MortalityTableQx) else None,
+        valuation_year=(
+            spec.valuation_year if not isinstance(spec.mortality, sp.MortalityTableQx) else None
+        ),
         expenses=spec.expenses,
         index_s0=s0_py,
         index_levels_payment=levels_py,
@@ -323,28 +327,30 @@ def build_rila_workbook_from_spec(
 
     for r in range(first, last_cap_row + 1):
         a = f"A{r}"
-        ws_pr.cell(row=r, column=1, value=f"=IF(ROW()-3>{nm_ref},\"\",ROW()-3)")
+        ws_pr.cell(row=r, column=1, value=f'=IF(ROW()-3>{nm_ref},"",ROW()-3)')
         ws_pr.cell(row=r, column=2, value=f"=IF({a}=\"\",\"\",{a}/{_in_addr('B', _IN_ROW_FREQ)})")
-        ws_pr.cell(row=r, column=3, value=f"=IF({a}=\"\",\"\",{_in_addr('B', _IN_ROW_ISSUE_AGE)}+({a}-1)/{_in_addr('B', _IN_ROW_FREQ)})")
+        ws_pr.cell(
+            row=r,
+            column=3,
+            value=f"=IF({a}=\"\",\"\",{_in_addr('B', _IN_ROW_ISSUE_AGE)}+({a}-1)/{_in_addr('B', _IN_ROW_FREQ)})",
+        )
         ws_pr.cell(row=r, column=4, value=_survival_end_formula(r, a, mort_mode, first_row=first))
         if r == first:
-            d_surv_start = f"=IF({a}=\"\",\"\",1)"
+            d_surv_start = f'=IF({a}="","",1)'
         else:
-            d_surv_start = f"=IF({a}=\"\",\"\",D{r-1})"
+            d_surv_start = f'=IF({a}="","",D{r-1})'
         ws_pr.cell(row=r, column=5, value=d_surv_start)
-        ws_pr.cell(row=r, column=6, value=f"=IF({a}=\"\",\"\",MAX(0,MIN(1,E{r}-D{r})))")
+        ws_pr.cell(row=r, column=6, value=f'=IF({a}="","",MAX(0,MIN(1,E{r}-D{r})))')
         ws_pr.cell(
             row=r,
             column=7,
-            value=(
-                f"=IF({a}=\"\",\"\",IFERROR(INDEX({idx_b},MATCH({a},{idx_a},0)),\"\"))"
-            ),
+            value=(f'=IF({a}="","",IFERROR(INDEX({idx_b},MATCH({a},{idx_a},0)),""))'),
         )
         ws_pr.cell(
             row=r,
             column=8,
             value=(
-                f"=IF({a}=\"\",\"\",IF(AND({a}>=12,MOD({a},12)=0),"
+                f'=IF({a}="","",IF(AND({a}>=12,MOD({a},12)=0),'
                 f"IFERROR(INDEX({idx_b},MATCH({a},{idx_a},0))/INDEX({idx_b},MATCH({a}-12,{idx_a},0))-1,0),0))"
             ),
         )
@@ -352,31 +358,29 @@ def build_rila_workbook_from_spec(
             row=r,
             column=9,
             value=(
-                f"=IF({a}=\"\",\"\",IF(AND({a}>=12,MOD({a},12)=0),"
+                f'=IF({a}="","",IF(AND({a}>=12,MOD({a},12)=0),'
                 f"MAX({fl},MIN({cap},{part}*H{r})),0))"
             ),
         )
         ws_pr.cell(
             row=r,
             column=10,
-            value=(
-                f"=IF({a}=\"\",\"\","
-                f"(IF({a}=1,{prem},J{r-1})*(1+I{r}))*(1-{rider}/12))"
-            ),
+            value=(f'=IF({a}="","",' f"(IF({a}=1,{prem},J{r-1})*(1+I{r}))*(1-{rider}/12))"),
         )
-        ws_pr.cell(row=r, column=11, value=f"=IF({a}=\"\",0,F{r}*J{r})")
+        ws_pr.cell(row=r, column=11, value=f'=IF({a}="",0,F{r}*J{r})')
         ws_pr.cell(
             row=r,
             column=12,
-            value=(
-                f"=IF({a}=\"\",0,{exp_m}*"
-                f"POWER(1+((1+{exp_if})^(1/12)-1),{a}-1)*D{r})"
-            ),
+            value=(f'=IF({a}="",0,{exp_m}*' f"POWER(1+((1+{exp_if})^(1/12)-1),{a}-1)*D{r})"),
         )
-        ws_pr.cell(row=r, column=13, value=f"=IF({a}=\"\",0,K{r}+L{r})")
-        ws_pr.cell(row=r, column=15, value=f"=IF({a}=\"\",\"\",IFERROR(INDEX({mc_ref},MATCH({a},{RECALC_MONTHLY_CURVE_SHEET}!$A:$A,0)),\"\"))")
-        ws_pr.cell(row=r, column=16, value=f"=IF({a}=\"\",0,K{r}*O{r})")
-        ws_pr.cell(row=r, column=17, value=f"=IF({a}=\"\",0,L{r}*O{r})")
+        ws_pr.cell(row=r, column=13, value=f'=IF({a}="",0,K{r}+L{r})')
+        ws_pr.cell(
+            row=r,
+            column=15,
+            value=f'=IF({a}="","",IFERROR(INDEX({mc_ref},MATCH({a},{RECALC_MONTHLY_CURVE_SHEET}!$A:$A,0)),""))',
+        )
+        ws_pr.cell(row=r, column=16, value=f'=IF({a}="",0,K{r}*O{r})')
+        ws_pr.cell(row=r, column=17, value=f'=IF({a}="",0,L{r}*O{r})')
 
     money_cols = (7, 8, 9, 10, 11, 12, 13, 16, 17)
     for r in range(first, last_cap_row + 1):
@@ -432,8 +436,18 @@ def build_rila_workbook_from_spec(
     )
     rila_rows: list[tuple[str, float, str, str]] = [
         ("PV benefits", float(res.pv_benefit), f"={LIABILITY_SHEET_NAME}!X4", "money"),
-        ("PV monthly expenses", float(res.pv_monthly_expenses), f"={LIABILITY_SHEET_NAME}!X5", "money"),
-        ("PV monthly total (ben+exp)", float(res.pv_benefit + res.pv_monthly_expenses), f"={LIABILITY_SHEET_NAME}!X7", "money"),
+        (
+            "PV monthly expenses",
+            float(res.pv_monthly_expenses),
+            f"={LIABILITY_SHEET_NAME}!X5",
+            "money",
+        ),
+        (
+            "PV monthly total (ben+exp)",
+            float(res.pv_benefit + res.pv_monthly_expenses),
+            f"={LIABILITY_SHEET_NAME}!X7",
+            "money",
+        ),
         ("Single premium", float(res.single_premium), f"={LIABILITY_SHEET_NAME}!X8", "money"),
         ("Annuity factor", float(res.annuity_factor), f"={LIABILITY_SHEET_NAME}!X6", "factor"),
     ]

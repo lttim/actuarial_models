@@ -179,8 +179,12 @@ def build_run_form_seed_defaults(
         "run_valuation_year": int(saved_inputs.get("valuation_year", 2025)),
         "run_spread": float(saved_inputs.get("spread", 0.0)),
         "run_use_index": bool(saved_inputs.get("use_index", True)),
-        "run_index_csv": str(saved_inputs.get("index_scenario_csv_path") or sp.DEFAULT_SP500_SCENARIO_CSV),
-        "run_expense_inflation_pct": float(saved_inputs.get("expense_annual_inflation", 0.025) * 100.0),
+        "run_index_csv": str(
+            saved_inputs.get("index_scenario_csv_path") or sp.DEFAULT_SP500_SCENARIO_CSV
+        ),
+        "run_expense_inflation_pct": float(
+            saved_inputs.get("expense_annual_inflation", 0.025) * 100.0
+        ),
         "run_mc_enable": bool(saved_inputs.get("mc_enabled", True)),
         "run_mc_n_sims": int(saved_inputs.get("mc_n_sims", 100)),
         "run_mc_seed": int(saved_inputs.get("mc_seed", 42)),
@@ -189,16 +193,22 @@ def build_run_form_seed_defaults(
         "run_mc_s0": float(saved_inputs.get("mc_s0", 100.0)),
         "run_qx_csv": _nonblank_str(saved_inputs, "mortality_qx_csv", sp.DEFAULT_MORTALITY_QX_CSV),
         "run_rp_xlsx": _nonblank_str(saved_inputs, "mortality_rp_xlsx", sp.DEFAULT_RP2014_XLSX),
-        "run_rp_out": _nonblank_str(saved_inputs, "mortality_rp_out_csv", sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV),
+        "run_rp_out": _nonblank_str(
+            saved_inputs, "mortality_rp_out_csv", sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV
+        ),
         "run_mp_xlsx": _nonblank_str(saved_inputs, "mortality_mp_xlsx", sp.DEFAULT_MP2016_XLSX),
-        "run_mp_out": _nonblank_str(saved_inputs, "mortality_mp_out_csv", sp.DEFAULT_MP2016_MALE_IMPROVEMENT_CSV),
+        "run_mp_out": _nonblank_str(
+            saved_inputs, "mortality_mp_out_csv", sp.DEFAULT_MP2016_MALE_IMPROVEMENT_CSV
+        ),
         # Separate keys per product; fallbacks match historical expander defaults.
         "run_spia_benefit_annual": float(saved_inputs.get("benefit_annual", 100_000.0)),
         "run_term_benefit_annual": float(
             saved_inputs.get("benefit_annual", term_ui.default_death_benefit)
         ),
         "run_term_length": str(saved_inputs.get("term_length", term_ui.term_length_options[0])),
-        "run_term_premium_mode": str(saved_inputs.get("term_premium_mode", term_ui.premium_mode_options[0])),
+        "run_term_premium_mode": str(
+            saved_inputs.get("term_premium_mode", term_ui.premium_mode_options[0])
+        ),
         "run_term_benefit_timing": str(
             saved_inputs.get("term_benefit_timing", term_ui.benefit_timing_options[0])
         ),

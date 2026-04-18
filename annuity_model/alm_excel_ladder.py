@@ -40,10 +40,7 @@ def _excel_df_flat(*, t_cell: str, y_last_row: int, spread_ref: str = "Inputs!$B
     hi = f"INDEX({ya},({br})+1)"
     zlo = f"INDEX({zb},{br})"
     zhi = f"INDEX({zb},({br})+1)"
-    w = (
-        f"IF(ABS(({hi})-({lo}))<1E-15,0,"
-        f"(({t_cell})-({lo}))/MAX(ABS(({hi})-({lo})),1E-15))"
-    )
+    w = f"IF(ABS(({hi})-({lo}))<1E-15,0," f"(({t_cell})-({lo}))/MAX(ABS(({hi})-({lo})),1E-15))"
     ldf_lo = f"(-(({zlo})+{sp})*({lo}))"
     ldf_hi = f"(-(({zhi})+{sp})*({hi}))"
     ldf_mid = f"({ldf_lo})+({w})*((({ldf_hi})-({ldf_lo})))"
@@ -132,18 +129,33 @@ def write_alm_engine_sheet(
     ws.merge_cells("A2:J2")
 
     ws["A5"], ws["B5"] = "Initial AUM ($)", float(initial_aum)
-    ws["A7"], ws["B7"] = "Borrow: 1=scenario-linked rate, 0=fixed annual", int(
-        1 if asm.borrowing_rate_mode == "scenario_linked" else 0
+    ws["A7"], ws["B7"] = (
+        "Borrow: 1=scenario-linked rate, 0=fixed annual",
+        int(1 if asm.borrowing_rate_mode == "scenario_linked" else 0),
     )
     ws["A8"], ws["B8"] = (
         "Tenor (y) if scenario / fixed annual borrow rate (dec.)",
-        float(asm.borrowing_rate_tenor_years if asm.borrowing_rate_mode == "scenario_linked" else asm.borrowing_rate_annual),
+        float(
+            asm.borrowing_rate_tenor_years
+            if asm.borrowing_rate_mode == "scenario_linked"
+            else asm.borrowing_rate_annual
+        ),
     )
-    ws["A9"], ws["B9"] = "Borrow spread (dec.) if scenario-linked", float(asm.borrowing_spread_annual)
-    ws["A10"], ws["B10"] = "1 = borrow before selling", int(1 if asm.borrowing_policy == "borrow_before_selling" else 0)
-    ws["A11"], ws["B11"] = "1 = reinvest maturities pro_rata", int(1 if asm.reinvest_rule == "pro_rata" else 0)
-    ws["A12"], ws["B12"] = "1 = disinvest shortest tenor first; 0 = pro_rata MV", int(
-        1 if asm.disinvest_rule == "shortest_first" else 0
+    ws["A9"], ws["B9"] = (
+        "Borrow spread (dec.) if scenario-linked",
+        float(asm.borrowing_spread_annual),
+    )
+    ws["A10"], ws["B10"] = (
+        "1 = borrow before selling",
+        int(1 if asm.borrowing_policy == "borrow_before_selling" else 0),
+    )
+    ws["A11"], ws["B11"] = (
+        "1 = reinvest maturities pro_rata",
+        int(1 if asm.reinvest_rule == "pro_rata" else 0),
+    )
+    ws["A12"], ws["B12"] = (
+        "1 = disinvest shortest tenor first; 0 = pro_rata MV",
+        int(1 if asm.disinvest_rule == "shortest_first" else 0),
     )
 
     df_borrow = _excel_df_flat(t_cell="$B$8", y_last_row=y_last_row, spread_ref=yc_spread)
@@ -574,11 +586,7 @@ def write_alm_engine_sheet(
         debt_p = f"IF(ROW()={R0},0,{_L(de_c)}{rp})"
         cash_p = f"IF(ROW()={R0},$B$15*$B$5,{_L(ca_c)}{rp})"
         face_p = [
-            (
-                f"$B${WBASE + k}*$B$5/$F${WBASE + k}"
-                if i == 0
-                else f"{_L(fe[k])}{rp}"
-            )
+            (f"$B${WBASE + k}*$B$5/$F${WBASE + k}" if i == 0 else f"{_L(fe[k])}{rp}")
             for k in range(nb)
         ]
         trem_p = [f"$E${WBASE + k}" if i == 0 else f"{_L(te[k])}{rp}" for k in range(nb)]

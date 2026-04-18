@@ -1,6 +1,6 @@
 # RILA parity contract (Python ↔ Excel)
 
-**Version:** 1.0  
+**Version:** 1.0
 **Applies to:** `rila_projection.py` and `build_rila_excel_workbook.py` / liability sheet formulas.
 
 This addendum sits beside `model_parity_contract.md` (SPIA ALM ladder). RILA parity covers **liability pricing and cashflows** on the liability sheet plus `ModelCheck` aggregates. When a RILA workbook includes `ALM_Projection`, SPIA ALM parity rules apply to those sheets unchanged.

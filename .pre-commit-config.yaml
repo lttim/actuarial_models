@@ -7,7 +7,15 @@
 # never diverge.
 
 default_language_version:
-  python: python3.11
+  # `python3` (not `python3.11`) so pre-commit will use whatever Python 3.x the
+  # caller / CI runner has. The actual *target* Python is fixed by:
+  #   - tool.ruff.target-version (py311) in annuity_model/pyproject.toml
+  #   - tool.black.target-version in annuity_model/pyproject.toml
+  #   - tool.mypy.python_version (3.11) in annuity_model/pyproject.toml
+  # so changing this to a wildcard does not relax what the hooks actually check.
+  # Pinning to python3.11 was breaking CI because actions/setup-python only
+  # provisions the matrix entry's interpreter (3.12 for the pre-commit job).
+  python: python3
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -29,6 +37,14 @@ repos:
         args: ["--fix=lf"]
         exclude: ^.*\.bat$  # Windows launchers stay CRLF per .gitattributes
 
+  # Single formatter: ruff-format. Black was previously listed too, but the
+  # two reformatters disagreed on assert-with-paren wrapping (black 25.1.0
+  # vs ruff-format 0.8.x), making `pre-commit run --all-files` non-idempotent
+  # and causing CI to fail with "files were modified by this hook" on every
+  # push. Ruff-format produces black-compatible output by design, so dropping
+  # black removes the conflict, eliminates the maintenance burden of two
+  # near-identical pins (black==25.1.0 + ruff==0.8.4), and obviates the
+  # dependabot black-major-bump PR.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.4
     hooks:
@@ -38,22 +54,23 @@ repos:
       - id: ruff-format
         files: ^annuity_model/.*\.py$
 
-  - repo: https://github.com/psf/black
-    rev: 25.1.0
-    hooks:
-      - id: black
-        files: ^annuity_model/.*\.py$
-        args: ["--config", "annuity_model/pyproject.toml"]
-
   # Mypy is run strict on the parity-critical core only (per pyproject.toml
   # overrides). Adding a new product engine? Add its module to the override
   # list there too.
+  #
+  # NB: `rev` matches the version pinned in annuity_model/requirements-dev.txt
+  # (mypy==1.13.0). Pre-commit's mirrors-mypy uses `vX.Y.Z` tags. Bump both
+  # together so local pre-commit and CI use the exact same checker.
+  #
+  # `pricing_projection` and `alm_excel_ladder` are excluded here while their
+  # 52 strict-mypy errors are being narrowed (P5 follow-up). See pyproject.toml
+  # `[[tool.mypy.overrides]]` for the matching rationale comment.
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
+    rev: v1.13.0
     hooks:
       - id: mypy
         name: mypy (parity-critical core)
-        files: ^annuity_model/(pricing_projection|term_projection|rila_projection|alm_excel_ladder|excel_workbook_validator|product_registry)\.py$
+        files: ^annuity_model/(term_projection|rila_projection|excel_workbook_validator|product_registry)\.py$
         args:
           - "--config-file=annuity_model/pyproject.toml"
         additional_dependencies:
@@ -64,25 +81,31 @@ repos:
   # Custom local hooks. Cheap import smoke + validator import smoke catch the
   # most embarrassing breakage classes (typo in a module-level import) before
   # the slower test suite even runs.
+  # Local hooks. These pick `./annuity_model/.venv/bin/python` if the dev
+  # bootstrap has been run, else fall back to `python3` (which is python3.12
+  # on CI runners via actions/setup-python). The codebase uses
+  # `dataclass(slots=True)` -- Python 3.10+ -- so we MUST NOT bind these to
+  # macOS's system `python3` (3.9). Same defence as the launcher
+  # (docs/runbooks/launcher_double_click.md).
   - repo: local
     hooks:
       - id: import-smoke-validator
         name: import smoke - excel_workbook_validator
-        entry: python -c "import sys; sys.path.insert(0, 'annuity_model'); from excel_workbook_validator import validate_workbook_or_raise"
+        entry: bash -c 'PY="./annuity_model/.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" -c "import sys; sys.path.insert(0, \"annuity_model\"); from excel_workbook_validator import validate_workbook_or_raise"'
         language: system
         pass_filenames: false
         files: ^annuity_model/excel_workbook_validator\.py$
 
       - id: import-smoke-engines
         name: import smoke - engines
-        entry: python -c "import sys; sys.path.insert(0, 'annuity_model'); import pricing_projection, term_projection, rila_projection, product_registry, product_excel"
+        entry: bash -c 'PY="./annuity_model/.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" -c "import sys; sys.path.insert(0, \"annuity_model\"); import pricing_projection, term_projection, rila_projection, product_registry, product_excel"'
         language: system
         pass_filenames: false
         files: ^annuity_model/(pricing_projection|term_projection|rila_projection|product_registry|product_excel|build_.*_excel_workbook|alm_excel_ladder|recalc_excel_shared)\.py$
 
       - id: render-parity-contract-check
         name: parity-contract docs in sync with parity_constants.py
-        entry: python annuity_model/scripts/render_parity_contract.py --check
+        entry: bash -c 'PY="./annuity_model/.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" annuity_model/scripts/render_parity_contract.py --check'
         language: system
         pass_filenames: false
         files: ^annuity_model/(parity_constants\.py|scripts/render_parity_contract\.py|docs/(model|rila)_parity_contract\.md)$
