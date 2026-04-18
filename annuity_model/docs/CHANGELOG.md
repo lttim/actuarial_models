@@ -69,6 +69,33 @@ ALM rules, RILA crediting) MUST also be logged in
   All 4 canonical gates remain green; only `alm_excel_ladder.py` is left in
   the strict-excluded list, scheduled for Wave 2.2.
 
+- **Strict mypy restored on `alm_excel_ladder.py`** (Wave 2.2 of phase-5
+  hardening). Added back to the strict override in
+  `annuity_model/pyproject.toml` and to the pre-commit `mypy` files
+  pattern. The 37 strict errors were resolved by:
+  - Introducing two narrow column accessors --
+    `Ci(name) -> int` and `Cl(name) -> list[int]` -- inside
+    `write_alm_engine_sheet` that wrap the existing `C()` registry. `C()`
+    returns `int | list[int]` (scalar columns vs per-bond column slices),
+    which forced every call site to cast or `isinstance`-check. The new
+    helpers fail-fast at runtime with a clear `RuntimeError` if a column
+    name resolves to the wrong shape, and let mypy --strict type-check the
+    ~30 affected `ws.cell(..., column=Ci("..."))` calls without per-callsite
+    casts.
+  - Annotating the `ws` parameter as
+    `openpyxl.worksheet.worksheet.Worksheet`. Untyped earlier because
+    openpyxl's stubs were spotty -- `types-openpyxl` (already pinned for
+    `excel_workbook_validator`) covers it now.
+  - Replacing two inline `lambda i, d=di: ...` closures (used to capture the
+    disinvestment-pass index `di` per loop iteration) with named factory
+    helpers `_fd_header_for(d)` / `_fd_gloss_for(d)`. The default-arg
+    closure idiom is a Python pattern for capturing loop variables but
+    mypy cannot annotate `d=di` defaults inside lambdas, so this is a pure
+    typing-driven refactor with identical runtime behavior.
+  All 4 canonical gates remain green. The strict mypy override list now
+  covers every parity-critical engine and builder module; the next strict
+  expansion will come with the `src/` layout migration in Wave 3.3.
+
 - **Quarterly recurring check** for the parked runtime Excel recalc gate.
   `annuity_model/docs/runbooks/runtime_excel_recalc_gate.md` now carries
   a "Recurring quarterly check" section with three concrete `pip install

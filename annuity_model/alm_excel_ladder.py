@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import numpy as np
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.worksheet import Worksheet
 
 import pricing_projection as sp
 
@@ -64,8 +65,28 @@ class ALMEngineLayout:
     field_guide_rows: tuple[tuple[str, str, str], ...]
 
 
+def _fd_header_for(d: int) -> Callable[[int], str]:
+    # Factory used in place of `lambda i, d=d: ...` so mypy can infer the
+    # parameter type. The default-arg trick is a Python idiom for capturing
+    # the loop variable but mypy cannot annotate lambda defaults.
+    def header(i: int) -> str:
+        return f"Pass {d + 1}: bond {i + 1} face ($)"
+
+    return header
+
+
+def _fd_gloss_for(d: int) -> Callable[[int], str]:
+    def gloss(i: int) -> str:
+        return (
+            f"Face remaining in bucket {i + 1} after disinvestment pass {d + 1}; "
+            f"extra passes support pro-rata peels."
+        )
+
+    return gloss
+
+
 def write_alm_engine_sheet(
-    ws,
+    ws: Worksheet,
     *,
     period_end_months_1based: list[int],
     n_projection_months: int,
@@ -426,11 +447,8 @@ def write_alm_engine_sheet(
             taken(
                 f"fd{di}",
                 nb,
-                lambda i, d=di: f"Pass {d + 1}: bond {i + 1} face ($)",
-                lambda i, d=di: (
-                    f"Face remaining in bucket {i + 1} after disinvestment pass {d + 1}; "
-                    f"extra passes support pro-rata peels."
-                ),
+                _fd_header_for(di),
+                _fd_gloss_for(di),
             )
         )
 
@@ -514,6 +532,22 @@ def write_alm_engine_sheet(
     def C(name: str) -> int | list[int]:
         return col[name]
 
+    # Strongly-typed accessors so the engine body type-checks under mypy
+    # --strict without per-callsite casts. Each fail-fast at runtime if a
+    # name resolves to the wrong shape (i.e. caller assumed scalar but it's
+    # a per-bond list, or vice versa).
+    def Ci(name: str) -> int:
+        v = col[name]
+        if not isinstance(v, int):
+            raise RuntimeError(f"column {name!r} is a list, not a scalar int")
+        return v
+
+    def Cl(name: str) -> list[int]:
+        v = col[name]
+        if not isinstance(v, list):
+            raise RuntimeError(f"column {name!r} is a scalar int, not a list")
+        return v
+
     field_guide_rows = tuple(
         (get_column_letter(cc), hdr_by_col[cc], col_gloss[cc]) for cc in range(1, last_col + 1)
     )
@@ -541,9 +575,7 @@ def write_alm_engine_sheet(
     ws.row_dimensions[engine_hdr_row].height = 44
     for cc in range(1, last_col + 1):
         ws.column_dimensions[get_column_letter(cc)].width = 10.5
-    tpm_cols = C("t_pm")
-    if not isinstance(tpm_cols, list):
-        raise RuntimeError("t_pm")
+    tpm_cols = Cl("t_pm")
     last_fd = col[f"fd{n_dis - 1}"]
     if not isinstance(last_fd, list):
         raise RuntimeError("fd")
@@ -555,11 +587,11 @@ def write_alm_engine_sheet(
     R0 = engine_data_first_row
     WBASE = w_row0
     n_periods = len(period_end_months_1based)
-    mon_c = int(C("mon"))
-    cf_i = int(C("cf"))
+    mon_c = Ci("mon")
+    cf_i = Ci("cf")
     if variable_period:
-        m0_c = int(C("m0"))
-        dt_c = int(C("dt_y"))
+        m0_c = Ci("m0")
+        dt_c = Ci("dt_y")
 
     for i in range(n_periods):
         r = R0 + i
@@ -583,13 +615,11 @@ def write_alm_engine_sheet(
                 value=f"=INDEX({sh}!${liab_cf_col}:${liab_cf_col},3+{_L(mon_c)}{r})",
             )
 
-        d_acc = int(C("d_acc"))
-        de_c = int(C("de_e"))
-        ca_c = int(C("ca_e"))
-        fe = C("fe")
-        te = C("te")
-        if not isinstance(fe, list) or not isinstance(te, list):
-            raise RuntimeError("bad fe/te")
+        d_acc = Ci("d_acc")
+        de_c = Ci("de_e")
+        ca_c = Ci("ca_e")
+        fe = Cl("fe")
+        te = Cl("te")
 
         debt_p = f"IF(ROW()={R0},0,{_L(de_c)}{rp})"
         cash_p = f"IF(ROW()={R0},$B$15*$B$5,{_L(ca_c)}{rp})"
@@ -622,12 +652,12 @@ def write_alm_engine_sheet(
             Tk = f"{_L(t_pm[k])}{r}"
             ws.cell(row=r, column=f_pm[k], value=f"=IF(AND({fk}>1E-9,{Tk}<=1E-9),0,{fk})")
 
-        cash_m = int(C("cash_m"))
+        cash_m = Ci("cash_m")
         ws.cell(row=r, column=cash_m, value=f"=({cash_p})+({msum})")
 
-        rep1 = int(C("rep1"))
-        cash_r1 = int(C("cash_r1"))
-        debt_r1 = int(C("debt_r1"))
+        rep1 = Ci("rep1")
+        cash_r1 = Ci("cash_r1")
+        debt_r1 = Ci("debt_r1")
         ws.cell(row=r, column=rep1, value=f"=MIN({_L(cash_m)}{r},{_L(d_acc)}{r})")
         ws.cell(row=r, column=cash_r1, value=f"={_L(cash_m)}{r}-{_L(rep1)}{r}")
         ws.cell(row=r, column=debt_r1, value=f"={_L(d_acc)}{r}-{_L(rep1)}{r}")
@@ -645,11 +675,11 @@ def write_alm_engine_sheet(
         for k in range(nb):
             ws.cell(row=r, column=mv_pm[k], value=f"={_L(f_pm[k])}{r}*{_L(df_pm[k])}{r}")
 
-        aum_re = int(C("aum_re"))
+        aum_re = Ci("aum_re")
         mv_sum = "+".join(f"{_L(mv_pm[k])}{r}" for k in range(nb))
         ws.cell(row=r, column=aum_re, value=f"={_L(cash_r1)}{r}+{mv_sum}")
 
-        xsr = int(C("xsr"))
+        xsr = Ci("xsr")
         ws.cell(row=r, column=xsr, value=f"={_L(cash_r1)}{r}-$B$15*{_L(aum_re)}{r}")
 
         for k in range(nb):
@@ -658,7 +688,7 @@ def write_alm_engine_sheet(
                 column=defc[k],
                 value=f"=MAX(0,$B${WBASE + k}*{_L(aum_re)}{r}-{_L(mv_pm[k])}{r})",
             )
-        dsum_i = int(C("dsum"))
+        dsum_i = Ci("dsum")
         ds = "+".join(f"{_L(defc[j])}{r}" for j in range(nb))
         ws.cell(row=r, column=dsum_i, value=f"={ds}")
 
@@ -684,7 +714,7 @@ def write_alm_engine_sheet(
                 ),
             )
 
-        cash_re = int(C("cash_re"))
+        cash_re = Ci("cash_re")
         dmv_sum = "+".join(f"{_L(dmv[j])}{r}" for j in range(nb))
         ws.cell(
             row=r,
@@ -718,9 +748,7 @@ def write_alm_engine_sheet(
                 ),
             )
 
-        dfd_cols = C("dfd")
-        if not isinstance(dfd_cols, list):
-            raise RuntimeError("dfd")
+        dfd_cols = Cl("dfd")
         for k in range(nb):
             ws.cell(
                 row=r,
@@ -728,15 +756,15 @@ def write_alm_engine_sheet(
                 value=f"={_excel_df_flat(t_cell=f'{_L(t_re[k])}{r}', y_last_row=y_last_row, spread_ref=yc_spread)}",
             )
 
-        ccf = int(C("cash_cf"))
+        ccf = Ci("cash_cf")
         ws.cell(row=r, column=ccf, value=f"={_L(cash_re)}{r}-{_L(cf_i)}{r}")
 
-        need_raw = int(C("need_raw"))
+        need_raw = Ci("need_raw")
         ws.cell(row=r, column=need_raw, value=f"=MAX(0,-{_L(ccf)}{r})")
 
-        c_bb = int(C("cash_bb"))
-        d_bb = int(C("debt_bb"))
-        need_dis = int(C("need_dis"))
+        c_bb = Ci("cash_bb")
+        d_bb = Ci("debt_bb")
+        need_dis = Ci("need_dis")
         ws.cell(
             row=r,
             column=c_bb,
@@ -789,16 +817,16 @@ def write_alm_engine_sheet(
 
         last_fk = dis_face[-1]
         last_cc = dis_cash[-1]
-        c_pd = int(C("cash_pd"))
-        d_pb = int(C("debt_pb"))
+        c_pd = Ci("cash_pd")
+        d_pb = Ci("debt_pb")
         ws.cell(row=r, column=c_pd, value=f"={_L(last_cc)}{r}")
         ws.cell(row=r, column=d_pb, value=f"={_L(d_bb)}{r}")
 
-        need_b2 = int(C("need_b2"))
+        need_b2 = Ci("need_b2")
         ws.cell(row=r, column=need_b2, value=f"=MAX(0,-{_L(c_pd)}{r})")
 
-        c_br2 = int(C("cash_br2"))
-        d_br2 = int(C("debt_br2"))
+        c_br2 = Ci("cash_br2")
+        d_br2 = Ci("debt_br2")
         ws.cell(
             row=r,
             column=c_br2,
@@ -810,9 +838,9 @@ def write_alm_engine_sheet(
             value=f"=IF(AND($B$10=0,{_L(need_b2)}{r}>0),{_L(d_pb)}{r}+{_L(need_b2)}{r},{_L(d_pb)}{r})",
         )
 
-        rep2 = int(C("rep2"))
-        cash_af2 = int(C("cash_af2"))
-        debt_af2 = int(C("debt_af2"))
+        rep2 = Ci("rep2")
+        cash_af2 = Ci("cash_af2")
+        debt_af2 = Ci("debt_af2")
         ws.cell(row=r, column=rep2, value=f"=MIN({_L(c_br2)}{r},{_L(d_br2)}{r})")
         ws.cell(row=r, column=cash_af2, value=f"={_L(c_br2)}{r}-{_L(rep2)}{r}")
         ws.cell(row=r, column=debt_af2, value=f"={_L(d_br2)}{r}-{_L(rep2)}{r}")
@@ -823,10 +851,8 @@ def write_alm_engine_sheet(
         ws.cell(row=r, column=ca_c, value=f"={_L(cash_af2)}{r}")
         for k in range(nb):
             ws.cell(row=r, column=te[k], value=f"={tref[k]}")
-        mv0 = int(C("mv0"))
-        mvb = C("mvb")
-        if not isinstance(mvb, list):
-            raise RuntimeError("mvb")
+        mv0 = Ci("mv0")
+        mvb = Cl("mvb")
         ws.cell(row=r, column=mv0, value=f"={_L(ca_c)}{r}")
         for k in range(nb):
             ws.cell(
@@ -836,15 +862,13 @@ def write_alm_engine_sheet(
             )
 
     last_r = R0 + n_periods - 1
-    mvb_l = C("mvb")
-    if not isinstance(mvb_l, list):
-        raise RuntimeError("mvb")
+    mvb_l = Cl("mvb")
     return ALMEngineLayout(
         first_data_row=R0,
         last_data_row=last_r,
-        col_mv_cash=int(C("mv0")),
-        col_mv_bond_start=int(mvb_l[0]),
-        col_debt_eom=int(C("de_e")),
+        col_mv_cash=Ci("mv0"),
+        col_mv_bond_start=mvb_l[0],
+        col_debt_eom=Ci("de_e"),
         n_bonds=nb,
         field_guide_rows=field_guide_rows,
     )
