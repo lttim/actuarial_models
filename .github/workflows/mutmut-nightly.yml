@@ -1,0 +1,112 @@
+name: mutmut (nightly mutation test)
+
+# Non-blocking nightly mutation pilot per P5 Wave 6.1. mutmut runs
+# against the parity-critical engine modules and uploads the survivors
+# report as a build artifact so we can review them at leisure. We
+# DELIBERATELY don't fail the workflow on surviving mutants -- the goal
+# at this stage is to gather a baseline, not to gate. Once the baseline
+# stabilises (Wave 6.2 + post-Wave-4 coverage ratchet), the
+# `continue-on-error: true` lines below come off and survivor count
+# becomes a hard gate.
+
+on:
+  schedule:
+    # 04:00 UTC daily. Picked to land before the European workday so a
+    # red badge is the first thing the maintainer sees.
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutmut:
+    name: mutmut (engine modules)
+    runs-on: ubuntu-latest
+    # Mutation testing is slow (one re-run of the test suite per mutant).
+    # 60min ceiling protects against a runaway expansion if someone adds
+    # a giant module to the mutation surface. Bump alongside the surface.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install runtime + dev dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r annuity_model/requirements.lock -r annuity_model/requirements-dev.txt
+
+      - name: Configure mutmut surface
+        # Generated inline (not committed) so the surface lives next to
+        # the rationale comment below. Keep this list in lockstep with
+        # the strict-mypy override in annuity_model/pyproject.toml --
+        # both lists answer the same question ("what is parity-critical
+        # core?"), and a divergence almost always means someone forgot
+        # to add a new engine to one of the two.
+        working-directory: annuity_model
+        run: |
+          cat > mutmut_config.py <<'PY'
+          # Mutate only the parity-critical engines + the workbook
+          # builders that produce the parity-protected outputs. Excluded:
+          #   - pricing_ui.py (Streamlit -- too thin to mutate
+          #     usefully without an AppTest harness).
+          #   - tests/, scripts/ (mutation in tests is meaningless).
+          #   - data_registry.py (declarations only -- mutmut would
+          #     rewrite the sha256 strings and we'd "kill" every
+          #     mutation via the registry sha256 invariant test, which
+          #     pads survivor counts but adds no real signal).
+          paths_to_mutate = [
+              "pricing_projection.py",
+              "term_projection.py",
+              "rila_projection.py",
+              "alm_excel_ladder.py",
+              "build_pricing_excel_workbook.py",
+              "build_rila_excel_workbook.py",
+              "build_term_excel_workbook.py",
+              "excel_workbook_validator.py",
+              "product_excel.py",
+              "product_registry.py",
+          ]
+          tests_dir = "tests"
+          # Use the parity gate as the hot loop -- it's the fastest
+          # high-signal subset (~1.1s vs ~9s for the full suite) and a
+          # mutation that survives the parity gate but dies on a unit
+          # test is almost always a real coverage gap (we want to find
+          # those).
+          runner = "python -m pytest tests/parity -q --no-header -x"
+          PY
+
+      - name: Run mutmut
+        # continue-on-error so survivors don't fail the nightly. The
+        # uploaded artifact is what we review; once the survivor count
+        # is stable + acceptable (Wave 6.2), this flag comes off and
+        # mutmut becomes a hard gate.
+        continue-on-error: true
+        working-directory: annuity_model
+        run: mutmut run
+
+      - name: Generate survivor report
+        if: always()
+        continue-on-error: true
+        working-directory: annuity_model
+        run: |
+          mutmut results > mutmut-results.txt
+          echo "=== Top 50 surviving mutants ===" >> mutmut-results.txt
+          mutmut results | head -50 >> mutmut-results.txt
+          # Cache file holds the per-mutant SQL state mutmut uses for
+          # incremental reruns; useful for local triage.
+          ls -la .mutmut-cache 2>/dev/null || true
+
+      - name: Upload mutmut artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutmut-nightly-${{ github.run_id }}
+          path: |
+            annuity_model/mutmut-results.txt
+            annuity_model/.mutmut-cache
+          retention-days: 14
+          if-no-files-found: warn

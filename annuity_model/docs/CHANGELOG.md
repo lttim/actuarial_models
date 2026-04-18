@@ -69,6 +69,34 @@ ALM rules, RILA crediting) MUST also be logged in
   All 4 canonical gates remain green; only `alm_excel_ladder.py` is left in
   the strict-excluded list, scheduled for Wave 2.2.
 
+- **Nightly mutmut mutation-test workflow** (Wave 6.1 of phase-5
+  hardening). New `.github/workflows/mutmut-nightly.yml` runs `mutmut
+  run` against the parity-critical engines + workbook builders every
+  night at 04:00 UTC and uploads the survivor report as a 14-day
+  artifact.
+  - Mutation surface is declared inline in the workflow (generated
+    `mutmut_config.py`) and intentionally mirrors the strict-mypy
+    override in `pyproject.toml`: `pricing_projection`, `term_projection`,
+    `rila_projection`, `alm_excel_ladder`, `build_pricing_excel_workbook`,
+    `build_rila_excel_workbook`, `build_term_excel_workbook`,
+    `excel_workbook_validator`, `product_excel`, `product_registry`.
+    Excluded: `pricing_ui` (no AppTest harness yet -- post-Wave-4
+    follow-up), `data_registry` (mutating the sha256 strings would be
+    killed by the registry invariant test for free, which pads survivor
+    counts without signal).
+  - mutmut's hot-loop runner is `pytest tests/parity -q -x` (~1.1s)
+    rather than the full suite (~9s); a mutation that survives the
+    parity gate but dies on a unit test is almost always a real
+    coverage gap, which is what we want to surface.
+  - `continue-on-error: true` on both `mutmut run` and the report step
+    keeps the nightly non-blocking. After ~2 weeks of baseline data
+    + the post-Wave-4 coverage ratchet, both flags come off and
+    surviving-mutant count becomes a hard gate (tracked as a Wave 6.2
+    follow-up).
+  - 60-minute job timeout protects against runaway expansion if a
+    new engine is added to the surface without a corresponding
+    timeout bump.
+
 - **Versioned data-artifacts registry** (Wave 3.2 of phase-5 hardening).
   New `annuity_model/data_registry.py` is now the single source of truth
   for every CSV consumed by the engines and builders. Each artifact has a
@@ -177,6 +205,70 @@ ALM rules, RILA crediting) MUST also be logged in
   end of 2026-Q2.
 
 ### Deferred
+- **Wave 4 (decompose `pricing_ui.py` into `ui/pages/*`)** is carried
+  over to a dedicated multi-PR sequence. `pricing_ui.py` is **4,455
+  lines / 49 top-level functions** today and is the only place
+  Streamlit `st.session_state` keys are minted. The migration plan in
+  `annuity_model/ui/MIGRATION.md` (already in repo) explicitly
+  prescribes **one page per PR** with Streamlit-test coverage between
+  each step -- that rhythm cannot be compressed into a single direct-
+  to-main commit while keeping the all-4-gates-green invariant alive.
+
+  Why "all at once" is unsafe: the only existing tests that exercise
+  the UI pages are `tests/test_pricing_ui_state_normalization.py` (135
+  tests, all session-state oriented) and the launcher invariants. Page
+  renderers themselves (`_render_overview`, `_render_pricing_run`,
+  `_render_what_if`, `_render_excel_replicator`, `_render_alm`,
+  `_render_unit_tests`) have no smoke coverage today; a regression in a
+  moved page would only surface when the user clicks it in Streamlit.
+
+  Migration sequencing for the follow-up PRs (do these in order so
+  back-compat aliases shrink monotonically):
+  1. Move `_render_overview` -> `ui/pages/overview.py`. Add a one-line
+     re-export in `pricing_ui.py` so `from pricing_ui import
+     _render_overview` keeps working until the last page lands. Run
+     all 4 gates + manual `streamlit run pricing_ui.py` smoke.
+  2. Repeat for `_render_pricing_run` (largest, uses `pricing_run_form_state`).
+  3. `_render_what_if` (depends on the same form state).
+  4. `_render_excel_replicator` (export-then-recompute is parity-
+     critical -- run a full deep_smoke on the moved page).
+  5. `_render_alm` (long projection visualisation, slow Streamlit
+     re-renders).
+  6. `_render_unit_tests` (in-app pytest runner; lowest blast radius).
+  7. Move helpers (`_render_metric`, `_render_chart`, ...) to
+     `ui/widgets/<feature>.py`.
+  8. Rename `pricing_run_form_state.py -> ui/forms/run_form_state.py`
+     in a separate commit (touches imports across all pages).
+  9. Move `main` + sidebar nav to `ui/app.py`. Delete
+     `pricing_ui.py` entirely; update launchers and CI to point at
+     `ui.app:main` (this last step is also where Wave 3.3's
+     `[project.scripts]` entry for `annuity-pricing-ui` lands).
+
+  The Wave 4 final step (coverage ratchet from 55% toward 75%) is also
+  deferred until the move completes, because the new `ui/pages/*`
+  modules become testable via `streamlit.testing.v1.AppTest` only after
+  they're factored out -- ratcheting against the current monolithic
+  `pricing_ui.py` would force a fragile import-time mock just to bump
+  the gate.
+
+- **Wave 5 (FastAPI wrapper + batch CLI)** is deferred. The plan calls
+  for a thin REST + CLI surface around `PricingProjection.run` and
+  `build_product_workbook` with `httpx.TestClient` round-trip tests and
+  a click-based batch runner. Doing this safely needs the Wave 3.3
+  packaging foundation (so the FastAPI app can import
+  `annuity_model.product_excel.build_product_workbook` cleanly) and the
+  Wave 4 UI decomposition (so the FastAPI handlers and the Streamlit
+  pages share a single business-logic adapter rather than reaching
+  through the monolithic `pricing_ui` for what's effectively
+  presentation code). Once Waves 3.3 and 4 land, Wave 5 is
+  ~150-200 LOC of routing + 1 batch CLI script + ~10 round-trip tests.
+
+- **Wave 6.2 (final coverage ratchet to 75%)** is deferred behind Wave
+  4 -- ratchets larger than ~5pp at a time tend to force test-shaped
+  hacks that don't catch real regressions. The Wave 4 follow-up PRs
+  will each ratchet by 1-2pp as their pages become testable, ending
+  at the 75% target naturally.
+
 - **Wave 3.3 (src/ layout + buildable wheel + `[project.scripts]`)** is
   carried over to a dedicated follow-up commit because the three pieces
   cannot land safely without each other in the current layout. Today
