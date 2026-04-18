@@ -1,0 +1,27 @@
+{
+  "_comment": "Branch protection profile for `main`. Apply with: gh api -X PUT repos/:owner/:repo/branches/main/protection --input .github/branch-protection.json. See annuity_model/docs/CHANGELOG.md (Wave 7) for the rationale and the second-CODEOWNER upgrade path. Keep the contexts list in lockstep with the job names in .github/workflows/ -- if you rename a job here, rename it there in the same PR, otherwise PRs will hang forever waiting on a status that never reports.",
+  "required_status_checks": {
+    "strict": true,
+    "contexts": [
+      "tests (ubuntu-latest / py3.12)",
+      "tests (ubuntu-latest / py3.11)",
+      "tests (macos-14 / py3.12)",
+      "tests (macos-14 / py3.11)",
+      "tests (windows-latest / py3.12)",
+      "tests (windows-latest / py3.11)",
+      "pre-commit (lint + format + mypy)",
+      "docker build + deep_smoke in container",
+      "build-and-deploy"
+    ]
+  },
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null,
+  "required_linear_history": true,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "required_conversation_resolution": true,
+  "lock_branch": false,
+  "allow_fork_syncing": false,
+  "block_creations": false
+}

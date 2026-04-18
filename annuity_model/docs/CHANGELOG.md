@@ -10,6 +10,56 @@ ALM rules, RILA crediting) MUST also be logged in
 
 ## [Unreleased]
 
+### Security / Governance
+- **Branch protection enabled on `main`** (P5 Wave 7, terminal step of the
+  Phase-5 hardening sweep -- direct-to-main commits stop here). Configured
+  via the GitHub branch-protection API with the following profile:
+  - `required_status_checks.strict = true` -- branches must be up to date
+    with `main` before merge, and the following CI contexts must all pass:
+    - `tests (ubuntu-latest / py3.12)` (carries the parity gate)
+    - `tests (ubuntu-latest / py3.11)`
+    - `tests (macos-14 / py3.12)`
+    - `tests (macos-14 / py3.11)`
+    - `tests (windows-latest / py3.12)`
+    - `tests (windows-latest / py3.11)`
+    - `pre-commit (lint + format + mypy)`
+    - `docker build + deep_smoke in container`
+    - `build-and-deploy` (mkdocs strict build + Pages deploy)
+  - `required_linear_history = true` -- merges must squash or rebase; no
+    merge commits cluttering the audit trail.
+  - `allow_force_pushes = false`, `allow_deletions = false` -- the parity
+    history can't be rewritten or deleted.
+  - `required_conversation_resolution = true` -- review threads must be
+    resolved before merge (catches the "I'll address that later" pattern).
+  - `enforce_admins = false` -- the solo CODEOWNER retains a fire escape
+    for genuine emergencies (e.g. a CI provider outage that's blocking a
+    security fix). Every admin override MUST be backfilled with a
+    follow-up PR + post-mortem entry; this is documented expectation, not
+    a technical gate, until the second CODEOWNER lands (Wave 1.5
+    deferral).
+  - `required_pull_request_reviews = null` -- NOT required because the
+    repo currently has a single CODEOWNER. GitHub blocks self-approval,
+    so requiring reviews on a one-owner repo creates an unbreakable
+    deadlock. When the second CODEOWNER lands, flip this to
+    `{required_approving_review_count: 1, require_code_owner_reviews:
+    true, dismiss_stale_reviews: true}` -- the JSON template is below.
+  Apply / refresh / inspect:
+  ```
+  # Inspect current rules
+  gh api repos/:owner/:repo/branches/main/protection
+  # Update (overwrites; idempotent)
+  gh api -X PUT repos/:owner/:repo/branches/main/protection \
+    --input .github/branch-protection.json
+  # Disable (only for emergency, e.g. moving CI workflows)
+  gh api -X DELETE repos/:owner/:repo/branches/main/protection
+  ```
+  When required check NAMES change (e.g. matrix expansion, new gate),
+  the protection JSON must be updated in the SAME PR that ships the
+  workflow change -- otherwise PRs sit forever waiting on a context
+  that no longer reports. The current required-context list is
+  authoritative; CI workflows MUST keep these job names stable or
+  update the protection list in lockstep.
+
 ### Fixed
 - **Dockerfile base image digest** was a placeholder (`sha256:3d77c6a4...`).
   `docker build .` failed with `manifest unknown`. Replaced with the real
