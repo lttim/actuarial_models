@@ -15,6 +15,7 @@ from openpyxl.chart import BarChart, Reference
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
+import data_registry
 import pricing_projection as sp
 from alm_excel_ladder import ALM_ENGINE_SHEET, write_alm_engine_sheet
 from recalc_excel_shared import write_monthly_curve_logdf as _write_monthly_curve_logdf_sheet
@@ -1213,10 +1214,12 @@ def build_workbook_from_spec(
 
 
 def _load_default_csv_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    yc = pd.read_csv(BASE_DIR / "treasury_zero_rate_curve_latest.csv")
-    rp = pd.read_csv(BASE_DIR / "rp2014_male_healthy_annuitant_qx_2014.csv")
-    mp = pd.read_csv(BASE_DIR / "mp2016_male_improvement_rates.csv")
-    exp = pd.read_csv(BASE_DIR / "expenses_assumptions_us_placeholders.csv")
+    # Resolve through the data registry so the on-disk path
+    # (data/<kind>/<as_of>/<basename>) only lives in one place.
+    yc = pd.read_csv(data_registry.get_artifact("treasury_zero_curve").path)
+    rp = pd.read_csv(data_registry.get_artifact("rp2014_male_healthy_annuitant_qx").path)
+    mp = pd.read_csv(data_registry.get_artifact("mp2016_male_improvement_rates").path)
+    exp = pd.read_csv(data_registry.get_artifact("expenses_assumptions_us_placeholders").path)
     return yc, rp, mp, exp
 
 
@@ -1239,7 +1242,7 @@ def build_workbook(out_path: Path | None = None) -> Path:
     yc, rp, mp, exp = _load_default_csv_data()
     pol, prem, monthly_ex = _expenses_from_placeholder_csv(exp)
     n_m = _n_months_for_contract(65, 110)
-    scen_path = BASE_DIR / "sp500_scenario_projection_monthly.csv"
+    scen_path = data_registry.get_artifact("sp500_scenario_monthly_seed_baseline").path
     try:
         s0, lv = sp.load_index_scenario_monthly_csv(str(scen_path), n_months=n_m)
     except FileNotFoundError:

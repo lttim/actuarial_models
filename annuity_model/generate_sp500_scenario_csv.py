@@ -2,8 +2,13 @@
 Generate a synthetic monthly S&P 500 *proxy* index path for SPIA scenario CSV.
 
 This is illustrative only (geometric random walk), not an official index print.
-Usage:
-    python generate_sp500_scenario_csv.py --months 600 --out sp500_scenario_projection_monthly.csv
+Usage (writes to a NEW versioned slot under data/index_scenarios; the
+default seed_baseline scenario lives under
+data/index_scenarios/sp500_seed_baseline/ and is sha256-locked by
+data_registry):
+
+    python generate_sp500_scenario_csv.py --months 600 \
+        --out data/index_scenarios/<new_label>/sp500_scenario_projection_monthly.csv
 """
 
 from __future__ import annotations
@@ -42,7 +47,18 @@ def main() -> None:
         default=600,
         help="Max month index in CSV = this value (rows month=0..months); 600 covers 50y e.g. age 60→110",
     )
-    p.add_argument("--out", type=Path, default=Path("sp500_scenario_projection_monthly.csv"))
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=Path(
+            "data/index_scenarios/sp500_seed_baseline/sp500_scenario_projection_monthly.csv"
+        ),
+        help=(
+            "Output path. Overwriting the seed_baseline file will trip the "
+            "data_registry sha256 invariant -- intentional, refresh by writing "
+            "to a new data/index_scenarios/<new_label>/ folder."
+        ),
+    )
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--s0", type=float, default=5000.0)
     args = p.parse_args()

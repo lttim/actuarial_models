@@ -55,15 +55,23 @@ _log = get_logger(__name__)
 Compounding = Literal["continuous"]
 
 
-DEFAULT_ZERO_CURVE_CSV = "treasury_zero_rate_curve_latest.csv"
-DEFAULT_PAR_CURVE_CSV = "treasury_par_yield_curve_latest.csv"
+# DEFAULT_*_CSV resolve through data_registry so the on-disk layout
+# (versioned: data/<kind>/<as_of>/<basename>) lives in exactly one place.
+# Callers that just want "the cached default" keep the same import; callers
+# that want the registry metadata (sha256, source attribution, version
+# label) should import from data_registry directly. See
+# data_registry.REGISTRY for the canonical catalog.
+from data_registry import path_str as _data_path
+
+DEFAULT_ZERO_CURVE_CSV = _data_path("treasury_zero_curve")
+DEFAULT_PAR_CURVE_CSV = _data_path("treasury_par_curve")
 DEFAULT_MORTALITY_QX_CSV = "rp2014_male_annuitant_qx.csv"
 DEFAULT_RP2014_XLSX = "rp2014_mort_tab_rates_exposure.xlsx"
 DEFAULT_MP2016_XLSX = "mp2016_rates.xlsx"
-DEFAULT_RP2014_MALE_HEALTHY_QX_CSV = "rp2014_male_healthy_annuitant_qx_2014.csv"
-DEFAULT_MP2016_MALE_IMPROVEMENT_CSV = "mp2016_male_improvement_rates.csv"
-DEFAULT_EXPENSES_CSV = "expenses_assumptions_us_placeholders.csv"
-DEFAULT_SP500_SCENARIO_CSV = "sp500_scenario_projection_monthly.csv"
+DEFAULT_RP2014_MALE_HEALTHY_QX_CSV = _data_path("rp2014_male_healthy_annuitant_qx")
+DEFAULT_MP2016_MALE_IMPROVEMENT_CSV = _data_path("mp2016_male_improvement_rates")
+DEFAULT_EXPENSES_CSV = _data_path("expenses_assumptions_us_placeholders")
+DEFAULT_SP500_SCENARIO_CSV = _data_path("sp500_scenario_monthly_seed_baseline")
 
 
 def load_index_scenario_monthly_csv(

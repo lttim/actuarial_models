@@ -69,6 +69,56 @@ ALM rules, RILA crediting) MUST also be logged in
   All 4 canonical gates remain green; only `alm_excel_ladder.py` is left in
   the strict-excluded list, scheduled for Wave 2.2.
 
+- **Versioned data-artifacts registry** (Wave 3.2 of phase-5 hardening).
+  New `annuity_model/data_registry.py` is now the single source of truth
+  for every CSV consumed by the engines and builders. Each artifact has a
+  declared `kind`, `version`, `relative_path`, `sha256`, and `source`
+  attribution string, exposed via a frozen `DataArtifact` dataclass and
+  catalogued in `data_registry.REGISTRY`.
+
+  On-disk layout moved from flat basenames in `annuity_model/` to
+  `annuity_model/data/<kind>/<version>/<basename>`:
+  - `data/yield_curves/2026-03-20/treasury_zero_rate_curve.csv`
+  - `data/yield_curves/2026-03-20/treasury_par_yield_curve.csv`
+  - `data/mortality/rp2014/rp2014_male_healthy_annuitant_qx_2014.csv`
+  - `data/mortality/mp2016/mp2016_male_improvement_rates.csv`
+  - `data/expenses/us_placeholders/expenses_assumptions_us_placeholders.csv`
+  - `data/index_scenarios/sp500_seed_baseline/sp500_scenario_projection_monthly.csv`
+
+  The 6 `pricing_projection.DEFAULT_*_CSV` constants now resolve through
+  `data_registry.path_str(...)` so existing call sites
+  (`pd.read_csv(DEFAULT_*_CSV)`) keep working without filesystem layout
+  knowledge. Hardcoded paths in `build_pricing_excel_workbook.py`,
+  `illustrate_pricing_projection.py`, `tests/test_rila_projection.py`,
+  and `generate_sp500_scenario_csv.py` were rewritten to go through the
+  registry.
+
+  New invariant test `tests/test_data_registry_invariants.py` (8 tests,
+  marked `invariant`) locks the registry contract:
+  - Every artifact exists at its declared path (catches stale
+    `relative_path` after a `git mv`).
+  - **Every artifact's on-disk bytes match the declared sha256.** This
+    is the parity-critical safety net: in-place edits to a yield curve
+    or mortality table will fail CI on the next run, forcing the
+    editor to either roll back or move the file to a new
+    `data/<kind>/<new_version>/` folder with a CHANGELOG entry.
+  - `DEFAULT_*_CSV` constants in `pricing_projection` resolve through
+    the registry (catches future bypasses where someone reintroduces
+    a hardcoded basename).
+  - Names are unique, paths are absolute, `relative_path` matches
+    `kind`/`version`, `get_artifact("totally_fake")` raises
+    `KeyError` with the list of known names.
+
+  Refresh procedure (when a yield-curve snapshot is updated, etc.):
+  1. Drop the new file under `data/<kind>/<new_version>/<basename>`.
+  2. Add a new `DataArtifact` entry to `REGISTRY` (or replace the old
+     one if the version label was bumped intentionally).
+  3. Run `pytest tests/test_data_registry_invariants.py` -- the
+     failure message includes the actual sha256 to paste into the
+     entry.
+  4. Add a CHANGELOG entry under `[Unreleased] -> Changed` documenting
+     the source of the new snapshot.
+
 - **`@register_builder` decorator pattern** for `build_product_workbook`
   (Wave 3.1 of phase-5 hardening). Replaces the ~30-line if/elif chain
   in `annuity_model/product_excel.py` with a `ProductType -> builder`

@@ -153,11 +153,9 @@ def test_pricing_infeasible_raises_with_loading_details():
     ages = np.arange(0, 121, dtype=int)
     qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
     mort = sp.MortalityTableQx(ages, qx)
-    ex = sp.ExpenseAssumptions.load_from_csv("expenses_assumptions_us_placeholders.csv")
+    ex = sp.ExpenseAssumptions.load_from_csv(sp.DEFAULT_EXPENSES_CSV)
     levels = np.asarray(
-        sp.load_index_scenario_monthly_csv("sp500_scenario_projection_monthly.csv", n_months=540)[
-            1
-        ],
+        sp.load_index_scenario_monthly_csv(sp.DEFAULT_SP500_SCENARIO_CSV, n_months=540)[1],
         dtype=float,
     )
     with pytest.raises(rp.RILAPricingInfeasibleError) as excinfo:

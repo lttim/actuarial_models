@@ -93,7 +93,14 @@ def main() -> None:
     valuation_year = 2025
     expense_annual_inflation = float(args.expense_inflation_pct) / 100.0
 
-    zero_curve_csv = "treasury_zero_rate_curve_latest.csv"
+    # Use the registry paths so the illustration script picks up the
+    # versioned snapshots (data/<kind>/<as_of>/<basename>) without each
+    # caller hardcoding the layout. ensure_*_csv writes to the same
+    # registry location -- safe because the registry test invariants
+    # will trip if a refresh produces a different file.
+    import data_registry as _dr
+
+    zero_curve_csv = _dr.path_str("treasury_zero_curve")
     rp2014_xlsx = "rp2014_mort_tab_rates_exposure.xlsx"
     mp2016_xlsx = "mp2016_rates.xlsx"
 
@@ -103,11 +110,11 @@ def main() -> None:
     yc = YieldCurve.load_zero_curve_csv(zero_curve_csv)
     base_qx = ensure_rp2014_male_healthy_annuitant_qx_csv(
         rp2014_xlsx_path=rp2014_xlsx,
-        out_csv_path="rp2014_male_healthy_annuitant_qx_2014.csv",
+        out_csv_path=_dr.path_str("rp2014_male_healthy_annuitant_qx"),
     )
     mp_ages, mp_years, mp_i = ensure_mp2016_male_improvement_csv(
         mp2016_xlsx_path=mp2016_xlsx,
-        out_csv_path="mp2016_male_improvement_rates.csv",
+        out_csv_path=_dr.path_str("mp2016_male_improvement_rates"),
     )
     mortality = MortalityTableRP2014MP2016(
         base_qx_2014=base_qx,
