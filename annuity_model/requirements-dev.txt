@@ -22,7 +22,7 @@ pymdown-extensions==10.21.2
 # Property tests + perf gates + mutation pilot (P4)
 hypothesis==6.152.1
 pytest-benchmark==5.2.3
-pytest-cov==6.0.0
+pytest-cov==7.1.0
 mutmut==3.5.0
 
 # Runtime-Excel parity (P4 -- xlcalculator-based recalc gate)
