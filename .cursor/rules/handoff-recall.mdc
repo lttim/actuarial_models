@@ -1,0 +1,146 @@
+---
+description: !handoff and !recall protocol for transferring chat context across agent sessions
+alwaysApply: true
+---
+
+# Chat Handoff Protocol (`!handoff` / `!recall`)
+
+When the user types a message that begins with (or consists solely of) `!handoff`
+or `!recall`, treat it as a command and follow this protocol exactly. Do not
+treat these tokens as natural-language input.
+
+Storage location: `.cursor/handoffs/` at the workspace root.
+Filename format: `YYYY-MM-DD-HHMMSS-<slug>.md` (UTC, sortable).
+
+---
+
+## `!handoff` — save the current chat for a future session
+
+Trigger forms:
+- `!handoff` — auto-generate a slug from the task
+- `!handoff <slug>` — use the user-provided slug (kebab-case, e.g. `parity-bugfix`)
+
+Steps:
+
+1. Compute a UTC timestamp via the shell: `date -u +%Y-%m-%d-%H%M%S`.
+2. Pick a short slug (kebab-case, ≤6 words) describing the task. If the user
+   supplied one, use it verbatim.
+3. Write a new file at `.cursor/handoffs/<timestamp>-<slug>.md` using the
+   **Handoff Document Template** below. Fill in every section honestly from
+   the actual conversation — do not invent content.
+4. Confirm to the user with the filename and a one-line summary of what was
+   captured. Example:
+
+   > Saved handoff to `.cursor/handoffs/2026-04-18-203015-parity-bugfix.md`
+   > (12 files referenced, 3 open questions).
+
+5. Do nothing else unless the user asks. The handoff is the deliverable.
+
+### Handoff Document Template
+
+```markdown
+# Handoff: <slug>
+
+- **Saved:** <ISO 8601 UTC timestamp>
+- **Workspace:** <repo root path>
+- **Branch / commit:** <`git branch --show-current` / `git rev-parse --short HEAD`>
+- **Model context (best guess):** <e.g. "approaching limit" / "mid-task">
+
+## 1. Original goal
+What the user originally asked for, in their own framing if possible.
+
+## 2. Current status
+One paragraph: what is done, what is in-flight, what is blocked.
+
+## 3. Decisions made
+Bullet list of non-obvious choices and *why* (trade-offs, constraints,
+rejected alternatives). Skip trivia.
+
+## 4. Files touched
+Table of files created / edited / deleted with a one-line "what changed".
+Use repo-relative paths.
+
+| Path | Change | Notes |
+|------|--------|-------|
+| `path/to/file.py` | edited | Added retry logic to `fetch_quote()` |
+
+## 5. Key commands run
+Only commands whose results matter for continuity (tests, migrations,
+builds). Skip `ls` / `cat` noise. Include exit status and any salient
+output.
+
+## 6. Open questions / TODO
+Numbered list. Each item should be actionable by a fresh agent with no
+prior context.
+
+## 7. Next concrete step
+A single sentence: the very next thing the new chat should do.
+
+## 8. Gotchas / context the new chat will not have
+Anything you learned the hard way: failing tests that turned out to be
+flaky, env quirks, rules consulted, files that look relevant but aren't,
+etc.
+
+## 9. Relevant rules / docs consulted
+Bullet list with paths (e.g. `annuity_model/AGENTS.md`,
+`.cursor/rules/actuarial-parity.mdc`).
+```
+
+---
+
+## `!recall` — load a prior handoff into the current chat
+
+Trigger forms:
+- `!recall` — load the most recent handoff (newest filename wins)
+- `!recall list` — list all available handoffs, newest first, with slug + saved date
+- `!recall <substring>` — load the newest handoff whose filename contains `<substring>`
+- `!recall <full-filename>` — load that exact file
+
+Steps:
+
+1. List `.cursor/handoffs/*.md`. If empty, tell the user "No handoffs found"
+   and stop.
+2. For `list`: print a markdown table of `filename | slug | saved (UTC)` sorted
+   newest first, then stop.
+3. Otherwise resolve the target file:
+   - No arg → newest by filename sort.
+   - Arg → newest filename that contains the arg as a substring; if no match,
+     report it and stop.
+4. Read the file in full.
+5. Reply with this exact structure (do not skip any heading even if empty):
+
+   ```
+   ## Recalled handoff: <filename>
+
+   **Goal:** <one line from §1>
+   **Status:** <one line from §2>
+   **Next step:** <verbatim from §7>
+
+   **Open items:**
+   - <bullet from §6>
+   - ...
+
+   **Gotchas to remember:**
+   - <bullet from §8>
+   - ...
+
+   I have the full handoff loaded. Ready to continue — confirm the next step
+   above or tell me what to adjust.
+   ```
+
+6. Wait for the user's confirmation before taking any further action. Do not
+   start editing files just because a handoff was recalled.
+
+---
+
+## Operating rules
+
+- The handoff file is the source of truth for cross-chat continuity. Treat it
+  as a deliverable: precise, no filler, no hallucinated file paths.
+- Never overwrite an existing handoff file. If the slug collides, append `-2`,
+  `-3`, etc.
+- Never auto-trigger `!handoff` or `!recall`. They run only when the user
+  types the command.
+- Handoff files are personal session artifacts and are git-ignored by default.
+- If the user is in a subagent or read-only mode and `!handoff` is requested,
+  explain that write access is needed and ask them to switch modes.

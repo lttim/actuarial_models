@@ -63,3 +63,8 @@ $RECYCLE.BIN/
 
 # --- Streamlit local secrets ---
 .streamlit/secrets.toml
+
+# --- Cursor chat handoffs (personal session artifacts) ---
+# The protocol rule and README are tracked; the generated handoffs are not.
+.cursor/handoffs/*.md
+!.cursor/handoffs/README.md
