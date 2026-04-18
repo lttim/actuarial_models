@@ -1,12 +1,31 @@
 # CODEOWNERS for Code_Sandbox.
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 #
-# Branch protection on `main` should require a review from the matching owner
-# below for every PR. Today the repo is solo-owned (@lttim); when the team
-# grows, replace @lttim with the appropriate team handle (e.g. @org/actuary).
+# Branch protection on `main` requires a review from the matching owner below
+# for every PR.
+#
+# == Solo-owner status (2026-04) ==
+# Today the repo is solo-owned by @lttim. The phase-5 backlog called for
+# adding a second human/team CODEOWNER so branch protection on `main` can
+# require a real second-pair-of-eyes review (otherwise self-review of every
+# parity-critical change is unenforceable). This is BLOCKED on a real second
+# reviewer existing -- it cannot be solved by editing this file alone.
+#
+# Two extension hooks are in place for the moment that's no longer true:
+#
+#   1. The placeholder team handle `@lttim/actuarial-reviewers` is documented
+#      below as a commented TODO. The day a second human/team reviewer is
+#      onboarded, uncomment those lines, create the team in GitHub with that
+#      slug, and add the new member(s); branch protection's "require review
+#      from CODEOWNERS" rule will then transparently start enforcing
+#      second-pair-of-eyes on every parity-critical PR.
+#
+#   2. annuity_model/docs/CODEOWNERS_RATIONALE.md tracks WHY each path is
+#      flagged so the second owner has context day one.
 
 # --- Default owner for everything ---
 * @lttim
+# TODO(second-owner): * @lttim @lttim/actuarial-reviewers
 
 # --- Parity-critical actuarial surface ---
 # Any change to engine math, ALM ladder, or the Excel formula validator MUST
@@ -19,6 +38,9 @@
 /annuity_model/excel_workbook_validator.py      @lttim
 /annuity_model/product_registry.py              @lttim
 /annuity_model/parity_constants.py              @lttim
+# TODO(second-owner): once @lttim/actuarial-reviewers exists, append it to
+# every parity-critical line above so branch protection actually requires
+# a second actuarial signoff on engine / ladder / validator changes.
 
 # Excel builders write the workbook structure that the validator gates.
 /annuity_model/build_pricing_excel_workbook.py  @lttim

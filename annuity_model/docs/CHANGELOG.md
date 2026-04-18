@@ -37,6 +37,19 @@ ALM rules, RILA crediting) MUST also be logged in
   ruff 0.10 (2025-Q1) and ignoring it now produces a "rules have been
   removed" warning. Tuple-form `isinstance(x, (X, Y))` is no longer flagged.
 
+### Deferred
+- **2nd CODEOWNER not added (still solo-owned by `@lttim`).** Phase-5
+  backlog item to add a second human/team CODEOWNER cannot be solved by
+  editing `.github/CODEOWNERS` alone -- it requires a real second
+  reviewer to exist. Two extension hooks are now in place so that the day
+  a second reviewer is onboarded the change is one-line: a placeholder
+  team handle `@lttim/actuarial-reviewers` is documented as a commented
+  TODO in `.github/CODEOWNERS`, and the default-owner line plus every
+  parity-critical override has a `TODO(second-owner)` next to it. Branch
+  protection on `main` (Wave 7) will still be enabled with
+  `require_code_owner_reviews: true` so that the contract is in place when
+  the team grows.
+
 ### Changed
 - **Dependabot mkdocstrings major bump (PR #8 applied directly to main):**
   `mkdocstrings[python] 0.27.0 -> 1.0.4`. Verified `mkdocs build --strict`
