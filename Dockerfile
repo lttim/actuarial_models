@@ -8,7 +8,7 @@
 # Tests:  docker run --rm annuity-model pytest -q
 # Shell:  docker run --rm -it annuity-model bash
 
-FROM python:3.12-slim-bookworm@sha256:3d77c6a48fcde98dbef0d33f0b3e95e8fc5b0b5d9c7d6c7e9c2c0a2f4e6f8a1b
+FROM python:3.12-slim-bookworm@sha256:d97792894a6a4162cae14da44542a83c75e56c77a27b92d58f3f83b7bc961292
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

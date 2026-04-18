@@ -11,6 +11,22 @@ ALM rules, RILA crediting) MUST also be logged in
 ## [Unreleased]
 
 ### Fixed
+- **Dockerfile base image digest** was a placeholder (`sha256:3d77c6a4...`).
+  `docker build .` failed with `manifest unknown`. Replaced with the real
+  current digest for `python:3.12-slim-bookworm`
+  (`sha256:d97792894a6a4162cae14da44542a83c75e56c77a27b92d58f3f83b7bc961292`)
+  fetched from the Docker Hub registry API. CI now verifies the image
+  builds and runs `deep_smoke.py` + parity tests inside the container on
+  every push (new `docker` job in `.github/workflows/ci.yml`). Refresh
+  procedure is documented inline in the workflow.
+
+### Added
+- New `docker` CI job that builds the image and runs both `deep_smoke.py`
+  and the parity gate inside the container on every push to `main` and on
+  every PR. Catches drift between the host venv and the reproducible
+  container build (the latter is what auditors will reproduce).
+
+### Fixed
 - CI coverage gate: `--fail-under=85` was aspirational and CI never went
   green on it. Today's actual coverage is 59.6%, dominated by the 4103-LOC
   Streamlit `pricing_ui.py` which the current test suite cannot exercise.

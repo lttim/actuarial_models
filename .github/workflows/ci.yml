@@ -110,3 +110,29 @@ jobs:
         with:
           name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}
           path: annuity_model/coverage.xml
+
+  docker:
+    name: docker build + deep_smoke in container
+    needs: pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        # The Dockerfile pins python:3.12-slim-bookworm by digest. If this step
+        # fails with "manifest unknown" the digest in the FROM line is stale --
+        # refresh it via Docker Hub registry API and update both Dockerfile and
+        # this comment. Build context is the repo root because the Dockerfile
+        # COPYs from annuity_model/ and actuarial_parity_kit/.
+        run: docker build -t annuity-model:ci .
+      - name: Smoke (deep_smoke inside container)
+        # The default CMD is `python scripts/deep_smoke.py`, but make the
+        # invocation explicit so a future CMD change does not silently change
+        # what CI verifies.
+        run: docker run --rm annuity-model:ci python scripts/deep_smoke.py
+      - name: Parity tests inside container
+        # Belt-and-braces: also run the parity gate from inside the image so
+        # we catch the case where dev-deps installed but the runtime image is
+        # missing something the parity tests need.
+        run: docker run --rm annuity-model:ci python -m pytest tests/parity -q
