@@ -13,21 +13,25 @@ from openpyxl.styles import Font
 
 import pricing_projection as sp
 import term_projection as tp
-
-from build_pricing_excel_workbook import (
+from excel_builder_helpers import (
     ALM_ENGINE_STEP_MONTHS,
     ALM_EXCEL_PATH_MONTH_CAP,
     ALM_PROJECTION_FIRST_DATA_ROW,
+    LIABILITY_SHEET_NAME,
     ALMExcelSnapshot,
     ExcelPythonSnapshot,
-    LIABILITY_SHEET_NAME,
-    _write_alm_projection_sheet,
-    _write_model_check_sheet,
     alm_excel_downsample_snapshot,
     alm_excel_truncate_snapshot,
     inject_alm_projection_formula_cached_values,
+    liability_layout_for,
+    write_alm_projection_sheet,
+    write_model_check_sheet,
 )
-from recalc_excel_shared import RECALC_MONTHLY_CURVE_SHEET, write_monthly_curve_logdf, write_yield_curve_sheet
+from recalc_excel_shared import (
+    RECALC_MONTHLY_CURVE_SHEET,
+    write_monthly_curve_logdf,
+    write_yield_curve_sheet,
+)
 
 TERM_PROJ_MAX_ROWS = 600
 
@@ -324,7 +328,7 @@ def build_term_workbook_from_spec(
     ws_pr["W6"] = "Σ l_start · v (annuity-style factor)"
     ws_pr["X6"] = f"=SUMPRODUCT(E{first}:E{last_cap_row},O{first}:O{last_cap_row})"
     ws_pr["W7"] = "PV net (claims − premiums)"
-    ws_pr["X7"] = f"=X4-X5"
+    ws_pr["X7"] = "=X4-X5"
     ws_pr["W8"] = "Actuarial present value (pricing)"
     ws_pr["X8"] = "=X7"
     ws_pr["W9"] = "Reserve at t=0"
@@ -337,13 +341,19 @@ def build_term_workbook_from_spec(
             raise ValueError("alm_assumptions is required when alm_snapshot is provided.")
         alm_snap_for_book = alm_excel_downsample_snapshot(alm_snapshot, int(ALM_ENGINE_STEP_MONTHS))
         alm_snap_for_book = alm_excel_truncate_snapshot(alm_snap_for_book, ALM_EXCEL_PATH_MONTH_CAP)
-        alm_layout = _write_alm_projection_sheet(
+        # Liability column letters live in liability_layouts.LIABILITY_LAYOUTS;
+        # Term shares the SPIA layout (S / O) but reads it explicitly so that
+        # changes to LIABILITY_LAYOUTS propagate everywhere automatically.
+        _term_layout = liability_layout_for("term_life")
+        alm_layout = write_alm_projection_sheet(
             wb,
             alm_snap_for_book,
             alm_assumptions,
             n_months=int(res.months.shape[0]),
             y_last_row=int(y_last_row),
             engine_step_months=int(ALM_ENGINE_STEP_MONTHS),
+            liability_total_col=_term_layout.total_cf_col,
+            liability_discount_col=_term_layout.discount_col,
         )
 
     snap_py = ExcelPythonSnapshot(
@@ -361,7 +371,7 @@ def build_term_workbook_from_spec(
         ("Actuarial present value (pricing)", float(res.single_premium), f"={LIABILITY_SHEET_NAME}!X8", "money"),
         ("Σ survival start · discount (annuity-style factor)", float(res.annuity_factor), f"={LIABILITY_SHEET_NAME}!X6", "factor"),
     ]
-    _write_model_check_sheet(
+    write_model_check_sheet(
         wb,
         snap_py,
         alm_layout=alm_layout,
@@ -372,7 +382,9 @@ def build_term_workbook_from_spec(
             "Column B is the Python snapshot at export. Column C aggregates "
             f"{LIABILITY_SHEET_NAME} summary formulas; column D should be ~0 after a full recalc. "
             "Edit Inputs, YieldCurve, MonthlyCurve, and mortality tabs as for SPIA exports. "
-            f"ALM sheets mirror the SPIA workbook and link {LIABILITY_SHEET_NAME} column S (ExpTotalCF) and O (discount)."
+            f"ALM sheets mirror the SPIA workbook and link {LIABILITY_SHEET_NAME} columns "
+            f"{liability_layout_for('term_life').total_cf_col} (ExpTotalCF) and "
+            f"{liability_layout_for('term_life').discount_col} (discount)."
         ),
     )
 

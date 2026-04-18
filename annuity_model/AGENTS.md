@@ -9,15 +9,42 @@ Every code change must maintain zero-discrepancy between the Python ALM engine a
 generated Excel workbook. Read and follow `docs/model_parity_contract.md` before modifying
 any calculation logic.
 
-## Before completing any task
+## Before completing any task -- canonical gates
 
-```
-pytest tests/parity/ -v         # must all pass
-pytest tests/ -v                # must all pass
+> This block is the *single source of truth* for the "what do I run before
+> claiming a task is done?" question. Any other doc that needs to state these
+> gates (root `AGENTS.md`, `actuarial-parity.mdc`, `parity_test_checklist.md`,
+> `CONTRIBUTING.md`) MUST link here instead of restating.
+
+```bash
+# 1. Parity gate (blocks any merge on failure)
+python -m pytest tests/parity -q
+
+# 2. Full unit-test gate
+python -m pytest -q
+
+# 3. End-to-end smoke (3 products + full Excel validator)
+python scripts/deep_smoke.py
+
+# 4. Tolerance contract is in sync with parity_constants.py
+python scripts/render_parity_contract.py --check
 ```
 
-If a task changes Excel-generating code, also verify the `ModelCheck` sheet in a regenerated
-workbook shows 0.00 surplus difference.
+All four must exit 0.
+
+If a task changes Excel-generating code, ALSO open the regenerated workbook
+in Excel (or run `recalc_excel_shared.recalculate_workbook`) and verify the
+`ModelCheck` sheet shows 0.00 difference -- the parity tests load values
+from openpyxl and CANNOT see formula bugs that only surface on Excel
+recalc. Step-by-step recipe in
+[docs/runbooks/regenerate_excel_cache.md](docs/runbooks/regenerate_excel_cache.md).
+
+If parity fails, follow
+[docs/runbooks/investigate_parity_break.md](docs/runbooks/investigate_parity_break.md).
+If the validator fails, follow
+[docs/runbooks/debug_validator_failure.md](docs/runbooks/debug_validator_failure.md).
+**Never widen a tolerance to make a test pass.** Tolerance changes route
+through `parity_constants.py` plus `model_change_log.md`.
 
 ## Key files
 

@@ -1,0 +1,61 @@
+name: security
+
+on:
+  schedule:
+    # Mondays 06:00 UTC -- weekly supply-chain audit.
+    - cron: "0 6 * * 1"
+  pull_request:
+    branches: [main]
+    paths:
+      - "annuity_model/requirements*.txt"
+      - "annuity_model/requirements.lock"
+      - "annuity_model/pyproject.toml"
+      - ".github/workflows/security.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  pip-audit:
+    name: pip-audit (CVEs in pinned deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install pip-audit
+        run: |
+          pip install --upgrade pip
+          pip install pip-audit==2.7.3
+      - name: Audit runtime + dev locked dependencies
+        run: |
+          pip-audit --requirement annuity_model/requirements.lock --strict
+          pip-audit --requirement annuity_model/requirements-dev.txt --strict
+
+  bandit:
+    name: bandit (static security scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install bandit
+        run: pip install bandit==1.7.10
+      - name: Bandit on annuity_model (excluding tests)
+        run: bandit -r annuity_model -x annuity_model/tests,annuity_model/.venv -ll
+
+  gitleaks:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

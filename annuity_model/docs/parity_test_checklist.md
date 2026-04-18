@@ -6,18 +6,22 @@ Use this checklist before every merge to main and every product release.
 
 ## Before every merge (PR gate)
 
-- [ ] `pytest tests/parity/ -v` — all pass, zero failures
-- [ ] `pytest tests/ -v` — all pass, zero failures
-- [ ] No new ad-hoc tolerances added to code without updating `docs/model_parity_contract.md`
+- [ ] Run the canonical "before completing any task" gates from
+      [annuity_model/AGENTS.md](../AGENTS.md#before-completing-any-task----canonical-gates)
+      — all four must exit 0.
+- [ ] No new ad-hoc tolerances added in code; new tolerances land in
+      `parity_constants.py` AND go through `model_change_log.md`.
 - [ ] If any formula-generating file changed: confirm the regenerated workbook
-      `ModelCheck` sheet shows **0.00** surplus discrepancy
+      `ModelCheck` sheet shows **0.00** surplus discrepancy after Excel recalc
+      (see [docs/runbooks/regenerate_excel_cache.md](runbooks/regenerate_excel_cache.md)).
 
 ---
 
 ## Before every product release
 
 - [ ] All merge checklist items above
-- [ ] Golden scenario suite passes with **|diff| ≤ 0.01** on surplus at every month
+- [ ] Golden scenario suite passes with **|diff| ≤ 1e-4** on surplus at every month
+      (matches `docs/model_parity_contract.md` §1; do not relax without a contract amendment)
 - [ ] Tie-break regression test passes (disinvestment sells from lowest-indexed bucket only)
 - [ ] No `data_only=True` Excel reads used for validation (must use recalculated values)
 - [ ] Step-level comparison (not just month 60 surplus) shows ≤ 1e-4 at every month

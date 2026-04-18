@@ -1,7 +1,30 @@
-numpy
-pandas
-openpyxl
-pytest
-pytest-html
-streamlit>=1.41.0
-matplotlib
+# Developer / test-only dependencies. Install via:
+#   pip install -r requirements.txt -r requirements-dev.txt
+# Production / Streamlit-Cloud installs MUST NOT pull this file.
+# Pinned to the versions in the M5 dev venv on 2026-04 (Python 3.12).
+pytest==9.0.3
+pytest-html==4.2.0
+
+# Static-analysis / formatter (mirrored by pre-commit + CI)
+ruff==0.7.4
+black==25.1.0
+mypy==1.13.0
+
+# Documentation site (mkdocs --serve / GitHub Pages deploy)
+mkdocs==1.6.1
+mkdocs-material==9.5.49
+mkdocstrings[python]==0.27.0
+pymdown-extensions==10.12
+
+# Property tests + perf gates + mutation pilot (P4)
+hypothesis==6.122.3
+pytest-benchmark==5.1.0
+pytest-cov==6.0.0
+mutmut==3.2.0
+
+# Runtime-Excel parity (P4 -- xlcalculator-based recalc gate)
+xlcalculator==0.5.0
+
+# Security / supply-chain
+pip-audit==2.7.3
+bandit==1.7.10

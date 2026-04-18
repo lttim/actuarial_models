@@ -32,8 +32,9 @@ Important:
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Optional, Sequence, Tuple
+from typing import Any, Literal
 
 ALMReinvestRule = Literal["hold_cash", "pro_rata"]
 ALMDisinvestRule = Literal["shortest_first", "pro_rata"]
@@ -46,6 +47,9 @@ import math
 import numpy as np
 import pandas as pd
 
+from _logging import get_logger
+
+_log = get_logger(__name__)
 
 Compounding = Literal["continuous"]
 
@@ -217,7 +221,7 @@ class YieldCurve:
     zero_rates: np.ndarray
 
     @staticmethod
-    def from_flat_rate(flat_zero_rate: float) -> "YieldCurve":
+    def from_flat_rate(flat_zero_rate: float) -> YieldCurve:
         mats = np.array([0.0, 1.0], dtype=float)
         zeros = np.array([flat_zero_rate, flat_zero_rate], dtype=float)
         return YieldCurve(mats, zeros)
@@ -228,7 +232,7 @@ class YieldCurve:
         *,
         maturity_col: str = "maturity_years",
         rate_col: str = "zero_rate",
-    ) -> "YieldCurve":
+    ) -> YieldCurve:
         df = pd.read_csv(path)
         mats = df[maturity_col].to_numpy(dtype=float)
         zeros = df[rate_col].to_numpy(dtype=float)
@@ -243,7 +247,7 @@ class YieldCurve:
         par_rate_col: str = "par_yield",
         coupon_freq: int = 2,
         interpolation: Literal["linear"] = "linear",
-    ) -> "YieldCurve":
+    ) -> YieldCurve:
         """
         Bootstrap discount factors from a par-yield curve.
 
@@ -329,7 +333,7 @@ def bootstrap_zero_rates_from_par_yields(
     par_yields: Sequence[float],
     *,
     coupon_freq: int = 2,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Bootstrap continuous zero rates from par yields.
 
@@ -421,7 +425,7 @@ class MortalityTableQx:
         age_col: str = "age",
         qx_col: str = "qx",
         dropna: bool = True,
-    ) -> "MortalityTableQx":
+    ) -> MortalityTableQx:
         df = pd.read_csv(path)
         if dropna:
             df = df.dropna(subset=[age_col, qx_col])
@@ -799,7 +803,7 @@ class ExpenseAssumptions:
         key_col: str = "key",
         value_col: str = "value",
         unit_col: str = "unit",
-    ) -> "ExpenseAssumptions":
+    ) -> ExpenseAssumptions:
         df = pd.read_csv(path)
         if key_col not in df.columns or value_col not in df.columns:
             raise ValueError(f"Expenses CSV must contain columns '{key_col}' and '{value_col}'.")
@@ -1253,7 +1257,7 @@ class ALMAllocationSpec:
     Target mix across buckets. ``weights`` aligns with ``buckets``; must sum to 1.
     """
 
-    buckets: Tuple[ALMBucketSpec, ...]
+    buckets: tuple[ALMBucketSpec, ...]
     weights: np.ndarray
 
     def __post_init__(self) -> None:
@@ -2070,42 +2074,17 @@ def run_alm_projection_from_pricing_result(
     liability_curve: YieldCurve | None = None,
     liability_cashflows: np.ndarray | None = None,
 ) -> ALMResult:
+    """Run ALM on any priced liability (SPIA / Term / RILA / future products).
+
+    Dispatches via :mod:`liability_dispatch`: every engine module registers a
+    ``pricing-result -> LiabilityPath`` converter at import time, so this
+    function stays product-agnostic. Adding a new product means importing the
+    new engine somewhere on the startup path -- not editing this function.
+
+    SPIA still uses the dedicated :func:`run_alm_projection` path because its
+    monthly cashflows interact with index-scenario expense inflation that the
+    generic LiabilityPath engine does not yet model.
     """
-    Run ALM on a priced liability: SPIA projection result or Term life projection result.
-
-    Uses the shared monthly liability-path engine. Import of ``term_projection`` is deferred
-    to avoid a module import cycle (``term_projection`` imports this module).
-    """
-    import term_projection as tp
-
-    if isinstance(pricing, tp.TermLifeProjectionResult):
-        if initial_asset_market_value is None:
-            initial_asset_market_value = float(pricing.single_premium)
-        return run_alm_projection_from_liability_path(
-            liability_path=tp.liability_path_from_term_projection(pricing),
-            yield_curve=yield_curve,
-            spread=spread,
-            assumptions=assumptions,
-            initial_asset_market_value=float(initial_asset_market_value),
-            asset_curve=asset_curve,
-            liability_curve=liability_curve,
-            liability_cashflows=liability_cashflows,
-        )
-    import rila_projection as rp
-
-    if isinstance(pricing, rp.RILAProjectionResult):
-        if initial_asset_market_value is None:
-            initial_asset_market_value = float(pricing.single_premium)
-        return run_alm_projection_from_liability_path(
-            liability_path=rp.liability_path_from_rila_projection(pricing),
-            yield_curve=yield_curve,
-            spread=spread,
-            assumptions=assumptions,
-            initial_asset_market_value=float(initial_asset_market_value),
-            asset_curve=asset_curve,
-            liability_curve=liability_curve,
-            liability_cashflows=liability_cashflows,
-        )
     if isinstance(pricing, SPIAProjectionResult):
         return run_alm_projection(
             pricing=pricing,
@@ -2117,9 +2096,26 @@ def run_alm_projection_from_pricing_result(
             liability_curve=liability_curve,
             liability_cashflows=liability_cashflows,
         )
-    raise TypeError(
-        "pricing must be a SPIAProjectionResult, term_projection.TermLifeProjectionResult, or "
-        f"rila_projection.RILAProjectionResult; got {type(pricing).__name__!r}."
+    from liability_dispatch import liability_path_for, registered_typenames
+    typename = type(pricing).__name__
+    if typename not in registered_typenames():
+        # Preserve the canonical "pricing must be" wording the public API has
+        # always raised for unknown inputs (matched by tests + integrations).
+        raise TypeError(
+            f"pricing must be a SPIAProjectionResult or any registered engine result "
+            f"({', '.join(registered_typenames())}); got {typename!r}."
+        )
+    if initial_asset_market_value is None:
+        initial_asset_market_value = float(pricing.single_premium)
+    return run_alm_projection_from_liability_path(
+        liability_path=liability_path_for(pricing),
+        yield_curve=yield_curve,
+        spread=spread,
+        assumptions=assumptions,
+        initial_asset_market_value=float(initial_asset_market_value),
+        asset_curve=asset_curve,
+        liability_curve=liability_curve,
+        liability_cashflows=liability_cashflows,
     )
 
 
@@ -2181,12 +2177,27 @@ def _example_usage() -> None:
         spread=0.0,
         valuation_year=valuation_year,
     )
-    print("Example SPIA single premium (placeholder inputs):", res.single_premium)
-    print("  PV benefits:", res.pv_benefit)
-    print("  PV monthly expenses:", res.pv_monthly_expenses)
-    print("  Annuity factor:", res.annuity_factor)
+    # Logging-first diagnostics: piggybacks on annuity_model._logging so the
+    # output respects ANNUITY_MODEL_LOG_FORMAT=json in CI / Docker. New
+    # diagnostic sites in this module SHOULD use _log instead of print().
+    _log.info("Example SPIA single premium (placeholder inputs): %s", res.single_premium)
+    _log.info("  PV benefits: %s", res.pv_benefit)
+    _log.info("  PV monthly expenses: %s", res.pv_monthly_expenses)
+    _log.info("  Annuity factor: %s", res.annuity_factor)
 
 
 if __name__ == "__main__":
+    from _logging import configure_logging  # noqa: E402
+    configure_logging()
     _example_usage()
+
+
+# Register SPIA's converter at module import so liability_dispatch.liability_path_for
+# can route generic ALM calls without an isinstance chain. Term and RILA register
+# their own converters at the bottom of their respective modules.
+from liability_dispatch import register_liability_path_converter  # noqa: E402
+
+register_liability_path_converter(
+    "SPIAProjectionResult", liability_path_from_spia_projection
+)
 

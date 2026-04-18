@@ -16,13 +16,21 @@ This addendum sits beside `model_parity_contract.md` (SPIA ALM ladder). RILA par
 
 ## Tolerances (liability sheet)
 
-| Variable | Absolute tolerance |
-|----------|---------------------|
-| Expected claim cashflow (month) | 1e-4 |
-| Account value (end of month, per $ premium basis pre-scale) | 1e-10 |
-| Discount factor | 1e-10 |
-| PV claims / PV expenses / actuarial PV | 1e-4 |
-| `ModelCheck` pricing differences | 0.00 (exact match to snapshot at export) |
+The table below is generated from `annuity_model/parity_constants.py` by
+`scripts/render_parity_contract.py`. Edit the constants module, then run
+`python -m annuity_model.scripts.render_parity_contract` to refresh; CI verifies
+the docs are in sync via `--check`.
+
+<!-- BEGIN GENERATED tolerances -->
+| Variable | Tolerance | Units | Notes |
+|----------|-----------|-------|-------|
+| PV(benefit) cell | `1e-04` (`parity_constants.RILA_PV_TOL`) | USD | ModelCheck B5 |
+| PV(expenses) cell | `1e-04` (`parity_constants.RILA_PV_TOL`) | USD | ModelCheck B6 |
+| PV(total) cell | `1e-04` (`parity_constants.RILA_PV_TOL`) | USD | ModelCheck B7 |
+| Single premium cell | `1e-04` (`parity_constants.RILA_PV_TOL`) | USD | ModelCheck B8 |
+| Account value path | `1e-06` (`parity_constants.RILA_AV_TOL`) | USD | Per month |
+| ModelCheck snapshot | `0.0 (exact)` (`parity_constants.MODELCHECK_TOL`) | USD | Exact match required |
+<!-- END GENERATED tolerances -->
 
 ## Fee
 

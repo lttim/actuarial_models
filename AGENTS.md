@@ -16,13 +16,19 @@ Excel workbooks.
 1. **Python = Excel**: Every product must maintain exact numerical parity between its Python
    calculation engine and the Excel workbook it generates. See each product's
    `docs/model_parity_contract.md`.
-2. **Test gates**: `pytest tests/parity/` must pass at 0.00 discrepancy before any merge.
+2. **Test gates**: the canonical "before completing any task" gates live in
+   [annuity_model/AGENTS.md -- "Before completing any task"](annuity_model/AGENTS.md#before-completing-any-task----canonical-gates).
+   This file does not duplicate the commands; follow the link.
 3. **Epsilon tie-breaking**: Never use raw floating-point ordering when values are nominally
    equal. Always use index-based epsilon offsets (see parity contract for specification).
 4. **Step-level validation**: Validate month-by-month intermediate state, not only final output.
 5. **New bug = new test**: Every numerical bug must produce a permanent regression test.
 6. **Reuse the kit**: When starting a new product, copy `actuarial_parity_kit/` into the
    new repo and adapt. Do not start from scratch.
+7. **Tolerance constants live in code, not docs**: `annuity_model/parity_constants.py` is the
+   single source of truth. The two parity contracts and the release checklist render their
+   tolerance tables from this module via `scripts/render_parity_contract.py`. Never edit a
+   rendered table by hand.
 
 ## Starting a new product repo
 

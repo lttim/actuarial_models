@@ -10,10 +10,10 @@ and the generated Excel workbook. See `docs/model_parity_contract.md` for the fu
 
 ## Before declaring any task "done"
 
-1. Run `pytest tests/parity/ -v` — all parity tests must pass (0.00 discrepancy).
-2. Run `pytest tests/ -v` — all unit tests must pass.
-3. If you changed any formula-generating code (`alm_excel_ladder.py`, `build_pricing_excel_workbook.py`),
-   regenerate the workbook and verify the `ModelCheck` sheet shows 0.00 difference.
+The canonical "before completing any task" gates are documented once in
+[annuity_model/AGENTS.md -- "Before completing any task"](../AGENTS.md). Run
+that block. Do not duplicate the commands here; if they need to change, edit
+that file.
 
 ## Critical invariants — never break these
 

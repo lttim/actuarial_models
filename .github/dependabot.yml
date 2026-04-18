@@ -1,0 +1,53 @@
+version: 2
+updates:
+  # Python runtime + dev dependencies for the annuity_model package.
+  - package-ecosystem: pip
+    directory: "/annuity_model"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - python
+    groups:
+      patch-and-minor:
+        update-types: ["patch", "minor"]
+    commit-message:
+      prefix: "deps"
+      include: scope
+
+  # Mirror requirements.txt at repo root (Streamlit Cloud reads this one).
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:30"
+      timezone: America/New_York
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - python
+      - streamlit-cloud
+    commit-message:
+      prefix: "deps(root)"
+      include: scope
+
+  # GitHub Actions versions used in CI workflows.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "ci"
+      include: scope

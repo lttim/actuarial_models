@@ -13,7 +13,6 @@ import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
 
-
 # --- Monte Carlo first principles ---
 
 

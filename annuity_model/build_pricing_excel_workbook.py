@@ -16,7 +16,6 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
 import pricing_projection as sp
-
 from alm_excel_ladder import ALM_ENGINE_SHEET, write_alm_engine_sheet
 from recalc_excel_shared import write_monthly_curve_logdf as _write_monthly_curve_logdf_sheet
 
@@ -154,8 +153,8 @@ def alm_excel_truncate_snapshot(snap: ALMExcelSnapshot, max_months: int | None) 
 
 
 def alm_excel_snapshot_from_result(
-    alm: "sp.ALMResult",
-    asm: "sp.ALMAssumptions | None",
+    alm: sp.ALMResult,
+    asm: sp.ALMAssumptions | None,
     *,
     initial_asset_market_value: float | None = None,
 ) -> ALMExcelSnapshot:
@@ -189,7 +188,7 @@ def alm_excel_snapshot_from_result(
 
 
 def mc_excel_snapshot_from_result(
-    mc: "sp.SPIAMonteCarloResult",
+    mc: sp.SPIAMonteCarloResult,
     *,
     annual_drift: float,
     annual_vol: float,
@@ -529,7 +528,7 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
     ws["W6"] = "Annuity Factor"
     ws["X6"] = f"=SUMPRODUCT(N{first}:N{last},O{first}:O{last})"
     ws["W7"] = "PV Monthly Total"
-    ws["X7"] = f"=X4+X5"
+    ws["X7"] = "=X4+X5"
     ws["W8"] = "Single Premium"
     ws["X8"] = "=(Inputs!$B$10+X7)/(1-Inputs!$B$11)"
     ws["W9"] = "Reserve at t=0"
@@ -1109,6 +1108,13 @@ def build_workbook_from_spec(
             raise ValueError("alm_assumptions is required when alm_snapshot is provided (Excel ladder paramaters).")
         alm_snap_for_book = alm_excel_downsample_snapshot(alm_snapshot, int(alm_engine_step_months))
         alm_snap_for_book = alm_excel_truncate_snapshot(alm_snap_for_book, alm_excel_path_month_cap)
+        # Liability column letters live in liability_layouts.LIABILITY_LAYOUTS;
+        # SPIA uses S/O. Reading the layout here keeps the magic letters out
+        # of every callsite -- see liability_layouts.py for the registry.
+        # We pass the string code rather than ProductType to avoid a
+        # registry/builder import cycle.
+        from liability_layouts import liability_layout_for
+        _spia_layout = liability_layout_for("spia")
         alm_layout = _write_alm_projection_sheet(
             wb,
             alm_snap_for_book,
@@ -1116,6 +1122,8 @@ def build_workbook_from_spec(
             n_months=int(spec.n_months),
             y_last_row=int(3 + len(spec.yield_curve_df)),
             engine_step_months=int(alm_engine_step_months),
+            liability_total_col=_spia_layout.total_cf_col,
+            liability_discount_col=_spia_layout.discount_col,
         )
 
     if python_snapshot is not None:

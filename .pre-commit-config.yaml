@@ -1,0 +1,99 @@
+# Pre-commit hooks for Code_Sandbox.
+#
+# Install once per clone:    pre-commit install
+# Run on the whole tree:     pre-commit run --all-files
+#
+# CI runs the same hooks via .github/workflows/ci.yml so local and remote
+# never diverge.
+
+default_language_version:
+  python: python3.11
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+        # mkdocs.yml uses python-name tags (!!python/name:...) for pymdownx
+        # superfences; `check-yaml` (safe loader) cannot parse those.
+        exclude: ^annuity_model/mkdocs\.yml$
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: end-of-file-fixer
+        exclude: ^(.*\.xlsx|.*\.csv)$
+      - id: trailing-whitespace
+        exclude: ^(.*\.xlsx|.*\.csv)$
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+        exclude: ^.*\.bat$  # Windows launchers stay CRLF per .gitattributes
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        files: ^annuity_model/.*\.py$
+      - id: ruff-format
+        files: ^annuity_model/.*\.py$
+
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        files: ^annuity_model/.*\.py$
+        args: ["--config", "annuity_model/pyproject.toml"]
+
+  # Mypy is run strict on the parity-critical core only (per pyproject.toml
+  # overrides). Adding a new product engine? Add its module to the override
+  # list there too.
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
+        name: mypy (parity-critical core)
+        files: ^annuity_model/(pricing_projection|term_projection|rila_projection|alm_excel_ladder|excel_workbook_validator|product_registry)\.py$
+        args:
+          - "--config-file=annuity_model/pyproject.toml"
+        additional_dependencies:
+          - numpy>=2.0
+          - pandas-stubs
+          - types-openpyxl
+
+  # Custom local hooks. Cheap import smoke + validator import smoke catch the
+  # most embarrassing breakage classes (typo in a module-level import) before
+  # the slower test suite even runs.
+  - repo: local
+    hooks:
+      - id: import-smoke-validator
+        name: import smoke - excel_workbook_validator
+        entry: python -c "import sys; sys.path.insert(0, 'annuity_model'); from excel_workbook_validator import validate_workbook_or_raise"
+        language: system
+        pass_filenames: false
+        files: ^annuity_model/excel_workbook_validator\.py$
+
+      - id: import-smoke-engines
+        name: import smoke - engines
+        entry: python -c "import sys; sys.path.insert(0, 'annuity_model'); import pricing_projection, term_projection, rila_projection, product_registry, product_excel"
+        language: system
+        pass_filenames: false
+        files: ^annuity_model/(pricing_projection|term_projection|rila_projection|product_registry|product_excel|build_.*_excel_workbook|alm_excel_ladder|recalc_excel_shared)\.py$
+
+      - id: render-parity-contract-check
+        name: parity-contract docs in sync with parity_constants.py
+        entry: python annuity_model/scripts/render_parity_contract.py --check
+        language: system
+        pass_filenames: false
+        files: ^annuity_model/(parity_constants\.py|scripts/render_parity_contract\.py|docs/(model|rila)_parity_contract\.md)$
+
+      # Locks the launcher contract: anyone touching pyproject.toml or one of
+      # the launchers gets the launcher invariants test re-run before commit.
+      # This is what would have caught the dataclass(slots=True) / Python 3.9
+      # incident at commit time.
+      - id: launcher-invariants
+        name: launcher invariants (pyproject + run_pricing_ui.{sh,bat,command})
+        entry: bash -c 'cd annuity_model && ./.venv/bin/python -m pytest tests/test_launcher_invariants.py -q'
+        language: system
+        pass_filenames: false
+        files: ^(annuity_model/(pyproject\.toml|run_pricing_ui\.(sh|command|bat)|tests/test_launcher_invariants\.py))$

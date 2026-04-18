@@ -8,9 +8,9 @@ from openpyxl import load_workbook
 
 import pricing_projection as sp
 import term_projection as tp
-from build_term_excel_workbook import build_term_workbook_from_spec, term_excel_spec_from_launcher
 from build_pricing_excel_workbook import LIABILITY_SHEET_NAME
-
+from build_term_excel_workbook import build_term_workbook_from_spec, term_excel_spec_from_launcher
+from parity_constants import TERM_MODELCHECK_TOL
 
 pytestmark = [pytest.mark.parity, pytest.mark.product_term]
 
@@ -116,10 +116,10 @@ def test_term_workbook_modelcheck_reconciles_zero_difference():
     ex_claims = float(np.sum(res.expected_claim_cashflows * res.discount_factors))
     ex_prem = float(np.sum(res.expected_premium_cashflows * res.discount_factors))
     ex_net = float(np.sum(res.expected_total_cashflows * res.discount_factors))
-    np.testing.assert_allclose(float(ws_mc["B5"].value), ex_claims, rtol=0.0, atol=1e-9)
-    np.testing.assert_allclose(float(ws_mc["B6"].value), ex_prem, rtol=0.0, atol=1e-9)
-    np.testing.assert_allclose(float(ws_mc["B7"].value), ex_net, rtol=0.0, atol=1e-9)
-    np.testing.assert_allclose(ex_net, ex_claims - ex_prem, rtol=0.0, atol=1e-9)
+    np.testing.assert_allclose(float(ws_mc["B5"].value), ex_claims, rtol=0.0, atol=TERM_MODELCHECK_TOL)
+    np.testing.assert_allclose(float(ws_mc["B6"].value), ex_prem, rtol=0.0, atol=TERM_MODELCHECK_TOL)
+    np.testing.assert_allclose(float(ws_mc["B7"].value), ex_net, rtol=0.0, atol=TERM_MODELCHECK_TOL)
+    np.testing.assert_allclose(ex_net, ex_claims - ex_prem, rtol=0.0, atol=TERM_MODELCHECK_TOL)
 
 
 def test_term_workbook_includes_alm_sheets_when_snapshot_passed():
@@ -142,15 +142,14 @@ def test_term_workbook_includes_alm_sheets_when_snapshot_passed():
         liquidity_near_liquid_years=0.25,
     )
     from alm_excel_ladder import ALM_ENGINE_SHEET
-
     from build_pricing_excel_workbook import (
         ALM_ENGINE_FIELD_GUIDE_SHEET,
-        ALM_SHEET_NAME,
-        alm_excel_snapshot_from_result,
-        alm_excel_downsample_snapshot,
-        alm_excel_truncate_snapshot,
         ALM_ENGINE_STEP_MONTHS,
         ALM_EXCEL_PATH_MONTH_CAP,
+        ALM_SHEET_NAME,
+        alm_excel_downsample_snapshot,
+        alm_excel_snapshot_from_result,
+        alm_excel_truncate_snapshot,
     )
 
     aum0 = float(res.single_premium) + 100_000.0

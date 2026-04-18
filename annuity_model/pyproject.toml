@@ -1,0 +1,171 @@
+# pyproject.toml -- annuity_model
+# Phase 1 of the hardening roadmap: tool configuration only.
+# Phase 2 will move to a real `src/` layout + wheel build; the [project] table
+# below currently exists ONLY to publish runtime requirements (notably
+# `requires-python`) so launchers, CI, and tests share one source of truth.
+#
+# Today's import style (`import pricing_projection as sp`) still works because
+# pytest.ini sets `pythonpath = .`. The dev tools below pick up source under
+# annuity_model/ via explicit include patterns.
+
+[project]
+# Single source of truth for the minimum supported Python version.
+# Mirrored by:
+#   - annuity_model/run_pricing_ui.sh   (MIN_PYTHON_MAJOR/MINOR)
+#   - annuity_model/run_pricing_ui.bat  (MIN_PY_MAJOR/MINOR)
+#   - .github/workflows/ci.yml          (matrix.python-version)
+#   - tools below (target-version)
+# tests/test_launcher_invariants.py asserts these stay in sync.
+name = "annuity_model"
+version = "0.0.0"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["."]
+extend-exclude = [
+    ".venv",
+    ".smoke",
+    "reports",
+    "model output",
+    "streamlit output",
+    "*.xlsx",
+]
+
+[tool.ruff.lint]
+# Curated rule set: errors, warnings, pyflakes, isort, bugbear, simplify,
+# comprehensions, naming, pyupgrade. We deliberately stay narrow in P1; P2
+# ramps up to a stricter set (including E402, B905, UP042) after the
+# architecture refactor moves the sys.path hacks and StrEnum upgrades.
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM", "N"]
+ignore = [
+    "E501",   # line length is enforced by black/formatter, not lint
+    "E402",   # module-level imports after sys.path hacks: removed in P2 (real package layout)
+    "E741",   # ambiguous one-letter names (l, I) -- accepted in actuarial code
+    "N802",   # function names sometimes use uppercase (e.g. _L, C cell helpers)
+    "N803",   # actuarial code uses single-letter parameter names (q_x, t_rem, ...)
+    "N806",   # same: in-function variables like L, DF are intentional
+    "B007",   # loop control variable unused (parametrize-style loops)
+    "B008",   # FastAPI/Streamlit-friendly default-arg pattern
+    "B905",   # zip() without strict= -- broad change; revisit in P2
+    "F841",   # unused local (a few intentional debug/snapshot vars; revisit in P2)
+    "UP042",  # str+Enum should be StrEnum -- ProductType migration in P2
+    "SIM108", # ternary often hurts readability for actuarial branches
+    "SIM118", # `key in dict.keys()` -- benign style, revisit in P2
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["B", "N802", "N803", "N806", "C408"]
+"scripts/**/*.py" = ["B"]
+"illustrate_pricing_projection.py" = ["B"]
+"test_dashboard.py" = ["SIM105"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "pricing_projection",
+    "term_projection",
+    "rila_projection",
+    "alm_excel_ladder",
+    "build_pricing_excel_workbook",
+    "build_rila_excel_workbook",
+    "build_term_excel_workbook",
+    "excel_workbook_validator",
+    "product_registry",
+    "product_excel",
+    "recalc_excel_shared",
+    "pricing_run_form_state",
+    "pricing_ui",
+    "test_dashboard",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py311", "py312"]
+extend-exclude = '''
+/(
+    \.venv
+  | \.smoke
+  | reports
+)/
+'''
+
+[tool.mypy]
+python_version = "3.11"
+strict = false  # Default permissive; per-module overrides tighten the parity-critical core.
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+exclude = [
+    "^\\.venv/",
+    "^\\.smoke/",
+    "^reports/",
+    "^tests/",      # tests are exempt to keep the focus on the engine
+]
+
+# --- Strict-mode core: the parity-critical surface area ---
+# Mypy is run strict on these modules in pre-commit and CI. Adding a new
+# product means adding its engine + builder modules to this list.
+[[tool.mypy.overrides]]
+module = [
+    "pricing_projection",
+    "term_projection",
+    "rila_projection",
+    "alm_excel_ladder",
+    "excel_workbook_validator",
+    "product_registry",
+]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_unreachable = true
+no_implicit_reexport = true
+
+[tool.pytest.ini_options]
+# Mirror pytest.ini so tools that read pyproject (CI, IDE) get the same view.
+# pytest.ini stays the source of truth at runtime until P2 removes it.
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "regression: marks tests as regression tests for historical bugs (deselect with '-m \"not regression\"')",
+    "parity: marks parity tests for Python-vs-Excel reconciliation",
+    "product_spia: marks tests that validate SPIA product behavior",
+    "product_term: marks tests that validate Term Life product behavior",
+    "product_rila: marks tests that validate RILA product behavior",
+    "slow: marks tests that take >0.3s; deselect with '-m \"not slow\"'",
+]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["."]
+omit = [
+    ".venv/*",
+    ".smoke/*",
+    "tests/*",
+    "scripts/*",
+    "reports/*",
+    "illustrate_pricing_projection.py",
+    "generate_sp500_scenario_csv.py",
+    "test_dashboard.py",
+]
+parallel = false
+
+[tool.coverage.report]
+precision = 1
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "@overload",
+]

@@ -1,0 +1,50 @@
+# CODEOWNERS for Code_Sandbox.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Branch protection on `main` should require a review from the matching owner
+# below for every PR. Today the repo is solo-owned (@lttim); when the team
+# grows, replace @lttim with the appropriate team handle (e.g. @org/actuary).
+
+# --- Default owner for everything ---
+* @lttim
+
+# --- Parity-critical actuarial surface ---
+# Any change to engine math, ALM ladder, or the Excel formula validator MUST
+# be reviewed by an actuarial owner. Documented in
+# annuity_model/docs/CODEOWNERS_RATIONALE.md (added in Phase 3).
+/annuity_model/pricing_projection.py            @lttim
+/annuity_model/term_projection.py               @lttim
+/annuity_model/rila_projection.py               @lttim
+/annuity_model/alm_excel_ladder.py              @lttim
+/annuity_model/excel_workbook_validator.py      @lttim
+/annuity_model/product_registry.py              @lttim
+/annuity_model/parity_constants.py              @lttim
+
+# Excel builders write the workbook structure that the validator gates.
+/annuity_model/build_pricing_excel_workbook.py  @lttim
+/annuity_model/build_term_excel_workbook.py     @lttim
+/annuity_model/build_rila_excel_workbook.py     @lttim
+/annuity_model/recalc_excel_shared.py           @lttim
+/annuity_model/product_excel.py                 @lttim
+
+# Parity contracts and the parity test suite are the model's public guarantees.
+# Tightening or relaxing tolerances always needs an actuarial sign-off.
+/annuity_model/docs/model_parity_contract.md    @lttim
+/annuity_model/docs/rila_parity_contract.md     @lttim
+/annuity_model/docs/parity_test_checklist.md    @lttim
+/annuity_model/tests/parity/                    @lttim
+
+# --- Agent guidance ---
+# Editing AGENTS.md or the .cursor/rules/ files changes how every future
+# Cursor session behaves. Treat as load-bearing.
+/AGENTS.md                                      @lttim
+/annuity_model/AGENTS.md                        @lttim
+/annuity_model/.cursor/                         @lttim
+/annuity_model/.cursorrules                     @lttim
+
+# --- CI / control plane ---
+/.github/                                       @lttim
+/.pre-commit-config.yaml                        @lttim
+/annuity_model/pyproject.toml                   @lttim
+/annuity_model/requirements*.txt                @lttim
+/annuity_model/requirements.lock                @lttim

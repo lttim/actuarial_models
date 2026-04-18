@@ -156,3 +156,12 @@ def liability_path_from_term_projection(pricing: TermLifeProjectionResult) -> sp
         times_years=np.asarray(pricing.times_years, dtype=float),
         expected_total_cashflows=np.asarray(pricing.expected_total_cashflows, dtype=float),
     )
+
+
+# Register with the liability-path dispatch so the engine core can route
+# `run_alm_projection_from_pricing_result` without an isinstance chain.
+from liability_dispatch import register_liability_path_converter  # noqa: E402
+
+register_liability_path_converter(
+    "TermLifeProjectionResult", liability_path_from_term_projection
+)

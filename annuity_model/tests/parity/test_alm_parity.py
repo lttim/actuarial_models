@@ -27,21 +27,19 @@ ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 import pricing_projection as sp
+from parity_constants import TOL_DF, TOL_DOLLAR, TOL_TENOR
 from tests.parity.excel_formula_sim import (
     EXCEL_DISINVEST_EPSILON,
     EXCEL_DISINVEST_THRESHOLD,
     excel_disinvest_shortest_first,
+    excel_reinvest_pro_rata,
 )
 
 pytestmark = [pytest.mark.parity, pytest.mark.product_spia]
 
-# ---------------------------------------------------------------------------
-# Tolerances (from docs/model_parity_contract.md)
-# ---------------------------------------------------------------------------
-
-TOL_DOLLAR = 1e-4   # cash, face, MV, surplus ($)
-TOL_TENOR = 1e-6    # remaining tenor (years)
-TOL_DF = 1e-10      # discount factor (dimensionless)
+# Re-exported for backwards compatibility with any module that imports tolerances
+# from this file (the canonical home is :mod:`parity_constants`).
+__all__ = ["TOL_DOLLAR", "TOL_TENOR", "TOL_DF"]
 
 
 # ---------------------------------------------------------------------------
@@ -442,3 +440,119 @@ def test_spia_liability_adapter_path_preserves_alm_results():
     np.testing.assert_allclose(legacy.asset_market_value, via_path.asset_market_value, atol=TOL_DOLLAR)
     np.testing.assert_allclose(legacy.liability_pv, via_path.liability_pv, atol=TOL_DOLLAR)
     np.testing.assert_allclose(legacy.surplus, via_path.surplus, atol=TOL_DOLLAR)
+
+
+# ---------------------------------------------------------------------------
+# Reinvest parity: Excel pro-rata sim vs Python micro-reinvest
+# ---------------------------------------------------------------------------
+#
+# excel_reinvest_pro_rata is the executable spec of the ALM_Engine reinvest
+# columns (dmv / f_re) in alm_excel_ladder.py. _alm_micro_reinvest_pro_rata is
+# the Python production path. The two compute (cash, faces) the same way
+# whenever:
+#   * all touched buckets have t_rem > 1e-14 (no nominal-tenor fallback)
+#   * at least one bucket has a positive deficit (dsum > 1e-9 == gap_sum > 0)
+#   * excess > 1e-6
+# Under those conditions both engines distribute excess cash by deficit weight
+# and convert via face = dmv / df, so cash/faces must match to TOL_DOLLAR.
+# t_rem is intentionally NOT compared: the Python path only resets t_rem when
+# t_rem<=1e-14, while the Excel sim resets every bucket touched by reinvest.
+
+
+def _excel_reinvest_inputs(
+    *,
+    cash: float,
+    faces: np.ndarray,
+    t_rem: np.ndarray,
+    w: np.ndarray,
+    df: np.ndarray,
+) -> tuple[float, np.ndarray, float, float]:
+    """Build the (xsr, gaps, gap_sum, aum) inputs Excel needs from portfolio state."""
+    mv = faces * df
+    aum = float(cash + np.sum(mv))
+    xsr = float(cash - w[0] * aum)
+    tgt_mv_b = np.asarray(w[1:], dtype=float) * aum
+    gaps = np.maximum(tgt_mv_b - mv, 0.0)
+    gap_sum = float(np.sum(gaps))
+    return xsr, gaps, gap_sum, aum
+
+
+def test_reinvest_pro_rata_parity_python_vs_excel():
+    """Reinvest parity: Excel pro-rata sim agrees with Python micro-reinvest.
+
+    Hand-built portfolio with a clean excess + deficit pattern so both
+    engines take the documented happy path.
+    """
+    asm, w, buckets = _build_standard_buckets()
+    yc = _flat_yc(0.04)
+    nominal_tenors = np.array([float(b.tenor_years) for b in buckets[1:]], dtype=float)
+
+    # Construct underweight portfolio with explicit excess cash.
+    # All bond buckets present with t_rem > 1e-14.
+    aum = 1_000_000.0
+    cash = 250_000.0  # huge excess vs target 5% (50k)
+    t_rem = np.array([0.5, 2.5, 4.0, 8.0, 15.0])
+    # Half of target MV in bonds → leaves real deficits.
+    target_mv_b = w[1:] * aum
+    df0 = _df_rem(yc, t_rem)
+    faces = np.where(df0 > 1e-15, (target_mv_b * 0.5) / df0, 0.0)
+
+    py_cash, py_faces = sp._alm_micro_reinvest_pro_rata(
+        cash=cash,
+        faces=faces.copy(),
+        t_rem=t_rem.copy(),
+        w=w,
+        yield_curve=yc,
+        spread=0.0,
+        nominal_tenors=nominal_tenors,
+    )
+
+    df_xl = _df_rem(yc, t_rem)
+    xsr, gaps, gap_sum, _ = _excel_reinvest_inputs(
+        cash=cash, faces=faces, t_rem=t_rem, w=w, df=df_xl,
+    )
+    xl_cash, xl_faces, _ = excel_reinvest_pro_rata(
+        cash=cash,
+        faces=faces.copy(),
+        t_rem=t_rem.copy(),
+        df=df_xl,
+        w=w,
+        nominal_tenors=nominal_tenors,
+        xsr=xsr,
+        gaps=gaps,
+        gap_sum=gap_sum,
+    )
+
+    np.testing.assert_allclose(py_cash, xl_cash, atol=TOL_DOLLAR,
+                               err_msg=f"Reinvest cash mismatch: py={py_cash:.6f}, xl={xl_cash:.6f}")
+    np.testing.assert_allclose(py_faces, xl_faces, atol=TOL_DOLLAR,
+                               err_msg="Reinvest face vector mismatch (Python vs Excel sim)")
+
+
+def test_reinvest_pro_rata_no_op_when_no_excess():
+    """Both engines must no-op when cash <= target (no excess to deploy)."""
+    asm, w, buckets = _build_standard_buckets()
+    yc = _flat_yc(0.04)
+    nominal_tenors = np.array([float(b.tenor_years) for b in buckets[1:]], dtype=float)
+    aum = 1_000_000.0
+    cash = float(w[0] * aum)  # exactly at target
+    t_rem = np.array([0.5, 2.5, 4.0, 8.0, 15.0])
+    df0 = _df_rem(yc, t_rem)
+    faces = (w[1:] * aum) / df0
+
+    py_cash, py_faces = sp._alm_micro_reinvest_pro_rata(
+        cash=cash, faces=faces.copy(), t_rem=t_rem.copy(), w=w,
+        yield_curve=yc, spread=0.0, nominal_tenors=nominal_tenors,
+    )
+    xsr, gaps, gap_sum, _ = _excel_reinvest_inputs(
+        cash=cash, faces=faces, t_rem=t_rem, w=w, df=df0,
+    )
+    xl_cash, xl_faces, _ = excel_reinvest_pro_rata(
+        cash=cash, faces=faces.copy(), t_rem=t_rem.copy(), df=df0, w=w,
+        nominal_tenors=nominal_tenors, xsr=xsr, gaps=gaps, gap_sum=gap_sum,
+    )
+
+    np.testing.assert_allclose(py_cash, cash, atol=TOL_DOLLAR)
+    np.testing.assert_allclose(xl_cash, cash, atol=TOL_DOLLAR)
+    np.testing.assert_allclose(py_faces, faces, atol=TOL_DOLLAR)
+    np.testing.assert_allclose(xl_faces, faces, atol=TOL_DOLLAR)

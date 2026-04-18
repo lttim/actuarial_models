@@ -337,6 +337,15 @@ def liability_path_from_rila_projection(pricing: RILAProjectionResult) -> sp.Lia
     )
 
 
+# Register with the liability-path dispatch so the engine core can route
+# `run_alm_projection_from_pricing_result` without an isinstance chain.
+from liability_dispatch import register_liability_path_converter  # noqa: E402
+
+register_liability_path_converter(
+    "RILAProjectionResult", liability_path_from_rila_projection
+)
+
+
 def price_rila_single_premium_monte_carlo(
     *,
     contract: RILAContract,

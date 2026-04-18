@@ -6,7 +6,6 @@ import pytest
 import pricing_projection as sp
 import rila_projection as rp
 
-
 pytestmark = pytest.mark.product_rila
 
 

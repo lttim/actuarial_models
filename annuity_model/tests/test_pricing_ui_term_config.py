@@ -3,13 +3,13 @@ from __future__ import annotations
 import numpy as np
 
 import pricing_projection as sp
+from pricing_ui import _build_mortality
 from product_registry import (
     ProductType,
     get_product_capabilities,
     get_product_default_mortality_mode,
     get_product_mortality_mode_options,
 )
-from pricing_ui import _build_mortality
 
 
 def test_term_capabilities_disable_scenario_and_mc() -> None:

@@ -10,14 +10,13 @@ from openpyxl import load_workbook
 
 import pricing_projection as sp
 from alm_excel_ladder import ALM_ENGINE_SHEET
-
 from build_pricing_excel_workbook import (
     ALM_ENGINE_FIELD_GUIDE_SHEET,
-    ALM_EXCEL_PATH_MONTH_CAP,
     ALM_ENGINE_STEP_MONTHS,
+    ALM_EXCEL_PATH_MONTH_CAP,
     ALM_SHEET_NAME,
-    ExcelPythonSnapshot,
     LIABILITY_SHEET_NAME,
+    ExcelPythonSnapshot,
     alm_excel_downsample_snapshot,
     alm_excel_period_end_indices,
     alm_excel_snapshot_from_result,

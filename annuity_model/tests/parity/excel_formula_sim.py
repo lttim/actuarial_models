@@ -12,10 +12,26 @@ vice versa.  This file is the "executable specification" of the Excel formulas.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import numpy as np
 
-EXCEL_DISINVEST_EPSILON = 1e-9
-EXCEL_DISINVEST_THRESHOLD = 5e-10
+_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from parity_constants import (  # noqa: E402  (import after sys.path bootstrap)
+    EXCEL_DISINVEST_EPSILON,
+    EXCEL_DISINVEST_THRESHOLD,
+)
+
+__all__ = [
+    "EXCEL_DISINVEST_EPSILON",
+    "EXCEL_DISINVEST_THRESHOLD",
+    "excel_disinvest_shortest_first",
+    "excel_reinvest_pro_rata",
+]
 
 
 # ---------------------------------------------------------------------------

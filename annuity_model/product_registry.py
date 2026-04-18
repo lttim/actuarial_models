@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 import numpy as np
 
 import pricing_projection as sp
+import rila_projection as rp
 import term_projection as tp
 from build_pricing_excel_workbook import ExcelBuildSpec, excel_spec_from_launcher
 from build_rila_excel_workbook import RILAExcelBuildSpec, rila_excel_spec_from_launcher
 from build_term_excel_workbook import TermExcelBuildSpec, term_excel_spec_from_launcher
-import rila_projection as rp
 
 
 class ProductType(str, Enum):
@@ -538,14 +538,39 @@ _PRODUCT_UI_CONFIG: dict[ProductType, ProductUIConfig] = {
 }
 
 
+# Pluggable adapter registry. Each implemented product registers its adapter
+# instance here. Adding a new product means appending one entry; the dispatcher
+# below stays product-agnostic. (Future P3: replace with a @register decorator
+# pattern + auto-discovery once we move to the src/ layout.)
+_PRODUCT_ADAPTERS: dict[ProductType, ProductAdapter] = {
+    ProductType.SPIA: _SPIA_ADAPTER,
+    ProductType.TERM_LIFE: _TERM_ADAPTER,
+    ProductType.RILA: _RILA_ADAPTER,
+}
+
+
 def get_product_adapter(product_type: ProductType) -> ProductAdapter:
-    if product_type == ProductType.SPIA:
-        return _SPIA_ADAPTER
-    if product_type == ProductType.TERM_LIFE:
-        return _TERM_ADAPTER
-    if product_type == ProductType.RILA:
-        return _RILA_ADAPTER
-    raise NotImplementedError(f"{_PRODUCT_DISPLAY_NAME[product_type]} is not implemented yet.")
+    """Return the adapter for *product_type* or raise NotImplementedError.
+
+    Unimplemented products (Whole Life, Variable Annuity) are present in
+    :class:`ProductType` so the UI can render disabled options, but they
+    have no entry in :data:`_PRODUCT_ADAPTERS`.
+    """
+    adapter = _PRODUCT_ADAPTERS.get(product_type)
+    if adapter is None:
+        raise NotImplementedError(
+            f"{_PRODUCT_DISPLAY_NAME[product_type]} is not implemented yet."
+        )
+    return adapter
+
+
+def implemented_product_types() -> tuple[ProductType, ...]:
+    """Return the tuple of product types with a registered adapter.
+
+    Used by meta-tests in Phase 4 to assert every implemented product also
+    has an entry in ``LIABILITY_LAYOUTS``.
+    """
+    return tuple(_PRODUCT_ADAPTERS)
 
 
 def product_options_for_ui() -> list[ProductType]:
@@ -576,32 +601,50 @@ def get_term_contract_ui_config() -> TermContractUIConfig:
     return _TERM_CONTRACT_UI_CONFIG
 
 
-def get_pricing_metrics(product_type: ProductType, result: Any) -> tuple[PricingMetric, ...]:
-    if product_type == ProductType.RILA:
-        return (
-            PricingMetric(label="Single premium", value=float(getattr(result, "single_premium")), is_money=True),
-            PricingMetric(label="PV benefit (claims)", value=float(getattr(result, "pv_benefit")), is_money=True),
-            PricingMetric(label="PV monthly expenses", value=float(getattr(result, "pv_monthly_expenses")), is_money=True),
-            PricingMetric(label="Annuity factor", value=float(getattr(result, "annuity_factor")), is_money=False),
-        )
-    if product_type == ProductType.TERM_LIFE:
-        pv_claims = float(getattr(result, "pv_benefit"))
-        pv_premiums = float(-float(getattr(result, "pv_monthly_expenses")))
-        net_pv = float(getattr(result, "single_premium"))
-        economic_reserve = np.asarray(getattr(result, "economic_reserve", np.asarray([], dtype=float)))
-        issue_reserve = float(economic_reserve[0]) if economic_reserve.size else float("nan")
-        return (
-            PricingMetric(label="PV claims", value=pv_claims, is_money=True),
-            PricingMetric(label="PV premiums", value=pv_premiums, is_money=True),
-            PricingMetric(label="Net PV (claims - premiums)", value=net_pv, is_money=True),
-            PricingMetric(label="Issue reserve", value=issue_reserve, is_money=True),
-        )
+def _spia_pricing_metrics(result: Any) -> tuple[PricingMetric, ...]:
     return (
-        PricingMetric(label="Single premium", value=float(getattr(result, "single_premium")), is_money=True),
-        PricingMetric(label="PV benefit", value=float(getattr(result, "pv_benefit")), is_money=True),
-        PricingMetric(label="PV monthly expenses", value=float(getattr(result, "pv_monthly_expenses")), is_money=True),
-        PricingMetric(label="Annuity factor", value=float(getattr(result, "annuity_factor")), is_money=False),
+        PricingMetric(label="Single premium", value=float(result.single_premium), is_money=True),
+        PricingMetric(label="PV benefit", value=float(result.pv_benefit), is_money=True),
+        PricingMetric(label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True),
+        PricingMetric(label="Annuity factor", value=float(result.annuity_factor), is_money=False),
     )
+
+
+def _rila_pricing_metrics(result: Any) -> tuple[PricingMetric, ...]:
+    return (
+        PricingMetric(label="Single premium", value=float(result.single_premium), is_money=True),
+        PricingMetric(label="PV benefit (claims)", value=float(result.pv_benefit), is_money=True),
+        PricingMetric(label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True),
+        PricingMetric(label="Annuity factor", value=float(result.annuity_factor), is_money=False),
+    )
+
+
+def _term_pricing_metrics(result: Any) -> tuple[PricingMetric, ...]:
+    pv_claims = float(result.pv_benefit)
+    pv_premiums = float(-float(result.pv_monthly_expenses))
+    net_pv = float(result.single_premium)
+    economic_reserve = np.asarray(getattr(result, "economic_reserve", np.asarray([], dtype=float)))
+    issue_reserve = float(economic_reserve[0]) if economic_reserve.size else float("nan")
+    return (
+        PricingMetric(label="PV claims", value=pv_claims, is_money=True),
+        PricingMetric(label="PV premiums", value=pv_premiums, is_money=True),
+        PricingMetric(label="Net PV (claims - premiums)", value=net_pv, is_money=True),
+        PricingMetric(label="Issue reserve", value=issue_reserve, is_money=True),
+    )
+
+
+# Per-product pricing-metric formatters. Adding a new product means one
+# additional entry here; the dispatcher stays branch-free.
+_PRICING_METRIC_FORMATTERS: dict[ProductType, Callable[[Any], tuple[PricingMetric, ...]]] = {
+    ProductType.SPIA: _spia_pricing_metrics,
+    ProductType.TERM_LIFE: _term_pricing_metrics,
+    ProductType.RILA: _rila_pricing_metrics,
+}
+
+
+def get_pricing_metrics(product_type: ProductType, result: Any) -> tuple[PricingMetric, ...]:
+    formatter = _PRICING_METRIC_FORMATTERS.get(product_type, _spia_pricing_metrics)
+    return formatter(result)
 
 
 def get_product_ui_config(product_type: ProductType) -> ProductUIConfig:

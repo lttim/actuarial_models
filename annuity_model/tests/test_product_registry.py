@@ -16,7 +16,6 @@ from product_registry import (
     get_term_contract_ui_config,
 )
 
-
 pytestmark = [pytest.mark.product_spia, pytest.mark.product_term, pytest.mark.product_rila]
 
 

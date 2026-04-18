@@ -14,16 +14,16 @@ widgets to ``min_value`` on first paint.
 
 from __future__ import annotations
 
-import io
-import os
-import sys
-from pathlib import Path
-from typing import Any, Literal, MutableMapping
-
 import dataclasses
 import datetime as _dt
+import io
 import json
+import os
+import sys
 import time
+from collections.abc import MutableMapping
+from pathlib import Path
+from typing import Any, Literal
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
@@ -41,44 +41,42 @@ import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
 from alm_excel_ladder import ALM_ENGINE_SHEET
-
 from build_pricing_excel_workbook import (
     ALM_ENGINE_FIELD_GUIDE_SHEET,
     ALM_ENGINE_STEP_MONTHS,
     ALM_EXCEL_PATH_MONTH_CAP,
-    ALMExcelSnapshot,
     ALM_PROJECTION_FIRST_DATA_ROW,
     ALM_SHEET_NAME,
-    ExcelPythonSnapshot,
     LIABILITY_SHEET_NAME,
+    ALMExcelSnapshot,
+    ExcelPythonSnapshot,
     MCExcelSnapshot,
     alm_excel_downsample_snapshot,
     alm_excel_snapshot_from_result,
     alm_excel_truncate_snapshot,
     mc_excel_snapshot_from_result,
 )
-from product_excel import build_product_workbook
-from product_registry import (
-    ProductType,
-    get_product_adapter,
-    get_product_capabilities,
-    get_product_default_mortality_mode,
-    get_mortality_mode_label,
-    get_product_ui_config,
-    get_pricing_metrics,
-    get_product_mortality_mode_options,
-    get_term_contract_ui_config,
-    product_label,
-    product_options_for_ui,
-)
-from test_dashboard import render_unit_tests_page
-
 from pricing_run_form_state import (
     PRICING_RUN_NUMBER_INPUT_KEYS,
     build_run_form_seed_defaults,
     ensure_session_choice,
     run_number_input,
 )
+from product_excel import build_product_workbook
+from product_registry import (
+    ProductType,
+    get_mortality_mode_label,
+    get_pricing_metrics,
+    get_product_adapter,
+    get_product_capabilities,
+    get_product_default_mortality_mode,
+    get_product_mortality_mode_options,
+    get_product_ui_config,
+    get_term_contract_ui_config,
+    product_label,
+    product_options_for_ui,
+)
+from test_dashboard import render_unit_tests_page
 
 
 def _maybe_alm_excel_snapshot_for_workbook() -> ALMExcelSnapshot | None:
@@ -328,11 +326,11 @@ def _yield_curve_to_dict(yc: sp.YieldCurve) -> dict[str, Any]:
 def _mortality_to_dict(mort: Any) -> dict[str, Any]:
     out: dict[str, Any] = {}
     if hasattr(mort, "ages"):
-        out["ages"] = _serialize_array(getattr(mort, "ages"), include_full=True)
+        out["ages"] = _serialize_array(mort.ages, include_full=True)
     if hasattr(mort, "qx"):
-        out["qx"] = _serialize_array(getattr(mort, "qx"), include_full=True)
+        out["qx"] = _serialize_array(mort.qx, include_full=True)
     if hasattr(mort, "qx_at_int_age"):
-        out["qx_at_int_age"] = _serialize_array(getattr(mort, "qx_at_int_age"), include_full=True)
+        out["qx_at_int_age"] = _serialize_array(mort.qx_at_int_age, include_full=True)
     out["type"] = type(mort).__name__
     return out
 
@@ -883,20 +881,7 @@ def _build_profit_waterfall_chart_df(rows: list[tuple[str, float, bool]]) -> pd.
     n = len(rows)
     for i, (label, val, is_total) in enumerate(rows):
         v = float(val)
-        if is_total and i == 0:
-            records.append(
-                {
-                    "Step": label,
-                    "start": 0.0,
-                    "end": v,
-                    "delta": v,
-                    "lo": 0.0,
-                    "hi": v,
-                    "bar_color": "Total",
-                }
-            )
-            running = v
-        elif is_total and i == n - 1:
+        if is_total and i == 0 or is_total and i == n - 1:
             records.append(
                 {
                     "Step": label,

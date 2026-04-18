@@ -1,0 +1,90 @@
+site_name: annuity_model
+site_description: SPIA / Term Life / RILA pricing engine, ALM ladder, and Excel workbook generator.
+site_author: lttim
+repo_url: https://github.com/lttim/actuarial_models
+repo_name: actuarial_models
+edit_uri: edit/main/annuity_model/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["."]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            heading_level: 2
+            members_order: source
+            show_signature_annotations: true
+            separate_signature: true
+
+nav:
+  - Home: README.md
+  - Glossary: docs/glossary.md
+  - Contracts:
+      - SPIA / ALM: docs/model_parity_contract.md
+      - RILA: docs/rila_parity_contract.md
+      - RILA spec: docs/rila_product_spec.md
+      - Release checklist: docs/parity_test_checklist.md
+  - Runbooks:
+      - Investigate parity break: docs/runbooks/investigate_parity_break.md
+      - Debug validator failure: docs/runbooks/debug_validator_failure.md
+      - Regenerate Excel cache: docs/runbooks/regenerate_excel_cache.md
+      - Launcher double-click: docs/runbooks/launcher_double_click.md
+      - Release: docs/runbooks/release.md
+  - Governance:
+      - CHANGELOG: docs/CHANGELOG.md
+      - Model change log: docs/model_change_log.md
+      - CODEOWNERS rationale: docs/CODEOWNERS_RATIONALE.md
+  - UI migration: ui/MIGRATION.md

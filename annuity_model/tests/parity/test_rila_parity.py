@@ -10,7 +10,7 @@ import pricing_projection as sp
 import rila_projection as rp
 from build_pricing_excel_workbook import LIABILITY_SHEET_NAME
 from build_rila_excel_workbook import build_rila_workbook_from_spec, rila_excel_spec_from_launcher
-
+from parity_constants import RILA_AV_TOL, RILA_PV_TOL
 
 pytestmark = [pytest.mark.parity, pytest.mark.product_rila]
 
@@ -86,10 +86,11 @@ def test_rila_workbook_modelcheck_reconciles_zero_difference():
     pv_b = float(np.sum(res.expected_benefit_cashflows * res.discount_factors))
     pv_e = float(np.sum(res.expected_expense_cashflows * res.discount_factors))
     pv_t = float(np.sum(res.expected_total_cashflows * res.discount_factors))
-    np.testing.assert_allclose(float(ws_mc["B5"].value), pv_b, rtol=0.0, atol=1e-3)
-    np.testing.assert_allclose(float(ws_mc["B6"].value), pv_e, rtol=0.0, atol=1e-3)
-    np.testing.assert_allclose(float(ws_mc["B7"].value), pv_t, rtol=0.0, atol=1e-3)
-    np.testing.assert_allclose(float(ws_mc["B8"].value), float(res.single_premium), rtol=0.0, atol=1e-3)
+    # PV / ModelCheck tolerance comes from parity_constants.RILA_PV_TOL.
+    np.testing.assert_allclose(float(ws_mc["B5"].value), pv_b, rtol=0.0, atol=RILA_PV_TOL)
+    np.testing.assert_allclose(float(ws_mc["B6"].value), pv_e, rtol=0.0, atol=RILA_PV_TOL)
+    np.testing.assert_allclose(float(ws_mc["B7"].value), pv_t, rtol=0.0, atol=RILA_PV_TOL)
+    np.testing.assert_allclose(float(ws_mc["B8"].value), float(res.single_premium), rtol=0.0, atol=RILA_PV_TOL)
 
 
 def test_rila_account_value_matches_formula_track_month_12():
@@ -118,4 +119,4 @@ def test_rila_account_value_matches_formula_track_month_12():
     )
     prem = float(res.single_premium)
     expect = prem * (1.0 + cr) * (1.0 - contract.rider_fee_annual / 12.0) ** 12
-    np.testing.assert_allclose(av12, expect, rtol=0.0, atol=1e-6)
+    np.testing.assert_allclose(av12, expect, rtol=0.0, atol=RILA_AV_TOL)

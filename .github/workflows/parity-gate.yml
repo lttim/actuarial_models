@@ -1,0 +1,59 @@
+name: parity-gate
+
+# Dedicated, fast-fail status check for the parity suite. Branch protection
+# requires this to be green before any PR can merge to main. Keep it lean:
+# parity tests + the static Excel validator are the only invariants that
+# absolutely cannot regress.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "annuity_model/pricing_projection.py"
+      - "annuity_model/term_projection.py"
+      - "annuity_model/rila_projection.py"
+      - "annuity_model/alm_excel_ladder.py"
+      - "annuity_model/build_*_excel_workbook.py"
+      - "annuity_model/excel_workbook_validator.py"
+      - "annuity_model/product_registry.py"
+      - "annuity_model/product_excel.py"
+      - "annuity_model/recalc_excel_shared.py"
+      - "annuity_model/tests/parity/**"
+      - "annuity_model/docs/*parity*.md"
+      - "annuity_model/parity_constants.py"
+      - "annuity_model/requirements*.txt"
+      - "annuity_model/requirements.lock"
+      - "annuity_model/pyproject.toml"
+      - ".github/workflows/parity-gate.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: parity-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    name: parity + validator (ubuntu / py3.12)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: annuity_model
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install deps
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.lock -r requirements-dev.txt
+      - name: Parity tests (fast-fail, verbose)
+        run: pytest tests/parity/ -x -v --tb=short
+      - name: Static Excel formula validator (export + validate every product)
+        run: pytest tests/test_excel_export_validation.py -x -v --tb=short
+      - name: Deep smoke (real workbook build + validate)
+        run: python scripts/deep_smoke.py

@@ -1,10 +1,11 @@
-# Runtime dependencies for pricing_ui.py (Streamlit Cloud: see ../requirements.txt at repo root)
+# Runtime dependencies for pricing_ui.py (Streamlit Cloud: see ../requirements.txt at repo root).
+# Pinned to the versions used in the M5 dev venv on 2026-04 (Python 3.12).
 # streamlit>=1.41: avoids altair 5+/6 vs streamlit 1.19 vegalite.v4 import crash (uv resolution).
-numpy
-pandas
-pyarrow
-altair>=5.0.0
-streamlit>=1.41.0
-matplotlib
-openpyxl
-pytest
+# Test/dev tools (pytest, pytest-html, ruff, black, mypy, ...) live in requirements-dev.txt.
+numpy==2.4.4
+pandas==3.0.2
+pyarrow==23.0.1
+altair==6.0.0
+streamlit==1.56.0
+matplotlib==3.10.8
+openpyxl==3.1.5

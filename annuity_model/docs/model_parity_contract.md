@@ -19,17 +19,27 @@ For any given set of inputs, the Python engine and the recalculated Excel workbo
 agree to within the tolerances below at **every month** of the projection horizon, for
 every tracked state variable.
 
-| Variable | Absolute tolerance | Notes |
-|----------|--------------------|-------|
-| Cash balance EOM | 1e-4 | Dollar |
-| Bond face EOM | 1e-4 | Dollar per bucket |
-| Bond MV EOM | 1e-4 | Dollar per bucket |
-| Total asset MV | 1e-4 | Dollar |
-| Liability PV | 1e-4 | Dollar |
-| Surplus | 1e-4 | Dollar |
-| Remaining tenor (t_rem) | 1e-6 | Years |
-| Discount factor (DF) | 1e-10 | Dimensionless |
-| Reinvest amount (dmv) | 1e-4 | Dollar |
+The table below is generated from `annuity_model/parity_constants.py` by
+`scripts/render_parity_contract.py`. Edit the constants module, then run
+`python -m annuity_model.scripts.render_parity_contract` to refresh; CI verifies
+the docs are in sync via `--check`.
+
+<!-- BEGIN GENERATED tolerances -->
+| Variable | Tolerance | Units | Notes |
+|----------|-----------|-------|-------|
+| Cash balance EOM | `1e-04` (`parity_constants.TOL_DOLLAR`) | USD | Per month |
+| Bond face EOM | `1e-04` (`parity_constants.TOL_DOLLAR`) | USD | Per bucket per month |
+| Bond MV EOM | `1e-04` (`parity_constants.TOL_DOLLAR`) | USD | Per bucket per month |
+| Total asset MV | `1e-04` (`parity_constants.TOL_DOLLAR`) | USD |  |
+| Liability PV | `1e-04` (`parity_constants.TOL_DOLLAR`) | USD |  |
+| Surplus | `1e-04` (`parity_constants.TOL_DOLLAR`) | USD |  |
+| Remaining tenor (t_rem) | `1e-06` (`parity_constants.TOL_TENOR`) | Years |  |
+| Discount factor (DF) | `1e-10` (`parity_constants.TOL_DF`) | Dimensionless |  |
+| Reinvest amount (dmv) | `1e-04` (`parity_constants.TOL_DOLLAR`) | USD |  |
+| ModelCheck snapshot | `0.0 (exact)` (`parity_constants.MODELCHECK_TOL`) | USD | Exact match required |
+| Disinvest tie-break threshold (Excel) | `5e-10` (`parity_constants.EXCEL_DISINVEST_THRESHOLD`) | Dimensionless | Half the inter-bucket epsilon |
+| Per-bucket epsilon (Python / Excel) | `1e-09` (`parity_constants.EXCEL_DISINVEST_EPSILON`) | Dimensionless | k * eps (Py) / (k+1) * eps (Excel) |
+<!-- END GENERATED tolerances -->
 
 > **Display rounding** (2 decimal places for $ values in the UI) is the only place where
 > values may be rounded. All internal calculations use full float64 precision.

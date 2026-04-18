@@ -1,13 +1,12 @@
 # Streamlit Cloud reads this from the repo root when main file is streamlit_app.py.
-# Keep in sync with annuity_model/requirements.txt
-#
+# Keep in sync with annuity_model/requirements.txt.
+# Pinned to the versions used in the M5 dev venv on 2026-04 (Python 3.12).
 # Pin Streamlit: unpinned, uv can pick ancient streamlit (e.g. 1.19) while resolving
-# altair 6+, which drops altair.vegalite.v4 → ModuleNotFoundError at import time.
-numpy
-pandas
-pyarrow
-altair>=5.0.0
-streamlit>=1.41.0
-matplotlib
-openpyxl
-pytest
+# altair 6+, which drops altair.vegalite.v4 -> ModuleNotFoundError at import time.
+numpy==2.4.4
+pandas==3.0.2
+pyarrow==23.0.1
+altair==6.0.0
+streamlit==1.56.0
+matplotlib==3.10.8
+openpyxl==3.1.5

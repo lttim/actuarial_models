@@ -55,8 +55,8 @@ empty (no data, no header).
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 try:  # openpyxl is the workbook substrate; only imported lazily for type checks.
     from openpyxl.utils import column_index_from_string, get_column_letter

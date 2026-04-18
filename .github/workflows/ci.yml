@@ -1,0 +1,103 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Cancel in-progress runs for the same ref so a fast follow-up push doesn't
+# pile up CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pre-commit:
+    name: pre-commit (lint + format + mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install runtime + dev deps
+        run: |
+          pip install --upgrade pip
+          pip install -r annuity_model/requirements.lock -r annuity_model/requirements-dev.txt pre-commit
+      - name: Run pre-commit on all files
+        run: pre-commit run --all-files --show-diff-on-failure
+
+  test:
+    name: tests (${{ matrix.os }} / py${{ matrix.python-version }})
+    needs: pre-commit
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+        python-version: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: annuity_model
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install deps
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.lock -r requirements-dev.txt coverage[toml]
+      - name: pytest with coverage
+        run: |
+          coverage run -m pytest tests/ tests/parity/ -q
+          coverage report --fail-under=85
+          coverage xml -o coverage.xml
+      - name: Parity contract docs in sync with parity_constants
+        run: python scripts/render_parity_contract.py --check
+      - name: Deep smoke (build + validate every product workbook)
+        run: python scripts/deep_smoke.py
+      - name: Launcher self-check (POSIX only -- the Finder double-click path)
+        if: runner.os != 'Windows'
+        shell: bash
+        # Run with a stripped PATH so we exercise the same fallback logic a
+        # Finder double-click hits. The launcher must locate ./.venv/bin/python
+        # *or* a >= requires-python interpreter on PATH.
+        run: |
+          python -m venv .venv
+          ./.venv/bin/python -m pip install --upgrade pip
+          ./.venv/bin/python -m pip install -r requirements.lock
+          env -i HOME="$HOME" PATH="/usr/bin:/bin:/usr/sbin:/sbin" SHELL=/bin/bash \
+            bash ./run_pricing_ui.sh --self-check
+      - name: Launcher self-check (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          py -3 -m venv .venv
+          .venv\Scripts\python.exe -m pip install --upgrade pip
+          .venv\Scripts\python.exe -m pip install -r requirements.lock
+          call run_pricing_ui.bat --self-check
+      - name: HTML pytest report
+        if: always()
+        run: |
+          mkdir -p reports
+          pytest tests/ tests/parity/ -q --html=reports/pytest_report.html --self-contained-html || true
+      - name: Upload pytest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: annuity_model/reports/pytest_report.html
+      - name: Upload coverage XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: annuity_model/coverage.xml

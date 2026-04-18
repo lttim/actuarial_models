@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pricing_projection as sp
 from build_pricing_excel_workbook import (
     ALMExcelSnapshot,
     ExcelBuildSpec,
@@ -13,7 +14,6 @@ from build_pricing_excel_workbook import (
 from build_rila_excel_workbook import RILAExcelBuildSpec, build_rila_workbook_from_spec
 from build_term_excel_workbook import TermExcelBuildSpec, build_term_workbook_from_spec
 from product_registry import ProductType
-import pricing_projection as sp
 
 
 def build_product_workbook(

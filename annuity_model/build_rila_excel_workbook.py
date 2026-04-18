@@ -13,21 +13,25 @@ from openpyxl.styles import Font
 
 import pricing_projection as sp
 import rila_projection as rp
-
-from build_pricing_excel_workbook import (
+from excel_builder_helpers import (
     ALM_ENGINE_STEP_MONTHS,
     ALM_EXCEL_PATH_MONTH_CAP,
     ALM_PROJECTION_FIRST_DATA_ROW,
+    LIABILITY_SHEET_NAME,
     ALMExcelSnapshot,
     ExcelPythonSnapshot,
-    LIABILITY_SHEET_NAME,
-    _write_alm_projection_sheet,
-    _write_model_check_sheet,
     alm_excel_downsample_snapshot,
     alm_excel_truncate_snapshot,
     inject_alm_projection_formula_cached_values,
+    liability_layout_for,
+    write_alm_projection_sheet,
+    write_model_check_sheet,
 )
-from recalc_excel_shared import RECALC_MONTHLY_CURVE_SHEET, write_monthly_curve_logdf, write_yield_curve_sheet
+from recalc_excel_shared import (
+    RECALC_MONTHLY_CURVE_SHEET,
+    write_monthly_curve_logdf,
+    write_yield_curve_sheet,
+)
 
 RILA_PROJ_MAX_ROWS = 600
 SHEET_INPUTS = "Inputs"
@@ -390,7 +394,7 @@ def build_rila_workbook_from_spec(
     ws_pr["W6"] = "Σ l_end · v (annuity-style factor)"
     ws_pr["X6"] = f"=SUMPRODUCT(D{first}:D{last_cap_row},O{first}:O{last_cap_row})"
     ws_pr["W7"] = "PV total (ben+exp)"
-    ws_pr["X7"] = f"=X4+X5"
+    ws_pr["X7"] = "=X4+X5"
     ws_pr["W8"] = "Single premium (export)"
     ws_pr["X8"] = f"={SHEET_INPUTS}!$B${_IN_ROW_PREMIUM}"
     ws_pr["W9"] = "Reserve at t=0"
@@ -403,7 +407,11 @@ def build_rila_workbook_from_spec(
             raise ValueError("alm_assumptions is required when alm_snapshot is provided.")
         alm_snap_for_book = alm_excel_downsample_snapshot(alm_snapshot, int(ALM_ENGINE_STEP_MONTHS))
         alm_snap_for_book = alm_excel_truncate_snapshot(alm_snap_for_book, ALM_EXCEL_PATH_MONTH_CAP)
-        alm_layout = _write_alm_projection_sheet(
+        # Liability column letters live in liability_layouts.LIABILITY_LAYOUTS
+        # so the validator and parity tests can cross-check them. We pass the
+        # string code rather than ProductType to avoid a registry-builder cycle.
+        _rila_layout = liability_layout_for("rila")
+        alm_layout = write_alm_projection_sheet(
             wb,
             alm_snap_for_book,
             alm_assumptions,
@@ -411,8 +419,8 @@ def build_rila_workbook_from_spec(
             y_last_row=int(y_last_row),
             engine_step_months=int(ALM_ENGINE_STEP_MONTHS),
             yield_curve_spread_ref=_in_addr("B", _IN_ROW_SPREAD),
-            liability_total_col="M",
-            liability_discount_col="O",
+            liability_total_col=_rila_layout.total_cf_col,
+            liability_discount_col=_rila_layout.discount_col,
         )
 
     snap_py = ExcelPythonSnapshot(
@@ -429,7 +437,7 @@ def build_rila_workbook_from_spec(
         ("Single premium", float(res.single_premium), f"={LIABILITY_SHEET_NAME}!X8", "money"),
         ("Annuity factor", float(res.annuity_factor), f"={LIABILITY_SHEET_NAME}!X6", "factor"),
     ]
-    _write_model_check_sheet(
+    write_model_check_sheet(
         wb,
         snap_py,
         alm_layout=alm_layout,

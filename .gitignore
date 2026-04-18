@@ -26,6 +26,8 @@ reports/
 model output/
 streamlit output/
 tmp_*.csv
+# Deep-smoke driver writes workbooks here (script lives in annuity_model/scripts/)
+annuity_model/.smoke/out/
 
 # --- Editor / IDE ---
 .idea/
