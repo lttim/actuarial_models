@@ -17,7 +17,7 @@ mkdocstrings[python]==0.27.0
 pymdown-extensions==10.12
 
 # Property tests + perf gates + mutation pilot (P4)
-hypothesis==6.122.3
+hypothesis==6.152.1
 pytest-benchmark==5.1.0
 pytest-cov==6.0.0
 mutmut==3.2.0
