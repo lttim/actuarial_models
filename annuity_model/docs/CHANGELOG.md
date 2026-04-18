@@ -38,6 +38,21 @@ ALM rules, RILA crediting) MUST also be logged in
   removed" warning. Tuple-form `isinstance(x, (X, Y))` is no longer flagged.
 
 ### Changed
+- **Dependabot Actions + pytest-cov bumps (PRs #1, #2, #3, #4, #9 applied directly to main):**
+  - `actions/checkout v4 -> v6` across `ci.yml`, `docs.yml`, `parity-gate.yml`,
+    `security.yml` (8 occurrences). v5 dropped Node 16; v6 ships on Node 20
+    runtime which is what `actions/setup-python@v5` already requires.
+  - `actions/deploy-pages v4 -> v5` in `docs.yml`. v5 only added optional
+    `preview` mode; existing `id: deployment` step keeps working unchanged.
+  - `actions/upload-artifact v4 -> v7` in `ci.yml`. v5 added compression
+    options, v6/v7 changed nothing the workflow uses; the per-matrix-entry
+    artifact names already follow the v4+ unique-name requirement so no
+    collisions are possible.
+  - `pytest-cov 6.0.0 -> 7.1.0` in `requirements-dev.txt`; `requirements.lock`
+    regenerated. Verified `coverage run / report --fail-under=55` still
+    produces the same 59.6% total.
+  - Closes Dependabot PRs #1, #2, #3, #4, #9 as superseded.
+
 - **Dependabot patch-and-minor group bump (PR #7 applied directly to main):**
   `ruff 0.7.4 -> 0.15.11`, `mypy 1.13.0 -> 1.20.1`,
   `mkdocs-material 9.5.49 -> 9.7.6`, `pymdown-extensions 10.12 -> 10.21.2`,

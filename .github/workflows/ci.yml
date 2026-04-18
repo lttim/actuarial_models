@@ -21,7 +21,7 @@ jobs:
     name: pre-commit (lint + format + mypy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -46,7 +46,7 @@ jobs:
       run:
         working-directory: annuity_model
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -100,13 +100,13 @@ jobs:
           pytest tests/ tests/parity/ -q --html=reports/pytest_report.html --self-contained-html || true
       - name: Upload pytest report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-report-${{ matrix.os }}-py${{ matrix.python-version }}
           path: annuity_model/reports/pytest_report.html
       - name: Upload coverage XML
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}
           path: annuity_model/coverage.xml
@@ -116,7 +116,7 @@ jobs:
     needs: pre-commit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build image
