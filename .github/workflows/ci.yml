@@ -91,13 +91,13 @@ jobs:
           pytest tests/ tests/parity/ -q --html=reports/pytest_report.html --self-contained-html || true
       - name: Upload pytest report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-report-${{ matrix.os }}-py${{ matrix.python-version }}
           path: annuity_model/reports/pytest_report.html
       - name: Upload coverage XML
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}
           path: annuity_model/coverage.xml
