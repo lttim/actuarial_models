@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, TypeGuard, cast
 
 ALMReinvestRule = Literal["hold_cash", "pro_rata"]
 ALMDisinvestRule = Literal["shortest_first", "pro_rata"]
@@ -43,6 +43,7 @@ ALMBorrowingPolicy = Literal["borrow_before_selling", "borrow_after_assets_insuf
 ALMBorrowingRateMode = Literal["scenario_linked", "fixed"]
 
 import math
+import os
 
 import numpy as np
 import pandas as pd
@@ -270,8 +271,8 @@ class YieldCurve:
         par_yields = par_yields[order]
 
         zero_mats, zero_rates = bootstrap_zero_rates_from_par_yields(
-            par_maturities_years=maturities,
-            par_yields=par_yields,
+            par_maturities_years=maturities.tolist(),
+            par_yields=par_yields.tolist(),
             coupon_freq=coupon_freq,
         )
         return YieldCurve(zero_mats, zero_rates)
@@ -384,7 +385,7 @@ def bootstrap_zero_rates_from_par_yields(
 
     # Discount factors DF(0)=1; compute DF(j*period) sequentially.
     df = np.zeros_like(t_nodes)
-    df_prev = []  # store DF values for summations
+    df_prev: list[float] = []  # store DF values for summations
 
     for k, T in enumerate(t_nodes, start=1):
         yk = float(par_on_nodes[k - 1])
@@ -497,8 +498,12 @@ class MortalityTableQx:
         return S
 
 
-def _is_numeric(x: object) -> bool:
-    return isinstance(x, (int, float, np.number)) and not pd.isna(x)
+def _is_numeric(x: object) -> TypeGuard[int | float | np.number[Any]]:
+    # TypeGuard so that downstream `int(x)` / `float(x)` calls type-check
+    # without per-callsite casts. pd.isna's stub union does not include
+    # np.number/int/float directly; cast(Any, x) keeps mypy --strict happy
+    # without changing the runtime contract (pd.isna handles all three).
+    return isinstance(x, (int, float, np.number)) and not pd.isna(cast(Any, x))
 
 
 def load_rp2014_male_healthy_annuitant_qx_2014(rp2014_xlsx_path: str) -> MortalityTableQx:
@@ -563,7 +568,9 @@ def ensure_rp2014_male_healthy_annuitant_qx_csv(
     rp2014_xlsx_path: str,
     out_csv_path: str,
 ) -> MortalityTableQx:
-    if not pd.io.common.file_exists(out_csv_path):
+    # pd.io.common.file_exists is undocumented and not in pandas-stubs; use
+    # os.path.exists which has identical semantics for local file paths.
+    if not os.path.exists(out_csv_path):
         mt = load_rp2014_male_healthy_annuitant_qx_2014(rp2014_xlsx_path)
         pd.DataFrame({"age": mt.ages.astype(int), "qx": mt.qx}).to_csv(out_csv_path, index=False)
         return mt
@@ -659,7 +666,8 @@ def ensure_mp2016_male_improvement_csv(
     mp2016_xlsx_path: str,
     out_csv_path: str,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    if pd.io.common.file_exists(out_csv_path):
+    # See note in ensure_rp2014_*_csv: pd.io.common.file_exists is not in stubs.
+    if os.path.exists(out_csv_path):
         df = pd.read_csv(out_csv_path)
         ages = np.sort(df["age"].unique().astype(int))
         years = np.sort(df["year"].unique().astype(int))
@@ -1015,10 +1023,14 @@ def price_spia_single_premium(
     # Survival to payment: pay if alive at each payment date.
     if valuation_year is None and isinstance(mortality, MortalityTableRP2014MP2016):
         raise ValueError("valuation_year must be provided when using MortalityTableRP2014MP2016.")
+    # MortalityTableQx accepts int|None; MortalityTableRP2014MP2016 requires int.
+    # The guard above already failed-fast for the only None+RP2014MP2016 combo,
+    # so default to 0 for the (untyped) MortalityTableQx branch -- it ignores
+    # the value -- which lets the union call type-check under --strict.
     survival = mortality.monthly_survival_to_payment(
         issue_age=contract.issue_age,
         n_months=n_months,
-        valuation_year=valuation_year,
+        valuation_year=valuation_year if valuation_year is not None else 0,
     )
 
     # Discount factors.
@@ -1160,10 +1172,12 @@ def price_spia_single_premium_monte_carlo(
     if valuation_year is None and isinstance(mortality, MortalityTableRP2014MP2016):
         raise ValueError("valuation_year must be provided when using MortalityTableRP2014MP2016.")
 
+    # See sibling routine above: union signature requires `int`; MortalityTableQx
+    # branch ignores the value, so default-to-0 is harmless and keeps --strict happy.
     survival = mortality.monthly_survival_to_payment(
         issue_age=contract.issue_age,
         n_months=n_months,
-        valuation_year=valuation_year,  # ignored by MortalityTableQx
+        valuation_year=valuation_year if valuation_year is not None else 0,
     )
     months = np.arange(1, n_months + 1, dtype=int)
     times_years = months * dt
@@ -1946,7 +1960,8 @@ def run_alm_projection_from_liability_path(
         t_rem = np.maximum(t_rem - dt, 0.0)
         df = _df_rem(yc_a, spread, t_rem)
         matured = np.where((faces > 1e-15) & (t_rem <= 1e-14), True, False)
-        for k in np.flatnonzero(matured):
+        for k_idx in np.flatnonzero(matured):
+            k = int(k_idx)
             cash += float(faces[k])
             faces[k] = 0.0
         if debt > 1e-12 and cash > 1e-12:
@@ -2186,6 +2201,11 @@ def _example_usage() -> None:
     # If you have SOA workbooks locally, use RP-2014 base + MP-2016 improvements.
     # Otherwise fall back to a static qx CSV or a synthetic placeholder.
     valuation_year = 2025
+    # Explicit union annotation -- the try/except cascade narrows from
+    # MortalityTableRP2014MP2016 (preferred) to MortalityTableQx (fallback);
+    # without this, mypy infers the variable's type from the first assignment
+    # and rejects the wider fallback assignments below.
+    mortality: MortalityTableQx | MortalityTableRP2014MP2016
     try:
         rp_csv = DEFAULT_RP2014_MALE_HEALTHY_QX_CSV
         mp_csv = DEFAULT_MP2016_MALE_IMPROVEMENT_CSV

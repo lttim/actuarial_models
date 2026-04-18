@@ -38,6 +38,37 @@ ALM rules, RILA crediting) MUST also be logged in
   removed" warning. Tuple-form `isinstance(x, (X, Y))` is no longer flagged.
 
 ### Added
+- **Strict mypy restored on `pricing_projection.py`** (Wave 2.1 of phase-5
+  hardening). Added back to the strict override in
+  `annuity_model/pyproject.toml` and to the pre-commit `mypy` files
+  pattern, so the engine module is now checked under
+  `disallow_untyped_defs / disallow_incomplete_defs / check_untyped_defs /
+  warn_unreachable / no_implicit_reexport` on every commit and CI run.
+  The 16 strict errors were resolved by:
+  - Promoting `_is_numeric` to a `TypeGuard[int | float | np.number[Any]]`
+    so downstream `int()` / `float()` calls type-check without per-callsite
+    casts (eliminates 5 errors).
+  - Adding an explicit
+    `mortality: MortalityTableQx | MortalityTableRP2014MP2016`
+    annotation in `__main__` so the try/except fallback cascade widens the
+    inferred type instead of getting locked in by the first assignment
+    (eliminates 2 errors).
+  - Replacing two `pd.io.common.file_exists(...)` calls (undocumented and
+    not in pandas-stubs) with `os.path.exists(...)` (eliminates 2 errors).
+  - Defaulting `valuation_year` to `0` when calling
+    `monthly_survival_to_payment` on the `MortalityTableQx | RP2014MP2016`
+    union -- the runtime guard above the call already fast-fails the only
+    None+RP2014MP2016 combo and the Qx branch ignores the value
+    (eliminates 2 errors).
+  - Splitting the `np.flatnonzero(matured)` loop variable into `k_idx`
+    (numpy signedinteger) and `k = int(k_idx)` (Python int) so the
+    subsequent `faces[k]` array index type-checks (1 error).
+  - Adding `.tolist()` on two ndarray->`Sequence[float]` arguments to
+    `bootstrap_zero_rates_from_par_yields` (2 errors).
+  - Annotating `df_prev: list[float] = []` (1 error).
+  All 4 canonical gates remain green; only `alm_excel_ladder.py` is left in
+  the strict-excluded list, scheduled for Wave 2.2.
+
 - **Quarterly recurring check** for the parked runtime Excel recalc gate.
   `annuity_model/docs/runbooks/runtime_excel_recalc_gate.md` now carries
   a "Recurring quarterly check" section with three concrete `pip install

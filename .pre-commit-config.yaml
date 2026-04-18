@@ -64,15 +64,16 @@ repos:
   # (mypy==1.20.1). Pre-commit's mirrors-mypy uses `vX.Y.Z` tags. Bump both
   # together so local pre-commit and CI use the exact same checker.
   #
-  # `pricing_projection` and `alm_excel_ladder` are excluded here while their
-  # 52 strict-mypy errors are being narrowed (P5 follow-up). See pyproject.toml
+  # `alm_excel_ladder` is still excluded here while its strict-mypy errors are
+  # being narrowed (P5 Wave 2.2 follow-up). `pricing_projection` was restored
+  # to strict in P5 Wave 2.1 (2026-04). See pyproject.toml
   # `[[tool.mypy.overrides]]` for the matching rationale comment.
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.20.1
     hooks:
       - id: mypy
         name: mypy (parity-critical core)
-        files: ^annuity_model/(term_projection|rila_projection|excel_workbook_validator|product_registry)\.py$
+        files: ^annuity_model/(pricing_projection|term_projection|rila_projection|excel_workbook_validator|product_registry)\.py$
         args:
           - "--config-file=annuity_model/pyproject.toml"
         additional_dependencies:

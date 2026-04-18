@@ -107,15 +107,14 @@ exclude = [
 # Mypy is run strict on these modules in pre-commit and CI. Adding a new
 # product means adding its engine + builder modules to this list.
 #
-# `pricing_projection` and `alm_excel_ladder` are TEMPORARILY excluded from
-# strict mode (tracked as P5 follow-up). The 2026-04 hardening commit
-# enumerated them here aspirationally; they currently produce 52 mypy errors
-# (mostly: ndarray->Sequence, int|None->int, pd.api.common attr-defined,
-# numeric narrowing). Restoring them is a typed-narrowing task -- not a
-# silently-accepted soft pin -- so the override below lists only modules that
-# pass strict today.
+# `alm_excel_ladder` is still TEMPORARILY excluded from strict mode (tracked as
+# P5 Wave 2.2 follow-up). `pricing_projection` was restored to strict in
+# 2026-04 (Wave 2.1) by adding TypeGuard narrowing on `_is_numeric`, an
+# explicit Mortality union annotation, replacing pd.io.common.file_exists with
+# os.path.exists, and float-narrowing the np.flatnonzero loop index.
 [[tool.mypy.overrides]]
 module = [
+    "pricing_projection",
     "term_projection",
     "rila_projection",
     "excel_workbook_validator",
