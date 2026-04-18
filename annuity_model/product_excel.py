@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,129 @@ from build_rila_excel_workbook import RILAExcelBuildSpec, build_rila_workbook_fr
 from build_term_excel_workbook import TermExcelBuildSpec, build_term_workbook_from_spec
 from product_registry import ProductType
 
+# Per-product workbook builder. The signature accepts the union of all
+# kwargs the dispatcher might pass; individual builders pull what they need
+# (spec, out_path, alm_*) and ignore the rest. Returning bytes (the .xlsx
+# blob) is required so callers downstream of build_product_workbook can
+# write to disk *or* hand off to a Streamlit download_button without going
+# through the filesystem.
+ProductWorkbookBuilder = Callable[..., bytes]
+
+_BUILDER_REGISTRY: dict[ProductType, ProductWorkbookBuilder] = {}
+# Each entry's *expected* spec class. Validated at dispatch time so a
+# wrong-type spec fails fast with a clear TypeError instead of a confusing
+# AttributeError deep inside the builder. None means "no spec-type
+# enforcement" (currently unused; reserved for future products that may
+# accept a union spec).
+_BUILDER_SPEC_TYPES: dict[ProductType, type | None] = {}
+
+
+def register_builder(
+    product_type: ProductType,
+    *,
+    spec_type: type | None,
+) -> Callable[[ProductWorkbookBuilder], ProductWorkbookBuilder]:
+    """Register *fn* as the workbook builder for *product_type*.
+
+    Used as a decorator on the per-product wrapper functions defined below.
+    Re-registering the same product_type raises RuntimeError -- in this
+    codebase that almost always means a copy-paste mistake (two adapters
+    claiming the same enum), not an intentional override. If you really
+    need to override (e.g. for a test), pop from `_BUILDER_REGISTRY`
+    first.
+
+    spec_type is the dataclass that the dispatcher will isinstance-check
+    the incoming `spec` against before calling fn. Pass `None` only if the
+    builder accepts a union of spec types (none today).
+    """
+
+    def decorator(fn: ProductWorkbookBuilder) -> ProductWorkbookBuilder:
+        if product_type in _BUILDER_REGISTRY:
+            raise RuntimeError(
+                f"Workbook builder for {product_type!r} is already registered "
+                f"(existing={_BUILDER_REGISTRY[product_type]!r}, new={fn!r}). "
+                "Pop from _BUILDER_REGISTRY first if this is intentional."
+            )
+        _BUILDER_REGISTRY[product_type] = fn
+        _BUILDER_SPEC_TYPES[product_type] = spec_type
+        return fn
+
+    return decorator
+
+
+@register_builder(ProductType.SPIA, spec_type=ExcelBuildSpec)
+def _build_spia_workbook(
+    *,
+    spec: Any,
+    out_path: str | Path | None,
+    python_snapshot: ExcelPythonSnapshot | None,
+    mc_snapshot: MCExcelSnapshot | None,
+    alm_snapshot: ALMExcelSnapshot | None,
+    alm_assumptions: sp.ALMAssumptions | None,
+) -> bytes:
+    return build_workbook_from_spec(
+        spec,
+        out_path=out_path,
+        python_snapshot=python_snapshot,
+        mc_snapshot=mc_snapshot,
+        alm_snapshot=alm_snapshot,
+        alm_assumptions=alm_assumptions,
+    )
+
+
+@register_builder(ProductType.TERM_LIFE, spec_type=TermExcelBuildSpec)
+def _build_term_workbook(
+    *,
+    spec: Any,
+    out_path: str | Path | None,
+    python_snapshot: ExcelPythonSnapshot | None,
+    mc_snapshot: MCExcelSnapshot | None,
+    alm_snapshot: ALMExcelSnapshot | None,
+    alm_assumptions: sp.ALMAssumptions | None,
+) -> bytes:
+    # Term builder doesn't take python_snapshot / mc_snapshot today (no
+    # ESG/MC sheets are emitted for level-monthly term). Accept and drop
+    # them so the dispatcher signature is uniform.
+    del python_snapshot, mc_snapshot
+    return build_term_workbook_from_spec(
+        spec,
+        out_path=out_path,
+        alm_snapshot=alm_snapshot,
+        alm_assumptions=alm_assumptions,
+    )
+
+
+@register_builder(ProductType.RILA, spec_type=RILAExcelBuildSpec)
+def _build_rila_workbook(
+    *,
+    spec: Any,
+    out_path: str | Path | None,
+    python_snapshot: ExcelPythonSnapshot | None,
+    mc_snapshot: MCExcelSnapshot | None,
+    alm_snapshot: ALMExcelSnapshot | None,
+    alm_assumptions: sp.ALMAssumptions | None,
+) -> bytes:
+    # RILA builder takes alm_* but not python_snapshot / mc_snapshot at
+    # this layer (the RILA workbook embeds its own MC sheet from the
+    # spec). Accept and drop them so the dispatcher signature is uniform.
+    del python_snapshot, mc_snapshot
+    return build_rila_workbook_from_spec(
+        spec,
+        out_path=out_path,
+        alm_snapshot=alm_snapshot,
+        alm_assumptions=alm_assumptions,
+    )
+
+
+def registered_builders() -> tuple[ProductType, ...]:
+    """Return the tuple of product types that have a registered builder.
+
+    Used by the parity-invariant test to assert every implemented adapter
+    (from product_registry.implemented_product_types()) also has a
+    registered workbook builder, and vice versa.
+    """
+    return tuple(_BUILDER_REGISTRY)
+
 
 def build_product_workbook(
     *,
@@ -26,35 +150,22 @@ def build_product_workbook(
     alm_snapshot: ALMExcelSnapshot | None = None,
     alm_assumptions: sp.ALMAssumptions | None = None,
 ) -> bytes:
-    if product_type == ProductType.SPIA:
-        if not isinstance(spec, ExcelBuildSpec):
-            raise TypeError("SPIA workbook builder requires ExcelBuildSpec.")
-        return build_workbook_from_spec(
-            spec,
-            out_path=out_path,
-            python_snapshot=python_snapshot,
-            mc_snapshot=mc_snapshot,
-            alm_snapshot=alm_snapshot,
-            alm_assumptions=alm_assumptions,
+    builder = _BUILDER_REGISTRY.get(product_type)
+    if builder is None:
+        raise NotImplementedError(
+            f"Workbook builder is not implemented for product '{product_type.value}'."
         )
-    if product_type == ProductType.TERM_LIFE:
-        if not isinstance(spec, TermExcelBuildSpec):
-            raise TypeError("Term workbook builder requires TermExcelBuildSpec.")
-        return build_term_workbook_from_spec(
-            spec,
-            out_path=out_path,
-            alm_snapshot=alm_snapshot,
-            alm_assumptions=alm_assumptions,
+    expected_spec = _BUILDER_SPEC_TYPES[product_type]
+    if expected_spec is not None and not isinstance(spec, expected_spec):
+        raise TypeError(
+            f"{product_type.value} workbook builder requires {expected_spec.__name__}, "
+            f"got {type(spec).__name__}."
         )
-    if product_type == ProductType.RILA:
-        if not isinstance(spec, RILAExcelBuildSpec):
-            raise TypeError("RILA workbook builder requires RILAExcelBuildSpec.")
-        return build_rila_workbook_from_spec(
-            spec,
-            out_path=out_path,
-            alm_snapshot=alm_snapshot,
-            alm_assumptions=alm_assumptions,
-        )
-    raise NotImplementedError(
-        f"Workbook builder is not implemented for product '{product_type.value}'."
+    return builder(
+        spec=spec,
+        out_path=out_path,
+        python_snapshot=python_snapshot,
+        mc_snapshot=mc_snapshot,
+        alm_snapshot=alm_snapshot,
+        alm_assumptions=alm_assumptions,
     )

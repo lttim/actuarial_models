@@ -69,6 +69,29 @@ ALM rules, RILA crediting) MUST also be logged in
   All 4 canonical gates remain green; only `alm_excel_ladder.py` is left in
   the strict-excluded list, scheduled for Wave 2.2.
 
+- **`@register_builder` decorator pattern** for `build_product_workbook`
+  (Wave 3.1 of phase-5 hardening). Replaces the ~30-line if/elif chain
+  in `annuity_model/product_excel.py` with a `ProductType -> builder`
+  registry populated at import time by `@register_builder(ProductType.X,
+  spec_type=XSpec)` decorators on three thin wrapper functions
+  (`_build_spia_workbook`, `_build_term_workbook`, `_build_rila_workbook`).
+  Adding a new product is now a one-edit change: write the wrapper +
+  decorate it. The dispatcher (`build_product_workbook`) is now
+  product-agnostic and stays under 20 lines. Spec-type validation runs
+  before the builder is invoked, so wrong-type specs fail with a clear
+  `TypeError` instead of an `AttributeError` deep in the builder. New
+  invariant test `tests/test_builder_registry_invariants.py` (5 tests,
+  marked `invariant`) locks the registry contract:
+  - Every product in `implemented_product_types()` has a registered
+    builder, and vice versa (no orphans).
+  - Each builder declares its expected spec dataclass.
+  - Wrong-type spec raises `TypeError` with the product name in the
+    message.
+  - Unimplemented product raises `NotImplementedError` with the enum
+    `.value` in the message.
+  - Re-registering the same `ProductType` raises `RuntimeError` (catches
+    copy-paste mistakes where two builders claim the same enum).
+
 - **Strict mypy restored on `alm_excel_ladder.py`** (Wave 2.2 of phase-5
   hardening). Added back to the strict override in
   `annuity_model/pyproject.toml` and to the pre-commit `mypy` files
