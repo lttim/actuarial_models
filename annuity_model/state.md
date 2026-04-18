@@ -26,8 +26,12 @@ pytest tests/ tests/parity/ -q   # 150 passed
 pytest tests/parity/ -v          # 21 passed (incl. RILA)
 ```
 
-Last full run on Windows (Python 3.14, openpyxl latest): **150 passed in
-~10–12 s**.
+Last full runs:
+
+- Windows (Python 3.14, openpyxl latest): **150 passed in ~10–12 s**.
+- macOS Apple Silicon — MacBook Air M5 (Python 3.12.13, openpyxl 3.1.5,
+  Homebrew `python@3.12`): **150 passed in ~3.2 s** (3 consecutive runs:
+  3.46 / 3.19 / 3.22 s).
 
 ## What's in flight
 
