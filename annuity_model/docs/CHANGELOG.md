@@ -11,6 +11,20 @@ ALM rules, RILA crediting) MUST also be logged in
 ## [Unreleased]
 
 ### Fixed
+- CI dependency-resolution failure on `main` after the P0-P4 hardening commit:
+  `xlcalculator==0.5.0` (dev dep) transitively required `yearfrac<2`, which
+  conflicted with the pinned `numpy==2.4.4` in `requirements.lock`. Both
+  `ci.yml` and `docs.yml` failed at the install step on first push. Locally
+  the conflict was masked because the `.venv` predated the `xlcalculator`
+  addition. Resolution: parked `xlcalculator` (commented out in
+  `requirements-dev.txt`); the corresponding parity test
+  `tests/parity/test_runtime_excel_recalc.py` already self-skips via
+  `pytest.importorskip`. See
+  `docs/runbooks/runtime_excel_recalc_gate.md` for the restore plan.
+- `.github/workflows/docs.yml` now installs from `requirements.lock` instead
+  of the loose `requirements.txt + requirements-dev.txt`, so docs builds are
+  reproducible and immune to upstream transitive-dep drift (e.g. the
+  `contourpy 1.2.0` backtrack that broke the first run).
 - `run_pricing_ui.command` (Finder double-click) crashed on macOS systems
   whose default `python3` was Python 3.9 with a stray `streamlit` install in
   `~/Library/Python/3.9/site-packages`: `liability_layouts.py` uses
