@@ -124,24 +124,13 @@ check_untyped_defs = true
 warn_unreachable = true
 no_implicit_reexport = true
 
-[tool.pytest.ini_options]
-# Mirror pytest.ini so tools that read pyproject (CI, IDE) get the same view.
-# pytest.ini stays the source of truth at runtime until P2 removes it.
-pythonpath = ["."]
-testpaths = ["tests"]
-markers = [
-    "regression: marks tests as regression tests for historical bugs (deselect with '-m \"not regression\"')",
-    "parity: marks parity tests for Python-vs-Excel reconciliation",
-    "product_spia: marks tests that validate SPIA product behavior",
-    "product_term: marks tests that validate Term Life product behavior",
-    "product_rila: marks tests that validate RILA product behavior",
-    "slow: marks tests that take >0.3s; deselect with '-m \"not slow\"'",
-]
-addopts = [
-    "-ra",
-    "--strict-markers",
-    "--strict-config",
-]
+# [tool.pytest.ini_options] removed 2026-04 -- pytest.ini is the single source
+# of truth at runtime. Pytest reads pytest.ini *first* and ignores pyproject's
+# [tool.pytest.ini_options] when both exist, so this section was silently dead
+# and only created a drift hazard (e.g. the markers list here had fallen behind
+# pytest.ini, missing the `invariant` and `property` markers). The src/ layout
+# move (P3) will switch to pyproject as the canonical location and delete
+# pytest.ini in the same commit.
 
 [tool.coverage.run]
 branch = true

@@ -26,6 +26,14 @@ ALM rules, RILA crediting) MUST also be logged in
   every PR. Catches drift between the host venv and the reproducible
   container build (the latter is what auditors will reproduce).
 
+### Removed
+- Dead `[tool.pytest.ini_options]` block from `pyproject.toml`. Pytest reads
+  `pytest.ini` first when both exist and silently ignores the pyproject
+  block, so the duplicate was never enforced and had already fallen out of
+  sync (the marker list was missing `invariant` and `property`). `pytest.ini`
+  is the single runtime source of truth until the `src/` migration moves
+  config into `pyproject.toml` and deletes `pytest.ini` in the same commit.
+
 ### Fixed
 - CI coverage gate: `--fail-under=85` was aspirational and CI never went
   green on it. Today's actual coverage is 59.6%, dominated by the 4103-LOC
