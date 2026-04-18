@@ -1,12 +1,20 @@
 # pyproject.toml -- annuity_model
 # Phase 1 of the hardening roadmap: tool configuration only.
-# Phase 2 will move to a real `src/` layout + wheel build; the [project] table
-# below currently exists ONLY to publish runtime requirements (notably
-# `requires-python`) so launchers, CI, and tests share one source of truth.
 #
-# Today's import style (`import pricing_projection as sp`) still works because
-# pytest.ini sets `pythonpath = .`. The dev tools below pick up source under
-# annuity_model/ via explicit include patterns.
+# P5 Wave 3.3 status (2026-04): DEFERRED -- the buildable-wheel +
+# [project.scripts] + src/ MOVE bundle is too entangled to land in a
+# single commit without breaking imports. The current layout has
+# pyproject.toml AND __init__.py both inside annuity_model/, which is
+# neither standard flat nor src/. Restructuring requires either moving
+# pyproject up to repo root (and reworking the actuarial_parity_kit
+# co-tenant) or moving every .py into src/annuity_model/ and rewriting
+# ~100 bare imports across the codebase + tests + scripts. See
+# annuity_model/docs/CHANGELOG.md "[Unreleased] -> Deferred" for the
+# Wave 3.3 migration runbook.
+#
+# Today's import style (`import pricing_projection as sp`) still works
+# because pytest.ini sets `pythonpath = .`. The dev tools below pick up
+# source under annuity_model/ via explicit include patterns.
 
 [project]
 # Single source of truth for the minimum supported Python version.

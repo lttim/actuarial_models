@@ -40,9 +40,8 @@ pytestmark = [pytest.mark.invariant]
 
 def test_every_registered_artifact_exists_on_disk() -> None:
     missing = [a for a in REGISTRY if not a.path.exists()]
-    assert not missing, (
-        "Registered data artifacts not found on disk: "
-        + ", ".join(f"{a.name!r} -> {a.path}" for a in missing)
+    assert not missing, "Registered data artifacts not found on disk: " + ", ".join(
+        f"{a.name!r} -> {a.path}" for a in missing
     )
 
 
@@ -63,17 +62,14 @@ def test_every_registered_artifact_matches_declared_sha256() -> None:
             "",
         ]
         for name, declared, actual in drift:
-            msg_lines.append(
-                f"  - {name}: declared={declared}\n              actual  ={actual}"
-            )
+            msg_lines.append(f"  - {name}: declared={declared}\n              actual  ={actual}")
         pytest.fail("\n".join(msg_lines))
 
 
 def test_artifact_names_are_unique() -> None:
     names = [a.name for a in REGISTRY]
     assert len(names) == len(set(names)), (
-        f"Duplicate artifact names in REGISTRY: "
-        f"{sorted(n for n in names if names.count(n) > 1)}"
+        f"Duplicate artifact names in REGISTRY: {sorted(n for n in names if names.count(n) > 1)}"
     )
 
 

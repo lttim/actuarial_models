@@ -177,6 +177,68 @@ ALM rules, RILA crediting) MUST also be logged in
   end of 2026-Q2.
 
 ### Deferred
+- **Wave 3.3 (src/ layout + buildable wheel + `[project.scripts]`)** is
+  carried over to a dedicated follow-up commit because the three pieces
+  cannot land safely without each other in the current layout. Today
+  `pyproject.toml` AND `__init__.py` both live inside `annuity_model/`,
+  which is neither standard flat (pkg one level above pyproject) nor
+  src/ (pkg under `src/`). Configuring setuptools' wheel build on top
+  of this would either need pyproject moved to repo root (with the
+  co-tenant `actuarial_parity_kit/` reorganised) or every module moved
+  into `src/annuity_model/` with ~100 bare imports rewritten as
+  `from annuity_model.<x> import <y>` across modules + tests + scripts +
+  Streamlit launcher + Dockerfile. Either path is too large for a
+  single safe commit while keeping all 4 canonical gates green.
+
+  Migration runbook for the follow-up (do this as a single dedicated PR
+  so `git blame` stays clean):
+  1. Create `annuity_model/src/annuity_model/` and `git mv` every
+     `annuity_model/*.py` into it (preserves blame). Move
+     `annuity_model/__init__.py` along with them.
+  2. Rewrite intra-package bare imports across all moved files. The
+     pattern is mechanical:
+     ``import pricing_projection as sp`` ->
+     ``from annuity_model import pricing_projection as sp``. Tests
+     and `scripts/*.py` get the same rewrite. ``ruff check --fix``
+     handles import sorting after the move.
+  3. Update `pyproject.toml`:
+     - Add `[build-system]` with `setuptools>=68 + wheel`.
+     - Add `[project.scripts]` for
+       `annuity-deep-smoke = "scripts.deep_smoke:main"`,
+       `annuity-parity-trace`, `annuity-render-parity-contract`.
+     - Add `[tool.setuptools.packages.find] where = ["src"]` and
+       `[tool.setuptools.package-data] "annuity_model" = ["data/**/*.csv"]`
+       so the versioned data tree from Wave 3.2 ships in the wheel.
+     - Move runtime deps from `requirements.txt` into
+       `[project.dependencies]` and keep `requirements.txt` as a thin
+       `pip install -e annuity_model[dev]` shim for back-compat.
+  4. Update `pytest.ini`: drop `pythonpath = .` (the install handles
+     it) and switch `testpaths = src/annuity_model/tests` if tests
+     also move. Or leave tests at `annuity_model/tests/` and add
+     `pythonpath = src` instead.
+  5. Update `Dockerfile`: replace `ENV PYTHONPATH=/app/annuity_model`
+     with `RUN pip install /app/annuity_model[dev]` and drop the
+     `WORKDIR /app/annuity_model` cd (all the entry points become
+     console scripts on `$PATH`).
+  6. Update `.github/workflows/ci.yml`: replace ad-hoc `pip install
+     -r annuity_model/requirements.lock` with
+     `pip install ./annuity_model[dev]`. Add a `python -m build` job
+     that produces the wheel + sdist as build artifacts on every push.
+  7. Update launchers (`run_pricing_ui.{sh,bat,command}`) to call
+     `annuity-pricing-ui` (new console script wrapping `pricing_ui:main`)
+     instead of the current `streamlit run pricing_ui.py`. Bump the
+     `tests/test_launcher_invariants.py` regexes to match.
+  8. Update `.pre-commit-config.yaml` mypy `files:` patterns to point
+     at `src/annuity_model/...` and adjust ruff isort `known-first-party`
+     to use the package name.
+  9. Add a packaging invariant test that builds the wheel inside a
+     `tmp_path` venv, installs it, imports `annuity_model`, and asserts
+     `annuity-deep-smoke` resolves on `$PATH`. This is the parity-style
+     guard against silent regression of the install path.
+  10. Validate end-to-end: 4 canonical gates + Docker build + every
+      launcher + a `pip install --no-build-isolation .` against a clean
+      venv. Only then merge.
+
 - **2nd CODEOWNER not added (still solo-owned by `@lttim`).** Phase-5
   backlog item to add a second human/team CODEOWNER cannot be solved by
   editing `.github/CODEOWNERS` alone -- it requires a real second
