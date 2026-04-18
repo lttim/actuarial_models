@@ -37,6 +37,14 @@ ALM rules, RILA crediting) MUST also be logged in
   ruff 0.10 (2025-Q1) and ignoring it now produces a "rules have been
   removed" warning. Tuple-form `isinstance(x, (X, Y))` is no longer flagged.
 
+### Added
+- **Quarterly recurring check** for the parked runtime Excel recalc gate.
+  `annuity_model/docs/runbooks/runtime_excel_recalc_gate.md` now carries
+  a "Recurring quarterly check" section with three concrete `pip install
+  --dry-run` probes (xlcalculator update, yearfrac>=2 unblocked,
+  numpy>=2 + formulas/pycel) and a dated audit trail. Next review due
+  end of 2026-Q2.
+
 ### Deferred
 - **2nd CODEOWNER not added (still solo-owned by `@lttim`).** Phase-5
   backlog item to add a second human/team CODEOWNER cannot be solved by

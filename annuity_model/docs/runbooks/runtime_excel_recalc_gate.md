@@ -4,6 +4,32 @@
 
 **Parked** since 2026-04-18.
 
+## Recurring quarterly check
+
+This runbook is on a **quarterly review cadence** (next due: end of each
+calendar quarter -- 2026-Q2, Q3, Q4, ...). At each checkpoint, run:
+
+```bash
+# 1. Try the upstream xlcalculator with the current lockfile constraints
+pip install --dry-run "xlcalculator>0.5.0"        # is there a newer release?
+# 2. Test if the yearfrac transitive cap has been lifted
+pip install --dry-run "xlcalculator yearfrac>=2"
+# 3. Check our pinned numpy is still compatible with the alternatives in
+#    "Restore plan" below (formulas, pycel)
+pip install --dry-run "numpy>=2 formulas"
+pip install --dry-run "numpy>=2 pycel"
+```
+
+If any of the three return cleanly, work item: **bump out of parked**
+(see "How to restore" below) and add a `Fixed` entry to
+`annuity_model/docs/CHANGELOG.md`. Otherwise, log the result inline in
+this section as a one-line dated bullet so the next checkpoint sees the
+prior outcome and can detect drift quickly.
+
+Audit trail (most recent first):
+- 2026-04-18: parked. `xlcalculator==0.5.0` still pulls `yearfrac<2`,
+  conflicts with `numpy==2.4.4`. Next review due 2026-Q2.
+
 The dev dep `xlcalculator==0.5.0` is commented out in
 [`annuity_model/requirements-dev.txt`](https://github.com/lttim/actuarial_models/blob/main/annuity_model/requirements-dev.txt)
 and [`tests/parity/test_runtime_excel_recalc.py`](https://github.com/lttim/actuarial_models/blob/main/annuity_model/tests/parity/test_runtime_excel_recalc.py)
