@@ -116,7 +116,10 @@ repos:
       # incident at commit time.
       - id: launcher-invariants
         name: launcher invariants (pyproject + run_pricing_ui.{sh,bat,command})
-        entry: bash -c 'cd annuity_model && ./.venv/bin/python -m pytest tests/test_launcher_invariants.py -q'
+        # Same .venv-prefer-with-python3-fallback pattern as the other local
+        # hooks, so this works on (a) the CI pre-commit job which has no
+        # ./annuity_model/.venv and (b) macOS dev where the venv is required.
+        entry: bash -c 'cd annuity_model && PY="./.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" -m pytest tests/test_launcher_invariants.py -q'
         language: system
         pass_filenames: false
         files: ^(annuity_model/(pyproject\.toml|run_pricing_ui\.(sh|command|bat)|tests/test_launcher_invariants\.py))$

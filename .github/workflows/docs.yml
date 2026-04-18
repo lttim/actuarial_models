@@ -49,7 +49,13 @@ jobs:
       - name: Build mkdocs site
         run: mkdocs build --strict
 
+      # `enablement: true` makes configure-pages auto-enable Pages on the
+      # repo on first run -- without this, the action fails with
+      # "Get Pages site failed ... Not Found" until someone manually flips
+      # Settings -> Pages -> Source = "GitHub Actions".
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: annuity_model/site
