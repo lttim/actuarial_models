@@ -3,11 +3,11 @@ Browser dashboard for pricing engine unit tests: descriptions, run controls, and
 
 Run from the annuity_model folder:
     streamlit run test_dashboard.py
-Or double-click run_test_dashboard.bat (Windows).
+Or double-click run_test_dashboard.bat (Windows) / ./run_test_dashboard.sh (macOS, Linux).
 
 For the full model workspace (pricing + charts + these tests), use:
     streamlit run pricing_ui.py
-Or run_pricing_ui.bat.
+Or run_pricing_ui.bat / ./run_pricing_ui.sh.
 """
 
 from __future__ import annotations

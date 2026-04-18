@@ -31,3 +31,55 @@ cp -r actuarial_parity_kit/ ../new_product_model/
 cd ../new_product_model/
 # Rename and adapt: cursor_rules/ → .cursor/rules/, then fill in product-specific logic
 ```
+
+## Cross-platform setup (Windows + macOS Apple Silicon)
+
+This repo is a single Git repository at `Code_Sandbox/`. There must **not** be a
+nested `.git` inside `annuity_model/` or any other product directory.
+
+Line endings, ignore rules, and binary handling are pinned in the root
+`.gitattributes` and `.gitignore`. Do not override `core.autocrlf` per machine —
+the attributes file already does the right thing for both OSes.
+
+### Cloning on macOS (Apple Silicon, M-series)
+
+```bash
+git clone https://github.com/lttim/actuarial_models.git Code_Sandbox
+cd Code_Sandbox/annuity_model
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+./run_pricing_ui.sh        # Streamlit UI
+pytest tests/ tests/parity/ # full regression
+```
+
+All Python deps (numpy, pandas, openpyxl, pyarrow, streamlit, matplotlib) ship
+arm64 wheels for Python 3.11+, so the M-series Mac uses the native build with
+no Rosetta. If `pip install` ever falls back to building from source, upgrade
+`pip` first (`python3 -m pip install --upgrade pip`).
+
+### Cloning on Windows
+
+```powershell
+git clone https://github.com/lttim/actuarial_models.git Code_Sandbox
+cd Code_Sandbox\annuity_model
+py -3 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+.\run_pricing_ui.bat
+py -3 -m pytest tests\ tests\parity\
+```
+
+### Launcher parity
+
+Every shell launcher must have a Windows twin and vice-versa. Current pairs:
+
+| Purpose             | Windows                  | macOS / Linux            |
+|---------------------|--------------------------|--------------------------|
+| Pricing Streamlit   | `run_pricing_ui.bat`     | `run_pricing_ui.sh`      |
+| Test dashboard      | `run_test_dashboard.bat` | `run_test_dashboard.sh`  |
+| pytest HTML report  | `run_tests_report.bat`   | `run_tests_report.sh`    |
+
+When adding a new launcher, ship both files in the same commit and keep them in
+sync. `.gitattributes` enforces `*.sh = LF` and `*.bat = CRLF` so neither side
+gets mangled by the other OS's checkout settings.

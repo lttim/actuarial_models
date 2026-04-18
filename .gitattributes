@@ -1,0 +1,50 @@
+# Normalize line endings so the repo is portable between Windows, macOS and Linux.
+# Without this, `core.autocrlf=true` on Windows can flip every file the first time
+# a macOS user edits them.
+
+* text=auto eol=lf
+
+# Shell / Unix scripts must always be LF, even when checked out on Windows
+# (otherwise bash/zsh on macOS choke on `\r`).
+*.sh        text eol=lf
+*.bash      text eol=lf
+Makefile    text eol=lf
+
+# Windows scripts must always be CRLF.
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Source / config — text, normalized to LF.
+*.py        text eol=lf diff=python
+*.md        text eol=lf
+*.txt       text eol=lf
+*.csv       text eol=lf
+*.json      text eol=lf
+*.toml      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.ini       text eol=lf
+*.cfg       text eol=lf
+*.mdc       text eol=lf
+.gitignore        text eol=lf
+.gitattributes    text eol=lf
+.cursorrules      text eol=lf
+
+# Binary assets — never touch line endings, never diff as text.
+*.xlsx      binary
+*.xlsm      binary
+*.xls       binary
+*.xlsb      binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.pdf       binary
+*.ico       binary
+*.zip       binary
+*.gz        binary
+*.parquet   binary
+*.pkl       binary
+*.npy       binary
+*.npz       binary

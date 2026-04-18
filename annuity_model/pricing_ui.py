@@ -4,7 +4,7 @@ interactive charts, and embedded unit-test dashboard.
 
 Run from the annuity_model folder:
     streamlit run pricing_ui.py
-Or: run_pricing_ui.bat (Windows).
+Or: run_pricing_ui.bat (Windows) / ./run_pricing_ui.sh (macOS, Linux).
 
 New Pricing Run numeric inputs and ``run_*`` session keys: extend
 ``pricing_run_form_state.build_run_form_seed_defaults`` and use
