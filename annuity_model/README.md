@@ -1,7 +1,12 @@
 # annuity_model
 
-Production-quality SPIA / Term Life / RILA pricing engine, ALM ladder, and Excel
+Production-quality 10-product pricing engine, ALM ladder, and Excel
 workbook generator. Python is the source of truth; Excel is the auditor.
+
+**Implemented products:** SPIA, Term Life, RILA, MYGA, FIA, VA, WL, UL,
+IUL, VUL. The 7 new products beyond the original SPIA / Term / RILA core
+landed in the seven-product rollout
+([docs/seven_product_rollout_plan.md](docs/seven_product_rollout_plan.md)).
 
 ## Module map
 
@@ -18,25 +23,45 @@ annuity_model/
 ├── pricing_projection.py          # SPIA pricing + ALM core engine
 ├── term_projection.py             # Term Life pricing engine
 ├── rila_projection.py             # RILA pricing engine
+├── myga_projection.py             # MYGA engine (Phase 1)
+├── fia_projection.py              # FIA engine (Phase 2)
+├── va_projection.py               # Variable Annuity engine (Phase 3)
+├── wl_projection.py               # Whole Life single-premium engine (Phase 4)
+├── ul_projection.py               # Universal Life single-premium engine (Phase 5)
+├── iul_projection.py              # Indexed UL engine (Phase 6)
+├── vul_projection.py              # Variable UL engine (Phase 7)
+├── lapse.py                       # static lapse / persistency framework (Phase 0)
+├── crediting.py                   # crediting strategies (RILA / FIA / IUL)
+├── account_value.py               # UL/IUL/VUL monthly AV cycle
+├── mortality_2017_cso.py          # 2017 CSO Ultimate placeholder loader
+├── actuarial_benchmarks.py        # per-product band constants
 ├── alm_excel_ladder.py            # Excel ALM_Engine sheet generator
-├── build_pricing_excel_workbook.py  # SPIA workbook builder
-├── build_term_excel_workbook.py     # Term workbook builder
-├── build_rila_excel_workbook.py     # RILA workbook builder
+├── build_*_excel_workbook.py      # 10 per-product workbook builders
 ├── product_excel.py               # build_product_workbook dispatcher
 ├── pricing_ui.py                  # Streamlit app (legacy monolith; see ui/MIGRATION.md)
 ├── ui/                            # decomposition target for pricing_ui.py
+├── products/                      # per-product subpackages (10 of them)
+├── data/
+│   ├── mortality/cso_2017_ult/    # synthetic CSO 2017 Ultimate placeholder
+│   └── ...
 ├── scripts/
-│   ├── deep_smoke.py              # end-to-end smoke (3 products, full validate)
+│   ├── deep_smoke.py              # end-to-end smoke (10 products, full validate)
 │   ├── parity_trace.py            # python-vs-excel CSV trace for parity debug
-│   └── render_parity_contract.py  # rebuilds tolerance tables from constants
+│   ├── render_parity_contract.py  # rebuilds tolerance tables from constants
+│   ├── render_actuarial_benchmarks.py  # rebuilds per-product band tables
+│   └── generate_cso_2017_synthetic.py  # placeholder CSO data generator
 ├── tests/
 │   ├── parity/                    # python-vs-excel parity gates (block release)
+│   ├── ui/                        # Streamlit AppTest smokes (10 products)
 │   └── test_*.py                  # unit tests
 └── docs/
+    ├── seven_product_rollout_plan.md   # plan covering Phase 0..9
     ├── model_parity_contract.md   # SPIA + ALM tolerance contract (generated)
     ├── rila_parity_contract.md    # RILA tolerance contract (generated)
+    ├── actuarial_benchmarks.md    # per-product band rationale (generated)
+    ├── lapse_framework.md         # lapse v1 contract
     ├── parity_test_checklist.md   # release checklist
-    ├── glossary.md                # SPIA, RILA, q_x, etc.
+    ├── glossary.md                # SPIA, RILA, MYGA, FIA, VA, WL, UL, IUL, VUL, GMDB, NAR, COI, AV, M&E
     ├── CHANGELOG.md
     ├── model_change_log.md        # parity-impacting change log (governance)
     ├── CODEOWNERS_RATIONALE.md

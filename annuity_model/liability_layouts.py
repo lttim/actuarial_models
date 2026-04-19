@@ -66,10 +66,28 @@ class LiabilityLayout:
 # Single source of truth. Keys are ProductType.value strings (kept in sync
 # with the enum literals in product_registry.py). The validator and parity
 # tests read this map; never duplicate these letters elsewhere in the codebase.
+#
+# Convention (Section 8.1 of docs/seven_product_rollout_plan.md):
+#   * Accumulation products (RILA / MYGA / FIA / VA) use total_cf_col="M",
+#     discount_col="O" (RILA-style: AV plus death CF in column M-13).
+#   * Life products (SPIA / Term / WL / UL / IUL / VUL) use total_cf_col="S",
+#     discount_col="O" (SPIA / Term-style: longer cashflow grid with
+#     premium / claim / discount columns).
 LIABILITY_LAYOUTS: Mapping[str, LiabilityLayout] = {
     "spia": LiabilityLayout(product_code="spia", total_cf_col="S", discount_col="O"),
     "term_life": LiabilityLayout(product_code="term_life", total_cf_col="S", discount_col="O"),
     "rila": LiabilityLayout(product_code="rila", total_cf_col="M", discount_col="O"),
+    "myga": LiabilityLayout(product_code="myga", total_cf_col="M", discount_col="O"),
+    "fia": LiabilityLayout(product_code="fia", total_cf_col="M", discount_col="O"),
+    "variable_annuity": LiabilityLayout(
+        product_code="variable_annuity", total_cf_col="M", discount_col="O"
+    ),
+    "whole_life": LiabilityLayout(product_code="whole_life", total_cf_col="S", discount_col="O"),
+    "universal_life": LiabilityLayout(
+        product_code="universal_life", total_cf_col="S", discount_col="O"
+    ),
+    "indexed_ul": LiabilityLayout(product_code="indexed_ul", total_cf_col="S", discount_col="O"),
+    "variable_ul": LiabilityLayout(product_code="variable_ul", total_cf_col="S", discount_col="O"),
 }
 
 

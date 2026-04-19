@@ -222,9 +222,18 @@ def test_register_product_rejects_silent_override() -> None:
 def test_get_product_definition_raises_for_unregistered() -> None:
     """Lookup for a ProductType with no shim must raise KeyError with a
     pointer to the products/<name>.py path the contributor needs to
-    create. Whole Life is in the enum but never registered."""
+    create.
+
+    All ten ``ProductType`` members are now wired, so we synthesize a
+    fake unregistered enum member purely for this negative-case test.
+    """
+    from enum import Enum
+
+    class _FakeProductType(str, Enum):
+        UNKNOWN = "unknown_product_for_test"
+
     with pytest.raises(KeyError, match="products/<name>.py"):
-        get_product_definition(ProductType.WHOLE_LIFE)
+        get_product_definition(_FakeProductType.UNKNOWN)
 
 
 @pytest.mark.parametrize("product_type", list(ProductType))

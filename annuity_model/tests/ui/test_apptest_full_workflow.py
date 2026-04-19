@@ -242,6 +242,13 @@ _PRODUCT_RUN_CASES: list[tuple[str, str, str]] = [
     ("spia", "SPIA", "single_premium"),
     ("term_life", "Term Life", "single_premium"),
     ("rila", "RILA", "single_premium"),
+    ("myga", "MYGA", "single_premium"),
+    ("fia", "FIA", "single_premium"),
+    ("variable_annuity", "Variable Annuity", "single_premium"),
+    ("whole_life", "Whole Life", "single_premium"),
+    ("universal_life", "Universal Life", "single_premium"),
+    ("indexed_ul", "Indexed UL", "single_premium"),
+    ("variable_ul", "Variable UL", "single_premium"),
 ]
 
 

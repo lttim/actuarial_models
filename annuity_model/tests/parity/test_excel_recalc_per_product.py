@@ -332,10 +332,357 @@ def _make_rila_case() -> ProductRecalcCase:
     )
 
 
+def _make_myga_case() -> ProductRecalcCase:
+    """MYGA: 5y workbook with deterministic accumulation."""
+    import myga_projection as my
+    from build_myga_excel_workbook import (
+        build_myga_workbook_from_spec,
+        myga_excel_spec_from_launcher,
+    )
+    from parity_constants import MYGA_PV_TOL
+
+    contract = my.MYGAContract(
+        issue_age=60, sex="male", single_premium=100_000.0,
+        declared_rate_annual=0.045, guarantee_years=5,
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.045)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
+    mort = sp.MortalityTableQx(ages, qx)
+    expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    res = my.price_myga_single_premium(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=70, spread=0.0, valuation_year=None,
+        expenses=expenses, expense_annual_inflation=0.0,
+    )
+    spec = myga_excel_spec_from_launcher(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=70, spread=0.0, valuation_year=2025,
+        expenses=expenses, yield_mode_label="flat",
+        mortality_mode_label="qx", expense_mode_label="manual",
+        expense_annual_inflation=0.0,
+    )
+    blob = build_myga_workbook_from_spec(spec)
+    pv_b = float(np.sum(res.expected_benefit_cashflows * res.discount_factors))
+    pv_e = float(np.sum(res.expected_expense_cashflows * res.discount_factors))
+    pv_t = float(np.sum(res.expected_total_cashflows * res.discount_factors))
+    return ProductRecalcCase(
+        product_id="myga", product_name="MYGA", blob=blob,
+        tolerance=float(MYGA_PV_TOL),
+        modelcheck_python_cells={
+            "ModelCheck!B5": pv_b,
+            "ModelCheck!B6": pv_e,
+            "ModelCheck!B7": pv_t,
+            "ModelCheck!B8": float(res.single_premium),
+        },
+        modelcheck_formula_cells={},
+    )
+
+
+def _make_fia_case() -> ProductRecalcCase:
+    import fia_projection as fp
+    from build_fia_excel_workbook import (
+        build_fia_workbook_from_spec,
+        fia_excel_spec_from_launcher,
+    )
+    from parity_constants import FIA_PV_TOL
+
+    contract = fp.FIAContract(
+        issue_age=60, sex="male", single_premium=100_000.0,
+        participation=0.8, cap=0.07, floor=0.0, horizon_years=5,
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
+    mort = sp.MortalityTableQx(ages, qx)
+    expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    n_months = 60
+    rng = np.random.default_rng(42)
+    levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.02, size=n_months))
+    res = fp.price_fia_single_premium(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=65, spread=0.0, valuation_year=None,
+        expenses=expenses, index_s0=100.0, index_levels_payment=levels,
+        expense_annual_inflation=0.0,
+    )
+    spec = fia_excel_spec_from_launcher(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=65, spread=0.0, valuation_year=2025,
+        expenses=expenses, yield_mode_label="flat",
+        mortality_mode_label="qx", expense_mode_label="manual",
+        index_s0=100.0, index_levels_at_payment=res.index_level_at_payment,
+        expense_annual_inflation=0.0,
+    )
+    blob = build_fia_workbook_from_spec(spec)
+    pv_b = float(np.sum(res.expected_benefit_cashflows * res.discount_factors))
+    pv_e = float(np.sum(res.expected_expense_cashflows * res.discount_factors))
+    pv_t = float(np.sum(res.expected_total_cashflows * res.discount_factors))
+    return ProductRecalcCase(
+        product_id="fia", product_name="FIA", blob=blob,
+        tolerance=float(FIA_PV_TOL),
+        modelcheck_python_cells={
+            "ModelCheck!B5": pv_b,
+            "ModelCheck!B6": pv_e,
+            "ModelCheck!B7": pv_t,
+            "ModelCheck!B8": float(res.single_premium),
+        },
+        modelcheck_formula_cells={},
+    )
+
+
+def _make_va_case() -> ProductRecalcCase:
+    import va_projection as va
+    from build_va_excel_workbook import (
+        build_va_workbook_from_spec,
+        va_excel_spec_from_launcher,
+    )
+    from parity_constants import VA_PV_TOL
+
+    contract = va.VAContract(
+        issue_age=55, sex="male", single_premium=100_000.0,
+        me_charge_annual=0.014, horizon_years=10,
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
+    mort = sp.MortalityTableQx(ages, qx)
+    expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    n_months = 120
+    rng = np.random.default_rng(42)
+    levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
+    res = va.price_va_single_premium(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=65, spread=0.0, valuation_year=None,
+        expenses=expenses, index_s0=100.0, index_levels_payment=levels,
+        expense_annual_inflation=0.0,
+    )
+    spec = va_excel_spec_from_launcher(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=65, spread=0.0, valuation_year=2025,
+        expenses=expenses, yield_mode_label="flat",
+        mortality_mode_label="qx", expense_mode_label="manual",
+        index_s0=100.0, index_levels_at_payment=res.index_level_at_payment,
+        expense_annual_inflation=0.0,
+    )
+    blob = build_va_workbook_from_spec(spec)
+    pv_b = float(np.sum(res.expected_benefit_cashflows * res.discount_factors))
+    pv_e = float(np.sum(res.expected_expense_cashflows * res.discount_factors))
+    pv_t = float(np.sum(res.expected_total_cashflows * res.discount_factors))
+    return ProductRecalcCase(
+        product_id="variable_annuity", product_name="Variable Annuity", blob=blob,
+        tolerance=float(VA_PV_TOL),
+        modelcheck_python_cells={
+            "ModelCheck!B5": pv_b,
+            "ModelCheck!B6": pv_e,
+            "ModelCheck!B7": pv_t,
+            "ModelCheck!B8": float(res.single_premium),
+        },
+        modelcheck_formula_cells={},
+    )
+
+
+def _make_wl_case() -> ProductRecalcCase:
+    import wl_projection as wl
+    from build_wl_excel_workbook import (
+        build_wl_workbook_from_spec,
+        wl_excel_spec_from_launcher,
+    )
+    from parity_constants import WL_PV_TOL
+
+    contract = wl.WLContract(
+        issue_age=45, sex="male", smoker_class="nonsmoker", face_amount=250_000.0,
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
+    mort = sp.MortalityTableQx(ages, qx)
+    expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    res = wl.price_wl_single_premium(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=80, spread=0.0, valuation_year=None,
+        expenses=expenses, expense_annual_inflation=0.0,
+    )
+    spec = wl_excel_spec_from_launcher(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=80, spread=0.0, valuation_year=2025,
+        expenses=expenses, yield_mode_label="flat",
+        mortality_mode_label="qx", expense_mode_label="manual",
+        expense_annual_inflation=0.0,
+    )
+    blob = build_wl_workbook_from_spec(spec)
+    pv_b = float(np.sum(res.expected_benefit_cashflows * res.discount_factors))
+    pv_e = float(np.sum(res.expected_expense_cashflows * res.discount_factors))
+    pv_t = float(np.sum(res.expected_total_cashflows * res.discount_factors))
+    return ProductRecalcCase(
+        product_id="whole_life", product_name="Whole Life", blob=blob,
+        tolerance=float(WL_PV_TOL),
+        modelcheck_python_cells={
+            "ModelCheck!B5": pv_b,
+            "ModelCheck!B6": pv_e,
+            "ModelCheck!B7": pv_t,
+            "ModelCheck!B8": float(res.single_premium),
+        },
+        modelcheck_formula_cells={},
+    )
+
+
+def _make_ul_case() -> ProductRecalcCase:
+    import ul_projection as ul_proj
+    from build_ul_excel_workbook import (
+        build_ul_workbook_from_spec,
+        ul_excel_spec_from_launcher,
+    )
+    from parity_constants import UL_PV_TOL
+
+    contract = ul_proj.ULContract(
+        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
+    mort = sp.MortalityTableQx(ages, qx)
+    expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    res = ul_proj.price_ul_single_premium(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=80, spread=0.0, valuation_year=None,
+        expenses=expenses, expense_annual_inflation=0.0,
+    )
+    spec = ul_excel_spec_from_launcher(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=80, spread=0.0, valuation_year=2025,
+        expenses=expenses, yield_mode_label="flat",
+        mortality_mode_label="qx", expense_mode_label="manual",
+        expense_annual_inflation=0.0,
+    )
+    blob = build_ul_workbook_from_spec(spec)
+    pv_b = float(np.sum(res.expected_benefit_cashflows * res.discount_factors))
+    pv_e = float(np.sum(res.expected_expense_cashflows * res.discount_factors))
+    pv_t = float(np.sum(res.expected_total_cashflows * res.discount_factors))
+    return ProductRecalcCase(
+        product_id="universal_life", product_name="Universal Life", blob=blob,
+        tolerance=float(UL_PV_TOL),
+        modelcheck_python_cells={
+            "ModelCheck!B5": pv_b,
+            "ModelCheck!B6": pv_e,
+            "ModelCheck!B7": pv_t,
+            "ModelCheck!B8": float(res.single_premium),
+        },
+        modelcheck_formula_cells={},
+    )
+
+
+def _make_iul_case() -> ProductRecalcCase:
+    import iul_projection as iul_proj
+    from build_iul_excel_workbook import (
+        build_iul_workbook_from_spec,
+        iul_excel_spec_from_launcher,
+    )
+    from parity_constants import IUL_PV_TOL
+
+    contract = iul_proj.IULContract(
+        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
+        participation=1.0, cap=0.10, floor=0.0,
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
+    mort = sp.MortalityTableQx(ages, qx)
+    expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    n_months = (80 - 45) * 12
+    rng = np.random.default_rng(42)
+    levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
+    res = iul_proj.price_iul_single_premium(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=80, spread=0.0, valuation_year=None,
+        expenses=expenses, index_s0=100.0, index_levels_payment=levels,
+        expense_annual_inflation=0.0,
+    )
+    spec = iul_excel_spec_from_launcher(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=80, spread=0.0, valuation_year=2025,
+        expenses=expenses, yield_mode_label="flat",
+        mortality_mode_label="qx", expense_mode_label="manual",
+        index_s0=100.0, index_levels_at_payment=res.index_level_at_payment,
+        expense_annual_inflation=0.0,
+    )
+    blob = build_iul_workbook_from_spec(spec)
+    pv_b = float(np.sum(res.expected_benefit_cashflows * res.discount_factors))
+    pv_e = float(np.sum(res.expected_expense_cashflows * res.discount_factors))
+    pv_t = float(np.sum(res.expected_total_cashflows * res.discount_factors))
+    return ProductRecalcCase(
+        product_id="indexed_ul", product_name="Indexed UL", blob=blob,
+        tolerance=float(IUL_PV_TOL),
+        modelcheck_python_cells={
+            "ModelCheck!B5": pv_b,
+            "ModelCheck!B6": pv_e,
+            "ModelCheck!B7": pv_t,
+            "ModelCheck!B8": float(res.single_premium),
+        },
+        modelcheck_formula_cells={},
+    )
+
+
+def _make_vul_case() -> ProductRecalcCase:
+    import vul_projection as vul_proj
+    from build_vul_excel_workbook import (
+        build_vul_workbook_from_spec,
+        vul_excel_spec_from_launcher,
+    )
+    from parity_constants import VUL_PV_TOL
+
+    contract = vul_proj.VULContract(
+        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
+    mort = sp.MortalityTableQx(ages, qx)
+    expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    n_months = (80 - 45) * 12
+    rng = np.random.default_rng(42)
+    levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
+    res = vul_proj.price_vul_single_premium(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=80, spread=0.0, valuation_year=None,
+        expenses=expenses, index_s0=100.0, index_levels_payment=levels,
+        expense_annual_inflation=0.0,
+    )
+    spec = vul_excel_spec_from_launcher(
+        contract=contract, yield_curve=yc, mortality=mort,
+        horizon_age=80, spread=0.0, valuation_year=2025,
+        expenses=expenses, yield_mode_label="flat",
+        mortality_mode_label="qx", expense_mode_label="manual",
+        index_s0=100.0, index_levels_at_payment=res.index_level_at_payment,
+        expense_annual_inflation=0.0,
+    )
+    blob = build_vul_workbook_from_spec(spec)
+    pv_b = float(np.sum(res.expected_benefit_cashflows * res.discount_factors))
+    pv_e = float(np.sum(res.expected_expense_cashflows * res.discount_factors))
+    pv_t = float(np.sum(res.expected_total_cashflows * res.discount_factors))
+    return ProductRecalcCase(
+        product_id="variable_ul", product_name="Variable UL", blob=blob,
+        tolerance=float(VUL_PV_TOL),
+        modelcheck_python_cells={
+            "ModelCheck!B5": pv_b,
+            "ModelCheck!B6": pv_e,
+            "ModelCheck!B7": pv_t,
+            "ModelCheck!B8": float(res.single_premium),
+        },
+        modelcheck_formula_cells={},
+    )
+
+
 _CASE_BUILDERS: dict[str, Callable[[], ProductRecalcCase]] = {
     "spia": _make_spia_case,
     "term_life": _make_term_case,
     "rila": _make_rila_case,
+    "myga": _make_myga_case,
+    "fia": _make_fia_case,
+    "variable_annuity": _make_va_case,
+    "whole_life": _make_wl_case,
+    "universal_life": _make_ul_case,
+    "indexed_ul": _make_iul_case,
+    "variable_ul": _make_vul_case,
 }
 
 

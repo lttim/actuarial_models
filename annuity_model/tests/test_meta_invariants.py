@@ -50,6 +50,13 @@ def _expected_result_class_for(product_type: ProductType) -> str:
         ProductType.SPIA: "SPIAProjectionResult",
         ProductType.TERM_LIFE: "TermLifeProjectionResult",
         ProductType.RILA: "RILAProjectionResult",
+        ProductType.MYGA: "MYGAProjectionResult",
+        ProductType.FIA: "FIAProjectionResult",
+        ProductType.VARIABLE_ANNUITY: "VAProjectionResult",
+        ProductType.WHOLE_LIFE: "WLProjectionResult",
+        ProductType.UNIVERSAL_LIFE: "ULProjectionResult",
+        ProductType.INDEXED_UL: "IULProjectionResult",
+        ProductType.VARIABLE_UL: "VULProjectionResult",
     }[product_type]
 
 
@@ -173,10 +180,18 @@ def test_every_implemented_product_has_an_explicit_metric_formatter() -> None:
 
 def test_get_pricing_metrics_raises_for_unregistered_product() -> None:
     """The fallback was removed; calling for an unregistered product must
-    raise loudly so the UI surfaces a real error instead of mis-formatting."""
+    raise loudly so the UI surfaces a real error instead of mis-formatting.
+
+    All ten ``ProductType`` members are now implemented, so we synthesize a
+    fake unregistered enum member purely for this negative-case test.
+    """
+    from enum import Enum
+
+    class _FakeProductType(str, Enum):
+        UNKNOWN = "unknown"
 
     class _DummyResult:
         pass
 
     with pytest.raises(KeyError, match="No pricing-metric formatter registered"):
-        get_pricing_metrics(ProductType.WHOLE_LIFE, _DummyResult())
+        get_pricing_metrics(_FakeProductType.UNKNOWN, _DummyResult())  # type: ignore[arg-type]

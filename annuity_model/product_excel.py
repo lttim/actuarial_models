@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Any
 
 import pricing_projection as sp
+from build_fia_excel_workbook import FIAExcelBuildSpec, build_fia_workbook_from_spec
+from build_iul_excel_workbook import IULExcelBuildSpec, build_iul_workbook_from_spec
+from build_myga_excel_workbook import MYGAExcelBuildSpec, build_myga_workbook_from_spec
 from build_pricing_excel_workbook import (
     ALMExcelSnapshot,
     ExcelBuildSpec,
@@ -14,6 +17,10 @@ from build_pricing_excel_workbook import (
 )
 from build_rila_excel_workbook import RILAExcelBuildSpec, build_rila_workbook_from_spec
 from build_term_excel_workbook import TermExcelBuildSpec, build_term_workbook_from_spec
+from build_ul_excel_workbook import ULExcelBuildSpec, build_ul_workbook_from_spec
+from build_va_excel_workbook import VAExcelBuildSpec, build_va_workbook_from_spec
+from build_vul_excel_workbook import VULExcelBuildSpec, build_vul_workbook_from_spec
+from build_wl_excel_workbook import WLExcelBuildSpec, build_wl_workbook_from_spec
 from product_registry import ProductType
 
 # Per-product workbook builder. The signature accepts the union of all
@@ -128,6 +135,112 @@ def _build_rila_workbook(
         alm_snapshot=alm_snapshot,
         alm_assumptions=alm_assumptions,
     )
+
+
+# ---------------------------------------------------------------------------
+# Seven new product builders. ProductType: MYGA / FIA / VARIABLE_ANNUITY /
+# WHOLE_LIFE / UNIVERSAL_LIFE / INDEXED_UL / VARIABLE_UL.
+# Each accepts the union dispatcher kwargs and forwards only what its own
+# builder needs. None of the new builders embed ALM at this layer (v1).
+# ---------------------------------------------------------------------------
+
+
+@register_builder(ProductType.MYGA, spec_type=MYGAExcelBuildSpec)
+def _build_myga_workbook(
+    *,
+    spec: Any,
+    out_path: str | Path | None,
+    python_snapshot: ExcelPythonSnapshot | None,
+    mc_snapshot: MCExcelSnapshot | None,
+    alm_snapshot: ALMExcelSnapshot | None,
+    alm_assumptions: sp.ALMAssumptions | None,
+) -> bytes:
+    del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
+    return build_myga_workbook_from_spec(spec, out_path=out_path)
+
+
+@register_builder(ProductType.FIA, spec_type=FIAExcelBuildSpec)
+def _build_fia_workbook(
+    *,
+    spec: Any,
+    out_path: str | Path | None,
+    python_snapshot: ExcelPythonSnapshot | None,
+    mc_snapshot: MCExcelSnapshot | None,
+    alm_snapshot: ALMExcelSnapshot | None,
+    alm_assumptions: sp.ALMAssumptions | None,
+) -> bytes:
+    del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
+    return build_fia_workbook_from_spec(spec, out_path=out_path)
+
+
+@register_builder(ProductType.VARIABLE_ANNUITY, spec_type=VAExcelBuildSpec)
+def _build_va_workbook(
+    *,
+    spec: Any,
+    out_path: str | Path | None,
+    python_snapshot: ExcelPythonSnapshot | None,
+    mc_snapshot: MCExcelSnapshot | None,
+    alm_snapshot: ALMExcelSnapshot | None,
+    alm_assumptions: sp.ALMAssumptions | None,
+) -> bytes:
+    del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
+    return build_va_workbook_from_spec(spec, out_path=out_path)
+
+
+@register_builder(ProductType.WHOLE_LIFE, spec_type=WLExcelBuildSpec)
+def _build_wl_workbook(
+    *,
+    spec: Any,
+    out_path: str | Path | None,
+    python_snapshot: ExcelPythonSnapshot | None,
+    mc_snapshot: MCExcelSnapshot | None,
+    alm_snapshot: ALMExcelSnapshot | None,
+    alm_assumptions: sp.ALMAssumptions | None,
+) -> bytes:
+    del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
+    return build_wl_workbook_from_spec(spec, out_path=out_path)
+
+
+@register_builder(ProductType.UNIVERSAL_LIFE, spec_type=ULExcelBuildSpec)
+def _build_ul_workbook(
+    *,
+    spec: Any,
+    out_path: str | Path | None,
+    python_snapshot: ExcelPythonSnapshot | None,
+    mc_snapshot: MCExcelSnapshot | None,
+    alm_snapshot: ALMExcelSnapshot | None,
+    alm_assumptions: sp.ALMAssumptions | None,
+) -> bytes:
+    del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
+    return build_ul_workbook_from_spec(spec, out_path=out_path)
+
+
+@register_builder(ProductType.INDEXED_UL, spec_type=IULExcelBuildSpec)
+def _build_iul_workbook(
+    *,
+    spec: Any,
+    out_path: str | Path | None,
+    python_snapshot: ExcelPythonSnapshot | None,
+    mc_snapshot: MCExcelSnapshot | None,
+    alm_snapshot: ALMExcelSnapshot | None,
+    alm_assumptions: sp.ALMAssumptions | None,
+) -> bytes:
+    del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
+    return build_iul_workbook_from_spec(spec, out_path=out_path)
+
+
+@register_builder(ProductType.VARIABLE_UL, spec_type=VULExcelBuildSpec)
+def _build_vul_workbook(
+    *,
+    spec: Any,
+    out_path: str | Path | None,
+    python_snapshot: ExcelPythonSnapshot | None,
+    mc_snapshot: MCExcelSnapshot | None,
+    alm_snapshot: ALMExcelSnapshot | None,
+    alm_assumptions: sp.ALMAssumptions | None,
+) -> bytes:
+    del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
+    return build_vul_workbook_from_spec(spec, out_path=out_path)
 
 
 def registered_builders() -> tuple[ProductType, ...]:

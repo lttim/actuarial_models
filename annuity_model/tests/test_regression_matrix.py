@@ -47,13 +47,27 @@ from typing import Any, Callable
 import numpy as np
 import pytest
 
+import build_fia_excel_workbook as build_fia_xl
+import build_iul_excel_workbook as build_iul_xl
+import build_myga_excel_workbook as build_myga_xl
 import build_pricing_excel_workbook as build_spia_xl
 import build_rila_excel_workbook as build_rila_xl
 import build_term_excel_workbook as build_term_xl
+import build_ul_excel_workbook as build_ul_xl
+import build_va_excel_workbook as build_va_xl
+import build_vul_excel_workbook as build_vul_xl
+import build_wl_excel_workbook as build_wl_xl
 import excel_workbook_validator
+import fia_projection as fp
+import iul_projection as iul_proj
+import myga_projection as my
 import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
+import ul_projection as ul_proj
+import va_projection as va
+import vul_projection as vul_proj
+import wl_projection as wl
 from liability_dispatch import liability_path_for
 from product_registry import (
     ProductType,
@@ -153,10 +167,112 @@ def _build_rila_fixture(scenario: str) -> ProductFixture:
     )
 
 
+def _build_myga_fixture(scenario: str) -> ProductFixture:
+    horizon_age = 70 if scenario == "baseline" else 65
+    contract = my.MYGAContract(
+        issue_age=60, sex="male", single_premium=100_000.0,
+        declared_rate_annual=0.045, guarantee_years=5,
+    )
+    return ProductFixture(
+        product_type=ProductType.MYGA, contract=contract,
+        yield_curve=_flat_yc(0.045), mortality=_synthetic_mortality(),
+        horizon_age=horizon_age, expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        pricing_kwargs=dict(spread=0.0, valuation_year=None, expense_annual_inflation=0.0),
+    )
+
+
+def _build_fia_fixture(scenario: str) -> ProductFixture:
+    horizon_age = 70 if scenario == "baseline" else 65
+    contract = fp.FIAContract(
+        issue_age=60, sex="male", single_premium=100_000.0,
+        participation=0.8, cap=0.07, floor=0.0, horizon_years=10,
+    )
+    return ProductFixture(
+        product_type=ProductType.FIA, contract=contract,
+        yield_curve=_flat_yc(), mortality=_synthetic_mortality(),
+        horizon_age=horizon_age, expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        pricing_kwargs=dict(spread=0.0, valuation_year=None, expense_annual_inflation=0.0),
+    )
+
+
+def _build_va_fixture(scenario: str) -> ProductFixture:
+    horizon_age = 75 if scenario == "baseline" else 65
+    contract = va.VAContract(
+        issue_age=55, sex="male", single_premium=100_000.0,
+        me_charge_annual=0.014, horizon_years=20,
+    )
+    return ProductFixture(
+        product_type=ProductType.VARIABLE_ANNUITY, contract=contract,
+        yield_curve=_flat_yc(), mortality=_synthetic_mortality(),
+        horizon_age=horizon_age, expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        pricing_kwargs=dict(spread=0.0, valuation_year=None, expense_annual_inflation=0.0),
+    )
+
+
+def _build_wl_fixture(scenario: str) -> ProductFixture:
+    horizon_age = 120 if scenario == "baseline" else 80
+    contract = wl.WLContract(
+        issue_age=45, sex="male", smoker_class="nonsmoker", face_amount=250_000.0,
+    )
+    return ProductFixture(
+        product_type=ProductType.WHOLE_LIFE, contract=contract,
+        yield_curve=_flat_yc(), mortality=_synthetic_mortality(),
+        horizon_age=horizon_age, expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        pricing_kwargs=dict(spread=0.0, valuation_year=None, expense_annual_inflation=0.0),
+    )
+
+
+def _build_ul_fixture(scenario: str) -> ProductFixture:
+    horizon_age = 120 if scenario == "baseline" else 80
+    contract = ul_proj.ULContract(
+        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
+    )
+    return ProductFixture(
+        product_type=ProductType.UNIVERSAL_LIFE, contract=contract,
+        yield_curve=_flat_yc(), mortality=_synthetic_mortality(),
+        horizon_age=horizon_age, expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        pricing_kwargs=dict(spread=0.0, valuation_year=None, expense_annual_inflation=0.0),
+    )
+
+
+def _build_iul_fixture(scenario: str) -> ProductFixture:
+    horizon_age = 120 if scenario == "baseline" else 80
+    contract = iul_proj.IULContract(
+        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
+        participation=1.0, cap=0.10, floor=0.0,
+    )
+    return ProductFixture(
+        product_type=ProductType.INDEXED_UL, contract=contract,
+        yield_curve=_flat_yc(), mortality=_synthetic_mortality(),
+        horizon_age=horizon_age, expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        pricing_kwargs=dict(spread=0.0, valuation_year=None, expense_annual_inflation=0.0),
+    )
+
+
+def _build_vul_fixture(scenario: str) -> ProductFixture:
+    horizon_age = 120 if scenario == "baseline" else 80
+    contract = vul_proj.VULContract(
+        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
+    )
+    return ProductFixture(
+        product_type=ProductType.VARIABLE_UL, contract=contract,
+        yield_curve=_flat_yc(), mortality=_synthetic_mortality(),
+        horizon_age=horizon_age, expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        pricing_kwargs=dict(spread=0.0, valuation_year=None, expense_annual_inflation=0.0),
+    )
+
+
 _FIXTURE_BUILDERS: dict[ProductType, Callable[[str], ProductFixture]] = {
     ProductType.SPIA: _build_spia_fixture,
     ProductType.TERM_LIFE: _build_term_fixture,
     ProductType.RILA: _build_rila_fixture,
+    ProductType.MYGA: _build_myga_fixture,
+    ProductType.FIA: _build_fia_fixture,
+    ProductType.VARIABLE_ANNUITY: _build_va_fixture,
+    ProductType.WHOLE_LIFE: _build_wl_fixture,
+    ProductType.UNIVERSAL_LIFE: _build_ul_fixture,
+    ProductType.INDEXED_UL: _build_iul_fixture,
+    ProductType.VARIABLE_UL: _build_vul_fixture,
 }
 
 
@@ -168,37 +284,122 @@ _FIXTURE_BUILDERS: dict[ProductType, Callable[[str], ProductFixture]] = {
 # ---------------------------------------------------------------------------
 
 
+def _index_levels_for(fix: ProductFixture) -> tuple[float, np.ndarray]:
+    """Build a deterministic index path sized to the fixture's effective horizon.
+
+    For products with their own ``horizon_years`` field (FIA / VA / IUL /
+    VUL), the engine takes ``min(horizon_age, contract.horizon_years*12)``
+    months. We size the array to the maximum of the two so the index
+    path is always long enough.
+    """
+    base_n = int(round((fix.horizon_age - fix.contract.issue_age) * 12))
+    contract_n = int(getattr(fix.contract, "horizon_years", 0)) * 12
+    n_months = max(1, max(base_n, contract_n))
+    rng = np.random.default_rng(42)
+    levels = 100.0 * np.cumprod(1.0 + rng.normal(0.004, 0.02, size=n_months))
+    return 100.0, levels
+
+
+def _truncate_levels_for_engine(
+    fix: ProductFixture, levels: np.ndarray
+) -> np.ndarray:
+    """Truncate the index path to the n_months the engine expects.
+
+    Different engines compute n_months differently. To keep _index_levels_for
+    generic, we provide the maximum needed length and trim to the engine's
+    actual demand here.
+    """
+    base_n = int(round((fix.horizon_age - fix.contract.issue_age) * 12))
+    contract_n = int(getattr(fix.contract, "horizon_years", 0)) * 12
+    if fix.product_type is ProductType.RILA:
+        # RILA uses (horizon_age - issue_age)*12 only.
+        target = base_n
+    elif fix.product_type in (
+        ProductType.FIA, ProductType.VARIABLE_ANNUITY,
+        ProductType.INDEXED_UL, ProductType.VARIABLE_UL,
+    ):
+        # All four use min(base_n, contract_n).
+        target = min(base_n, contract_n) if contract_n > 0 else base_n
+    else:
+        target = base_n
+    return levels[: max(1, target)]
+
+
 def _price_deterministic(fix: ProductFixture) -> Any:
     """Run the deterministic price() and cache the result on the fixture."""
     if fix.product_type is ProductType.SPIA:
         result = sp.price_spia_single_premium(
-            contract=fix.contract,
-            yield_curve=fix.yield_curve,
-            mortality=fix.mortality,
-            horizon_age=fix.horizon_age,
-            expenses=fix.expenses,
-            **fix.pricing_kwargs,
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, **fix.pricing_kwargs,
         )
     elif fix.product_type is ProductType.TERM_LIFE:
         result = tp.price_term_life_level_monthly(
-            contract=fix.contract,
-            yield_curve=fix.yield_curve,
-            mortality=fix.mortality,
-            horizon_age=fix.horizon_age,
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
             **fix.pricing_kwargs,
         )
     elif fix.product_type is ProductType.RILA:
-        n_months = int(round((fix.horizon_age - fix.contract.issue_age) * 12))
-        rng = np.random.default_rng(42)
-        levels = 100.0 * np.cumprod(1.0 + rng.normal(0.004, 0.02, size=n_months))
+        s0, levels = _index_levels_for(fix)
+        levels = _truncate_levels_for_engine(fix, levels)
         result = rp.price_rila_single_premium(
-            contract=fix.contract,
-            yield_curve=fix.yield_curve,
-            mortality=fix.mortality,
-            horizon_age=fix.horizon_age,
-            expenses=fix.expenses,
-            index_s0=100.0,
-            index_levels_payment=levels,
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, index_s0=s0, index_levels_payment=levels,
+            **fix.pricing_kwargs,
+        )
+    elif fix.product_type is ProductType.MYGA:
+        result = my.price_myga_single_premium(
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, **fix.pricing_kwargs,
+        )
+    elif fix.product_type is ProductType.FIA:
+        s0, levels = _index_levels_for(fix)
+        levels = _truncate_levels_for_engine(fix, levels)
+        result = fp.price_fia_single_premium(
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, index_s0=s0, index_levels_payment=levels,
+            **fix.pricing_kwargs,
+        )
+    elif fix.product_type is ProductType.VARIABLE_ANNUITY:
+        s0, levels = _index_levels_for(fix)
+        levels = _truncate_levels_for_engine(fix, levels)
+        result = va.price_va_single_premium(
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, index_s0=s0, index_levels_payment=levels,
+            **fix.pricing_kwargs,
+        )
+    elif fix.product_type is ProductType.WHOLE_LIFE:
+        result = wl.price_wl_single_premium(
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, **fix.pricing_kwargs,
+        )
+    elif fix.product_type is ProductType.UNIVERSAL_LIFE:
+        result = ul_proj.price_ul_single_premium(
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, **fix.pricing_kwargs,
+        )
+    elif fix.product_type is ProductType.INDEXED_UL:
+        s0, levels = _index_levels_for(fix)
+        levels = _truncate_levels_for_engine(fix, levels)
+        result = iul_proj.price_iul_single_premium(
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, index_s0=s0, index_levels_payment=levels,
+            **fix.pricing_kwargs,
+        )
+    elif fix.product_type is ProductType.VARIABLE_UL:
+        s0, levels = _index_levels_for(fix)
+        levels = _truncate_levels_for_engine(fix, levels)
+        result = vul_proj.price_vul_single_premium(
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, index_s0=s0, index_levels_payment=levels,
             **fix.pricing_kwargs,
         )
     else:
@@ -210,31 +411,45 @@ def _price_deterministic(fix: ProductFixture) -> Any:
 def _price_monte_carlo(fix: ProductFixture) -> Any:
     if fix.product_type is ProductType.SPIA:
         return sp.price_spia_single_premium_monte_carlo(
-            contract=fix.contract,
-            yield_curve=fix.yield_curve,
-            mortality=fix.mortality,
-            horizon_age=fix.horizon_age,
-            expenses=fix.expenses,
-            n_sims=8,
-            annual_drift=0.04,
-            annual_vol=0.15,
-            seed=0,
-            s0=100.0,
-            **fix.pricing_kwargs,
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, n_sims=8, annual_drift=0.04, annual_vol=0.15,
+            seed=0, s0=100.0, **fix.pricing_kwargs,
         )
     if fix.product_type is ProductType.RILA:
         return rp.price_rila_single_premium_monte_carlo(
-            contract=fix.contract,
-            yield_curve=fix.yield_curve,
-            mortality=fix.mortality,
-            horizon_age=fix.horizon_age,
-            expenses=fix.expenses,
-            n_sims=8,
-            annual_drift=0.04,
-            annual_vol=0.15,
-            seed=0,
-            s0=100.0,
-            **fix.pricing_kwargs,
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, n_sims=8, annual_drift=0.04, annual_vol=0.15,
+            seed=0, s0=100.0, **fix.pricing_kwargs,
+        )
+    if fix.product_type is ProductType.FIA:
+        return fp.price_fia_single_premium_monte_carlo(
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, n_sims=4, annual_drift=0.04, annual_vol=0.15,
+            seed=0, s0=100.0, **fix.pricing_kwargs,
+        )
+    if fix.product_type is ProductType.VARIABLE_ANNUITY:
+        return va.price_va_single_premium_monte_carlo(
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, n_sims=4, annual_drift=0.04, annual_vol=0.15,
+            seed=0, s0=100.0, **fix.pricing_kwargs,
+        )
+    if fix.product_type is ProductType.INDEXED_UL:
+        return iul_proj.price_iul_single_premium_monte_carlo(
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, n_sims=4, annual_drift=0.04, annual_vol=0.15,
+            seed=0, s0=100.0, **fix.pricing_kwargs,
+        )
+    if fix.product_type is ProductType.VARIABLE_UL:
+        return vul_proj.price_vul_single_premium_monte_carlo(
+            contract=fix.contract, yield_curve=fix.yield_curve,
+            mortality=fix.mortality, horizon_age=fix.horizon_age,
+            expenses=fix.expenses, n_sims=4, annual_drift=0.04, annual_vol=0.15,
+            seed=0, s0=100.0, **fix.pricing_kwargs,
         )
     raise NotImplementedError(
         f"Monte Carlo not exercised by this matrix for {fix.product_type!r}; "
@@ -337,6 +552,79 @@ def _build_excel_workbook(fix: ProductFixture) -> bytes:
             expense_annual_inflation=0.01,
         )
         return build_rila_xl.build_rila_workbook_from_spec(spec)
+    # Seven new products use a uniform spec/builder shape. Pull the
+    # builder + spec_fn from product_excel via _BUILDER_REGISTRY.
+    if fix.product_type is ProductType.MYGA:
+        spec = build_myga_xl.myga_excel_spec_from_launcher(
+            contract=fix.contract, yield_curve=fix.yield_curve, mortality=fix.mortality,
+            horizon_age=fix.horizon_age, spread=0.0, valuation_year=2025,
+            expenses=fix.expenses, yield_mode_label="flat",
+            mortality_mode_label="synthetic", expense_mode_label="manual",
+            expense_annual_inflation=0.0,
+        )
+        return build_myga_xl.build_myga_workbook_from_spec(spec)
+    if fix.product_type is ProductType.FIA:
+        spec = build_fia_xl.fia_excel_spec_from_launcher(
+            contract=fix.contract, yield_curve=fix.yield_curve, mortality=fix.mortality,
+            horizon_age=fix.horizon_age, spread=0.0, valuation_year=2025,
+            expenses=fix.expenses, yield_mode_label="flat",
+            mortality_mode_label="synthetic", expense_mode_label="manual",
+            index_s0=100.0,
+            index_levels_at_payment=res.index_level_at_payment,
+            expense_annual_inflation=0.0,
+        )
+        return build_fia_xl.build_fia_workbook_from_spec(spec)
+    if fix.product_type is ProductType.VARIABLE_ANNUITY:
+        spec = build_va_xl.va_excel_spec_from_launcher(
+            contract=fix.contract, yield_curve=fix.yield_curve, mortality=fix.mortality,
+            horizon_age=fix.horizon_age, spread=0.0, valuation_year=2025,
+            expenses=fix.expenses, yield_mode_label="flat",
+            mortality_mode_label="synthetic", expense_mode_label="manual",
+            index_s0=100.0,
+            index_levels_at_payment=res.index_level_at_payment,
+            expense_annual_inflation=0.0,
+        )
+        return build_va_xl.build_va_workbook_from_spec(spec)
+    if fix.product_type is ProductType.WHOLE_LIFE:
+        spec = build_wl_xl.wl_excel_spec_from_launcher(
+            contract=fix.contract, yield_curve=fix.yield_curve, mortality=fix.mortality,
+            horizon_age=fix.horizon_age, spread=0.0, valuation_year=2025,
+            expenses=fix.expenses, yield_mode_label="flat",
+            mortality_mode_label="synthetic", expense_mode_label="manual",
+            expense_annual_inflation=0.0,
+        )
+        return build_wl_xl.build_wl_workbook_from_spec(spec)
+    if fix.product_type is ProductType.UNIVERSAL_LIFE:
+        spec = build_ul_xl.ul_excel_spec_from_launcher(
+            contract=fix.contract, yield_curve=fix.yield_curve, mortality=fix.mortality,
+            horizon_age=fix.horizon_age, spread=0.0, valuation_year=2025,
+            expenses=fix.expenses, yield_mode_label="flat",
+            mortality_mode_label="synthetic", expense_mode_label="manual",
+            expense_annual_inflation=0.0,
+        )
+        return build_ul_xl.build_ul_workbook_from_spec(spec)
+    if fix.product_type is ProductType.INDEXED_UL:
+        spec = build_iul_xl.iul_excel_spec_from_launcher(
+            contract=fix.contract, yield_curve=fix.yield_curve, mortality=fix.mortality,
+            horizon_age=fix.horizon_age, spread=0.0, valuation_year=2025,
+            expenses=fix.expenses, yield_mode_label="flat",
+            mortality_mode_label="synthetic", expense_mode_label="manual",
+            index_s0=100.0,
+            index_levels_at_payment=res.index_level_at_payment,
+            expense_annual_inflation=0.0,
+        )
+        return build_iul_xl.build_iul_workbook_from_spec(spec)
+    if fix.product_type is ProductType.VARIABLE_UL:
+        spec = build_vul_xl.vul_excel_spec_from_launcher(
+            contract=fix.contract, yield_curve=fix.yield_curve, mortality=fix.mortality,
+            horizon_age=fix.horizon_age, spread=0.0, valuation_year=2025,
+            expenses=fix.expenses, yield_mode_label="flat",
+            mortality_mode_label="synthetic", expense_mode_label="manual",
+            index_s0=100.0,
+            index_levels_at_payment=res.index_level_at_payment,
+            expense_annual_inflation=0.0,
+        )
+        return build_vul_xl.build_vul_workbook_from_spec(spec)
     raise AssertionError(f"unhandled product {fix.product_type!r}")
 
 
@@ -401,6 +689,29 @@ EXPECTED_SKIPS: dict[tuple[ProductType, str, str], str] = {
     ),
     (ProductType.TERM_LIFE, "short_horizon", "pricing_monte_carlo"): (
         "term_projection.py exposes no Monte Carlo entry point yet."
+    ),
+    # MYGA pricing is deterministic given the contract -- no stochastic
+    # input. v1 does not expose a Monte Carlo entry point.
+    (ProductType.MYGA, "baseline", "pricing_monte_carlo"): (
+        "myga_projection.py is deterministic; no Monte Carlo entry point in v1."
+    ),
+    (ProductType.MYGA, "short_horizon", "pricing_monte_carlo"): (
+        "myga_projection.py is deterministic; no Monte Carlo entry point in v1."
+    ),
+    # WL is deterministic -- mortality is the only stochastic source and v1
+    # uses the static CSO 2017 placeholder.
+    (ProductType.WHOLE_LIFE, "baseline", "pricing_monte_carlo"): (
+        "wl_projection.py is deterministic in v1; no Monte Carlo entry point."
+    ),
+    (ProductType.WHOLE_LIFE, "short_horizon", "pricing_monte_carlo"): (
+        "wl_projection.py is deterministic in v1; no Monte Carlo entry point."
+    ),
+    # UL has a flat declared rate; no stochastic input drives MC in v1.
+    (ProductType.UNIVERSAL_LIFE, "baseline", "pricing_monte_carlo"): (
+        "ul_projection.py uses flat declared rate; no Monte Carlo entry point in v1."
+    ),
+    (ProductType.UNIVERSAL_LIFE, "short_horizon", "pricing_monte_carlo"): (
+        "ul_projection.py uses flat declared rate; no Monte Carlo entry point in v1."
     ),
 }
 

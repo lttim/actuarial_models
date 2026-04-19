@@ -30,9 +30,16 @@ from __future__ import annotations
 
 import pytest
 
+from build_fia_excel_workbook import FIAExcelBuildSpec
+from build_iul_excel_workbook import IULExcelBuildSpec
+from build_myga_excel_workbook import MYGAExcelBuildSpec
 from build_pricing_excel_workbook import ExcelBuildSpec
 from build_rila_excel_workbook import RILAExcelBuildSpec
 from build_term_excel_workbook import TermExcelBuildSpec
+from build_ul_excel_workbook import ULExcelBuildSpec
+from build_va_excel_workbook import VAExcelBuildSpec
+from build_vul_excel_workbook import VULExcelBuildSpec
+from build_wl_excel_workbook import WLExcelBuildSpec
 from product_excel import (
     _BUILDER_REGISTRY,
     _BUILDER_SPEC_TYPES,
@@ -77,6 +84,13 @@ def test_each_builder_declares_expected_spec_type() -> None:
         ProductType.SPIA: ExcelBuildSpec,
         ProductType.TERM_LIFE: TermExcelBuildSpec,
         ProductType.RILA: RILAExcelBuildSpec,
+        ProductType.MYGA: MYGAExcelBuildSpec,
+        ProductType.FIA: FIAExcelBuildSpec,
+        ProductType.VARIABLE_ANNUITY: VAExcelBuildSpec,
+        ProductType.WHOLE_LIFE: WLExcelBuildSpec,
+        ProductType.UNIVERSAL_LIFE: ULExcelBuildSpec,
+        ProductType.INDEXED_UL: IULExcelBuildSpec,
+        ProductType.VARIABLE_UL: VULExcelBuildSpec,
     }
     for product_type, spec_type in expected.items():
         assert _BUILDER_SPEC_TYPES.get(product_type) is spec_type, (
@@ -97,34 +111,51 @@ def test_dispatcher_rejects_wrong_spec_type_with_clear_typeerror() -> None:
         build_product_workbook(product_type=ProductType.RILA, spec=_NotASpec())
 
 
-def test_dispatcher_rejects_unimplemented_product_with_notimplementederror() -> None:
+def test_dispatcher_rejects_unregistered_product_with_notimplementederror() -> None:
+    """If a future ProductType is added to the enum but not yet given a
+    builder, the dispatcher must raise NotImplementedError. We simulate
+    that by temporarily popping a real builder."""
+
     class _NotASpec:
         pass
 
-    with pytest.raises(NotImplementedError, match=r"whole_life"):
-        build_product_workbook(product_type=ProductType.WHOLE_LIFE, spec=_NotASpec())
-    with pytest.raises(NotImplementedError, match=r"variable_annuity"):
-        build_product_workbook(product_type=ProductType.VARIABLE_ANNUITY, spec=_NotASpec())
+    saved_builder = _BUILDER_REGISTRY.pop(ProductType.MYGA, None)
+    saved_spec = _BUILDER_SPEC_TYPES.pop(ProductType.MYGA, None)
+    try:
+        with pytest.raises(NotImplementedError, match=r"myga"):
+            build_product_workbook(product_type=ProductType.MYGA, spec=_NotASpec())
+    finally:
+        if saved_builder is not None:
+            _BUILDER_REGISTRY[ProductType.MYGA] = saved_builder
+        if saved_spec is not None:
+            _BUILDER_SPEC_TYPES[ProductType.MYGA] = saved_spec
 
 
 def test_re_registering_same_product_type_raises_runtimeerror() -> None:
-    """Two builders fighting for the same ProductType is almost always a bug."""
+    """Two builders fighting for the same ProductType is almost always a bug.
 
-    @register_builder(ProductType.WHOLE_LIFE, spec_type=ExcelBuildSpec)
-    def _placeholder_builder(**_kwargs: object) -> bytes:  # pragma: no cover -- never called
-        return b""
-
+    Implemented by popping a real builder, registering a placeholder, then
+    asserting re-registration raises. The original is restored on cleanup
+    so the rest of the suite sees a pristine registry.
+    """
+    saved_builder = _BUILDER_REGISTRY.pop(ProductType.MYGA, None)
+    saved_spec = _BUILDER_SPEC_TYPES.pop(ProductType.MYGA, None)
     try:
+
+        @register_builder(ProductType.MYGA, spec_type=ExcelBuildSpec)
+        def _placeholder_builder(**_kwargs: object) -> bytes:  # pragma: no cover
+            return b""
+
         with pytest.raises(RuntimeError, match=r"already registered"):
 
-            @register_builder(ProductType.WHOLE_LIFE, spec_type=ExcelBuildSpec)
+            @register_builder(ProductType.MYGA, spec_type=ExcelBuildSpec)
             def _duplicate_builder(**_kwargs: object) -> bytes:  # pragma: no cover
                 return b""
 
     finally:
-        # Clean up so subsequent test runs / parallel workers see a pristine
-        # registry. Without this, the second invocation of the test (e.g.
-        # pytest --lf) would fail on the first decorator instead of the
-        # intended second one.
-        _BUILDER_REGISTRY.pop(ProductType.WHOLE_LIFE, None)
-        _BUILDER_SPEC_TYPES.pop(ProductType.WHOLE_LIFE, None)
+        _BUILDER_REGISTRY.pop(ProductType.MYGA, None)
+        _BUILDER_SPEC_TYPES.pop(ProductType.MYGA, None)
+        if saved_builder is not None:
+            _BUILDER_REGISTRY[ProductType.MYGA] = saved_builder
+        if saved_spec is not None:
+            _BUILDER_SPEC_TYPES[ProductType.MYGA] = saved_spec

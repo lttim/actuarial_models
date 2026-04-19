@@ -10,6 +10,119 @@ ALM rules, RILA crediting) MUST also be logged in
 
 ## [Unreleased]
 
+### Added — Seven-product rollout (Phases 0-9)
+
+Per [docs/seven_product_rollout_plan.md](seven_product_rollout_plan.md),
+the following seven products are now first-class citizens alongside SPIA
+/ Term / RILA. The `implemented_product_types()` set grows from 3 to 10:
+
+- **MYGA** (Multi-Year Guaranteed Annuity) — single premium, declared
+  rate, fixed guarantee period. Maturity payout + in-period death CF.
+  Engine: `myga_projection.py`. Builder:
+  `build_myga_excel_workbook.py`. Subpackage: `products/myga/`.
+- **FIA** (Fixed Indexed Annuity) — single premium with annual P2P
+  crediting (cap + floor + participation). Reuses `crediting`
+  framework. Engine: `fia_projection.py`. Builder:
+  `build_fia_excel_workbook.py`. Subpackage: `products/fia/`.
+- **VA** (Variable Annuity, repurposed `ProductType.VARIABLE_ANNUITY`)
+  — single premium with sub-account return. GMDB =
+  `max(AV, single_premium)`. Engine: `va_projection.py`. Builder:
+  `build_va_excel_workbook.py`. Subpackage:
+  `products/variable_annuity/`.
+- **WL** (Whole Life — single premium, repurposed
+  `ProductType.WHOLE_LIFE`) — level face × death-prob CF. Defaults to
+  CSO 2017 Ultimate placeholder mortality. Engine:
+  `wl_projection.py`. Builder: `build_wl_excel_workbook.py`.
+  Subpackage: `products/whole_life/`.
+- **UL** (Universal Life — single premium) — monthly cycle of
+  load → declared-rate credit → COI → expense charge. Type A death
+  benefit. AV-depletion terminates the contract. Engine:
+  `ul_projection.py`. Builder: `build_ul_excel_workbook.py`.
+  Subpackage: `products/universal_life/`.
+- **IUL** (Indexed UL) — UL with annual P2P credit on segment
+  anniversaries. Engine: `iul_projection.py`. Builder:
+  `build_iul_excel_workbook.py`. Subpackage: `products/indexed_ul/`.
+- **VUL** (Variable UL) — UL with monthly sub-account return as the
+  credit. Engine: `vul_projection.py`. Builder:
+  `build_vul_excel_workbook.py`. Subpackage: `products/variable_ul/`.
+
+Foundation modules added in Phase 0 (referenced by all seven new
+products, opt-in for SPIA / Term / RILA):
+
+- **`lapse.py`** — static lapse / persistency framework
+  (`LapseAssumption`, `combined_monthly_survival`, monthly hazard
+  helpers, default 8/7/6/5/4/3/2 ultimate-2% template). Per-product
+  opt-in via `lapse: LapseAssumption | None`. Existing engines stay
+  mortality-only (verified by unchanged golden JSON).
+- **`crediting.py`** — strategy hierarchy
+  (`CreditingStrategy` Protocol, `FixedDeclaredRate`,
+  `AnnualPointToPointCapped`). RILA's `segment_credited_return`
+  refactored to delegate to `AnnualPointToPointCapped` — public name
+  preserved, golden JSON byte-identical.
+- **`account_value.py`** — single-source UL/IUL/VUL monthly AV cycle
+  (`AVConfig`, `evolve_account_value`).
+- **`mortality_2017_cso.py` + four CSV artifacts** under
+  `data/mortality/cso_2017_ult/` — synthetic Gompertz-Makeham
+  approximation of CSO 2017 Ultimate (sex × smoker). NOT licensed CSO;
+  production users overlay their own file at the same path.
+- **`actuarial_benchmarks.py` + `docs/actuarial_benchmarks.md`** —
+  per-product band constants + rationale narrative; cross-checked by
+  `scripts/render_actuarial_benchmarks.py --check` (now part of
+  `just preflight`).
+- **`parity_constants.py`** extended with `LIFE_MODELCHECK_TOL`,
+  `ANNUITY_ACCUM_MODELCHECK_TOL`, `AV_TOL`, `LAPSE_DECREMENT_TOL`,
+  `MYGA_PV_TOL`, `FIA_PV_TOL`, `VA_PV_TOL`, `WL_PV_TOL`, `UL_PV_TOL`,
+  `IUL_PV_TOL`, `VUL_PV_TOL`.
+
+Per-product wiring (all 7 new products):
+
+- **Adapter & registry:** `product_registry._PRODUCT_ADAPTERS`,
+  `_PRICING_METRIC_FORMATTERS`, `_PRODUCT_DISPLAY_NAME`,
+  `_PRODUCT_CAPABILITIES`, `_PRODUCT_MORTALITY_MODE_OPTIONS`,
+  `_PRODUCT_DEFAULT_MORTALITY_MODE`, `_PRODUCT_UI_CONFIG`,
+  `_PRODUCT_VALIDATORS`. Life products default to `cso_2017_ult`
+  mortality; annuity products keep `rp2014_mp2016`.
+- **Excel builder dispatch:** `product_excel.py` `@register_builder`
+  decorators for all 7 new products.
+- **Liability layouts:** `liability_layouts.LIABILITY_LAYOUTS` —
+  accumulation products (RILA / MYGA / FIA / VA) use
+  `total_cf_col=M, discount_col=O`; life products (SPIA / Term / WL /
+  UL / IUL / VUL) use `total_cf_col=S, discount_col=O`.
+- **UI:** 7 new contract widget blocks + 7 new contract-construction
+  blocks in `pricing_ui.py`. New `RUN_KEY` constants in
+  `pricing_run_form_state.py` (one per product knob); seed defaults +
+  per-product normalization extended (force `run_use_index = True`
+  for indexed / VA-style products, `False` for fixed / declared-rate).
+- **Liability-path dispatch:** each engine module registers via
+  `liability_dispatch.register_liability_path_converter` at import
+  time. ALM dispatch needs no changes for new products.
+- **Tests (per product):** parity (`tests/parity/test_<P>_actuarial.py`),
+  golden JSON (`tests/parity/golden/<P>.json`), recalc case in
+  `tests/parity/test_excel_recalc_per_product.py::_CASE_BUILDERS`,
+  AppTest smoke (`tests/ui/test_apptest_<P>.py`),
+  regression-matrix fixture (`tests/test_regression_matrix.py`),
+  observability wiring (`tests/test_observability_wiring.py`).
+  All 7 actuarial assessments use bands from `actuarial_benchmarks.py`
+  imported by name — never inline literals.
+
+End-to-end deliverables:
+
+- **`scripts/deep_smoke.py`** now exercises all 10 products (was 3 +
+  RILA-with-ALM); zero failures, ~3 s total.
+- **`tests/ui/test_apptest_full_workflow.py::_PRODUCT_RUN_CASES`**
+  covers all 10 products; 57 tests pass.
+- **`scripts/generate_cso_2017_synthetic.py`** generates the four
+  placeholder mortality CSVs with documented "synthetic — overlay
+  licensed file in production" warnings (in a sidecar
+  `data/mortality/cso_2017_ult/README.md`).
+- **`scripts/render_actuarial_benchmarks.py`** mirrors
+  `render_parity_contract.py` and is wired into `just preflight`.
+- **`docs/lapse_framework.md`** — narrative for the lapse v1 contract.
+- **`docs/actuarial_benchmarks.md`** — per-product band rationale +
+  closed-form / sensitivity references.
+- **`docs/model_change_log.md`** — consolidated Phase 0 + Phases 1-9
+  entries.
+
 ### Added
 - **Always-on UI smoke gate (``tests/ui/test_apptest_full_workflow.py``,
   19 tests).** Closes the gap between the per-product

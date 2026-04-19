@@ -125,7 +125,10 @@ def _refresh_pricing_excel_workbook_in_session() -> None:
     mc_snap: MCExcelSnapshot | None = None
     mc = st.session_state.get("pricing_mc")
     mc_params = st.session_state.get("pricing_mc_params") or {}
-    if mc is not None:
+    if mc is not None and hasattr(mc, "single_premium") and hasattr(mc, "annuity_factor"):
+        # SPIA / RILA-shaped MC results only; new-product MC results omit
+        # those scalar fields (they expose pv_benefit + per-path arrays
+        # only in v1).
         mc_snap = mc_excel_snapshot_from_result(
             mc,
             annual_drift=float(mc_params.get("annual_drift", 0.06)),
@@ -736,11 +739,34 @@ def _normalize_run_state_for_selected_product(
     # Keep enumerated controls valid for current product.
     mortality_options = list(get_product_mortality_mode_options(selected_product))
     default_mortality_mode = get_product_default_mortality_mode(selected_product)
-    if switched_product and selected_product in (ProductType.SPIA, ProductType.RILA):
-        # SPIA/RILA should land on registry default mortality when switching back from Term, etc.
+    if switched_product and selected_product in (
+        ProductType.SPIA,
+        ProductType.RILA,
+        ProductType.MYGA,
+        ProductType.FIA,
+        ProductType.VARIABLE_ANNUITY,
+        ProductType.WHOLE_LIFE,
+        ProductType.UNIVERSAL_LIFE,
+        ProductType.INDEXED_UL,
+        ProductType.VARIABLE_UL,
+    ):
         state["run_m_mode"] = default_mortality_mode
-    if switched_product and selected_product == ProductType.RILA:
+    # Force run_use_index ON for products that need it for meaningful crediting
+    if switched_product and selected_product in (
+        ProductType.RILA,
+        ProductType.FIA,
+        ProductType.INDEXED_UL,
+        ProductType.VARIABLE_UL,
+        ProductType.VARIABLE_ANNUITY,
+    ):
         state["run_use_index"] = True
+    # Force run_use_index OFF for products that don't use index
+    if switched_product and selected_product in (
+        ProductType.MYGA,
+        ProductType.WHOLE_LIFE,
+        ProductType.UNIVERSAL_LIFE,
+    ):
+        state["run_use_index"] = False
     if str(state.get("run_m_mode", "")) not in mortality_options:
         state["run_m_mode"] = default_mortality_mode
 
@@ -830,6 +856,18 @@ def _build_mortality(
         return _minimal_mortality(), False
     if mode == "qx_csv":
         return sp.MortalityTableQx.load_qx_csv(str(_resolve_path(qx_csv))), False
+    if mode == "cso_2017_ult":
+        # Default to nonsmoker; per-product UI selects smoker_class on the
+        # contract dataclass. Smoker class drives the choice of CSV file
+        # via the loader, but here we don't have access to the contract
+        # yet (mortality is built before contract construction); we
+        # fall back to nonsmoker as the safer default. Production users
+        # can override by switching the mortality mode to ``qx_csv`` and
+        # pointing to a specific cohort file.
+        from mortality_2017_cso import MortalityTable2017CSO
+
+        cso = MortalityTable2017CSO.load(sex=sex, smoker_class="nonsmoker")
+        return cso.table, False
     base_qx = sp.ensure_rp2014_male_healthy_annuitant_qx_csv(
         rp2014_xlsx_path=str(_resolve_path(rp_xlsx)),
         out_csv_path=str(_resolve_path(rp_out_csv)),
@@ -2295,6 +2333,207 @@ def _render_run_and_results() -> None:
                     max_value=1.0,
                     format="%.4f",
                 )
+        elif selected_product == ProductType.MYGA:
+            benefit_annual = 0.0
+            term_choice = "n/a"
+            premium_mode_choice = "n/a"
+            benefit_timing_choice = "n/a"
+            monthly_premium = 0.0
+            m1, m2, m3 = st.columns(3)
+            with m1:
+                run_number_input(
+                    "Single premium ($)", "run_myga_single_premium",
+                    default=100_000.0, min_value=1.0, step=1_000.0,
+                )
+            with m2:
+                run_number_input(
+                    "Declared rate (annual decimal)", "run_myga_declared_rate",
+                    default=0.045, min_value=-0.5, max_value=1.0, format="%.4f",
+                )
+            with m3:
+                run_number_input(
+                    "Guarantee years", "run_myga_guarantee_years",
+                    default=5, min_value=1, max_value=30, step=1,
+                )
+        elif selected_product == ProductType.FIA:
+            benefit_annual = 0.0
+            term_choice = "n/a"
+            premium_mode_choice = "n/a"
+            benefit_timing_choice = "n/a"
+            monthly_premium = 0.0
+            f1, f2, f3, f4, f5 = st.columns(5)
+            with f1:
+                run_number_input(
+                    "Single premium ($)", "run_fia_single_premium",
+                    default=100_000.0, min_value=1.0, step=1_000.0,
+                )
+            with f2:
+                run_number_input(
+                    "Participation", "run_fia_participation",
+                    default=0.80, min_value=0.0, max_value=5.0, format="%.4f",
+                )
+            with f3:
+                run_number_input(
+                    "Annual cap", "run_fia_cap",
+                    default=0.07, min_value=-1.0, max_value=2.0, format="%.4f",
+                )
+            with f4:
+                run_number_input(
+                    "Annual floor", "run_fia_floor",
+                    default=0.0, min_value=-1.0, max_value=1.0, format="%.4f",
+                )
+            with f5:
+                run_number_input(
+                    "Horizon years", "run_fia_horizon_years",
+                    default=10, min_value=1, max_value=40, step=1,
+                )
+        elif selected_product == ProductType.VARIABLE_ANNUITY:
+            benefit_annual = 0.0
+            term_choice = "n/a"
+            premium_mode_choice = "n/a"
+            benefit_timing_choice = "n/a"
+            monthly_premium = 0.0
+            v1, v2, v3 = st.columns(3)
+            with v1:
+                run_number_input(
+                    "Single premium ($)", "run_va_single_premium",
+                    default=100_000.0, min_value=1.0, step=1_000.0,
+                )
+            with v2:
+                run_number_input(
+                    "M&E charge (annual)", "run_va_me_charge",
+                    default=0.014, min_value=0.0, max_value=0.05,
+                    format="%.4f", help="Industry typical 100-200 bps.",
+                )
+            with v3:
+                run_number_input(
+                    "Horizon years", "run_va_horizon_years",
+                    default=20, min_value=1, max_value=40, step=1,
+                )
+        elif selected_product == ProductType.WHOLE_LIFE:
+            benefit_annual = 0.0
+            term_choice = "n/a"
+            premium_mode_choice = "n/a"
+            benefit_timing_choice = "n/a"
+            monthly_premium = 0.0
+            w1, w2 = st.columns(2)
+            with w1:
+                run_number_input(
+                    "Face amount ($)", "run_wl_face_amount",
+                    default=250_000.0, min_value=1.0, step=10_000.0,
+                )
+            with w2:
+                st.selectbox(
+                    "Smoker class", options=["nonsmoker", "smoker"],
+                    key="run_wl_smoker_class",
+                )
+        elif selected_product == ProductType.UNIVERSAL_LIFE:
+            benefit_annual = 0.0
+            term_choice = "n/a"
+            premium_mode_choice = "n/a"
+            benefit_timing_choice = "n/a"
+            monthly_premium = 0.0
+            u1, u2, u3 = st.columns(3)
+            with u1:
+                run_number_input(
+                    "Face amount ($)", "run_ul_face_amount",
+                    default=250_000.0, min_value=1.0, step=10_000.0,
+                )
+                st.selectbox(
+                    "Smoker class", options=["nonsmoker", "smoker"],
+                    key="run_ul_smoker_class",
+                )
+            with u2:
+                run_number_input(
+                    "Single premium ($)", "run_ul_single_premium",
+                    default=25_000.0, min_value=1.0, step=1_000.0,
+                )
+                run_number_input(
+                    "Premium load (decimal)", "run_ul_premium_load",
+                    default=0.06, min_value=0.0, max_value=0.5, format="%.4f",
+                )
+            with u3:
+                run_number_input(
+                    "Monthly expense charge ($)", "run_ul_monthly_expense",
+                    default=7.50, min_value=0.0, step=0.50,
+                )
+                run_number_input(
+                    "Declared rate (annual)", "run_ul_declared_rate",
+                    default=0.04, min_value=-0.5, max_value=1.0, format="%.4f",
+                )
+        elif selected_product == ProductType.INDEXED_UL:
+            benefit_annual = 0.0
+            term_choice = "n/a"
+            premium_mode_choice = "n/a"
+            benefit_timing_choice = "n/a"
+            monthly_premium = 0.0
+            i1, i2, i3, i4 = st.columns(4)
+            with i1:
+                run_number_input(
+                    "Face amount ($)", "run_iul_face_amount",
+                    default=250_000.0, min_value=1.0, step=10_000.0,
+                )
+                st.selectbox(
+                    "Smoker class", options=["nonsmoker", "smoker"],
+                    key="run_iul_smoker_class",
+                )
+            with i2:
+                run_number_input(
+                    "Single premium ($)", "run_iul_single_premium",
+                    default=25_000.0, min_value=1.0, step=1_000.0,
+                )
+                run_number_input(
+                    "Premium load", "run_iul_premium_load",
+                    default=0.06, min_value=0.0, max_value=0.5, format="%.4f",
+                )
+            with i3:
+                run_number_input(
+                    "Monthly expense", "run_iul_monthly_expense",
+                    default=7.50, min_value=0.0, step=0.50,
+                )
+                run_number_input(
+                    "Participation", "run_iul_participation",
+                    default=1.0, min_value=0.0, max_value=5.0, format="%.4f",
+                )
+            with i4:
+                run_number_input(
+                    "Annual cap", "run_iul_cap",
+                    default=0.10, min_value=-1.0, max_value=2.0, format="%.4f",
+                )
+                run_number_input(
+                    "Annual floor", "run_iul_floor",
+                    default=0.0, min_value=-1.0, max_value=1.0, format="%.4f",
+                )
+        elif selected_product == ProductType.VARIABLE_UL:
+            benefit_annual = 0.0
+            term_choice = "n/a"
+            premium_mode_choice = "n/a"
+            benefit_timing_choice = "n/a"
+            monthly_premium = 0.0
+            x1, x2, x3 = st.columns(3)
+            with x1:
+                run_number_input(
+                    "Face amount ($)", "run_vul_face_amount",
+                    default=250_000.0, min_value=1.0, step=10_000.0,
+                )
+                st.selectbox(
+                    "Smoker class", options=["nonsmoker", "smoker"],
+                    key="run_vul_smoker_class",
+                )
+            with x2:
+                run_number_input(
+                    "Single premium ($)", "run_vul_single_premium",
+                    default=25_000.0, min_value=1.0, step=1_000.0,
+                )
+                run_number_input(
+                    "Premium load", "run_vul_premium_load",
+                    default=0.06, min_value=0.0, max_value=0.5, format="%.4f",
+                )
+            with x3:
+                run_number_input(
+                    "Monthly expense", "run_vul_monthly_expense",
+                    default=7.50, min_value=0.0, step=0.50,
+                )
         else:
             benefit_annual = run_number_input(
                 "Annual benefit ($)",
@@ -2533,6 +2772,13 @@ def _render_run_and_results() -> None:
         ProductType.SPIA,
         ProductType.TERM_LIFE,
         ProductType.RILA,
+        ProductType.MYGA,
+        ProductType.FIA,
+        ProductType.VARIABLE_ANNUITY,
+        ProductType.WHOLE_LIFE,
+        ProductType.UNIVERSAL_LIFE,
+        ProductType.INDEXED_UL,
+        ProductType.VARIABLE_UL,
     )
     run = st.button(
         "Run pricing",
@@ -2597,6 +2843,80 @@ def _render_run_and_results() -> None:
                     cap=float(st.session_state.get("run_rila_cap", 0.10)),
                     floor=float(st.session_state.get("run_rila_floor", 0.0)),
                     rider_fee_annual=float(st.session_state.get("run_rila_rider_fee", 0.01)),
+                )
+            elif selected_product == ProductType.MYGA:
+                import myga_projection as my_proj
+                contract = my_proj.MYGAContract(
+                    issue_age=int(issue_age),
+                    sex="male" if sex == "male" else "female",
+                    single_premium=float(st.session_state.get("run_myga_single_premium", 100_000.0)),
+                    declared_rate_annual=float(st.session_state.get("run_myga_declared_rate", 0.045)),
+                    guarantee_years=int(st.session_state.get("run_myga_guarantee_years", 5)),
+                )
+            elif selected_product == ProductType.FIA:
+                import fia_projection as fp_proj
+                contract = fp_proj.FIAContract(
+                    issue_age=int(issue_age),
+                    sex="male" if sex == "male" else "female",
+                    single_premium=float(st.session_state.get("run_fia_single_premium", 100_000.0)),
+                    participation=float(st.session_state.get("run_fia_participation", 0.80)),
+                    cap=float(st.session_state.get("run_fia_cap", 0.07)),
+                    floor=float(st.session_state.get("run_fia_floor", 0.0)),
+                    horizon_years=int(st.session_state.get("run_fia_horizon_years", 10)),
+                )
+            elif selected_product == ProductType.VARIABLE_ANNUITY:
+                import va_projection as va_proj
+                contract = va_proj.VAContract(
+                    issue_age=int(issue_age),
+                    sex="male" if sex == "male" else "female",
+                    single_premium=float(st.session_state.get("run_va_single_premium", 100_000.0)),
+                    me_charge_annual=float(st.session_state.get("run_va_me_charge", 0.014)),
+                    horizon_years=int(st.session_state.get("run_va_horizon_years", 20)),
+                )
+            elif selected_product == ProductType.WHOLE_LIFE:
+                import wl_projection as wl_proj
+                contract = wl_proj.WLContract(
+                    issue_age=int(issue_age),
+                    sex="male" if sex == "male" else "female",
+                    smoker_class=str(st.session_state.get("run_wl_smoker_class", "nonsmoker")),  # type: ignore[arg-type]
+                    face_amount=float(st.session_state.get("run_wl_face_amount", 250_000.0)),
+                )
+            elif selected_product == ProductType.UNIVERSAL_LIFE:
+                import ul_projection as ul_proj
+                contract = ul_proj.ULContract(
+                    issue_age=int(issue_age),
+                    sex="male" if sex == "male" else "female",
+                    smoker_class=str(st.session_state.get("run_ul_smoker_class", "nonsmoker")),  # type: ignore[arg-type]
+                    face_amount=float(st.session_state.get("run_ul_face_amount", 250_000.0)),
+                    single_premium=float(st.session_state.get("run_ul_single_premium", 25_000.0)),
+                    premium_load_pct=float(st.session_state.get("run_ul_premium_load", 0.06)),
+                    monthly_expense_charge=float(st.session_state.get("run_ul_monthly_expense", 7.50)),
+                    declared_rate_annual=float(st.session_state.get("run_ul_declared_rate", 0.04)),
+                )
+            elif selected_product == ProductType.INDEXED_UL:
+                import iul_projection as iul_proj
+                contract = iul_proj.IULContract(
+                    issue_age=int(issue_age),
+                    sex="male" if sex == "male" else "female",
+                    smoker_class=str(st.session_state.get("run_iul_smoker_class", "nonsmoker")),  # type: ignore[arg-type]
+                    face_amount=float(st.session_state.get("run_iul_face_amount", 250_000.0)),
+                    single_premium=float(st.session_state.get("run_iul_single_premium", 25_000.0)),
+                    premium_load_pct=float(st.session_state.get("run_iul_premium_load", 0.06)),
+                    monthly_expense_charge=float(st.session_state.get("run_iul_monthly_expense", 7.50)),
+                    participation=float(st.session_state.get("run_iul_participation", 1.0)),
+                    cap=float(st.session_state.get("run_iul_cap", 0.10)),
+                    floor=float(st.session_state.get("run_iul_floor", 0.0)),
+                )
+            elif selected_product == ProductType.VARIABLE_UL:
+                import vul_projection as vul_proj
+                contract = vul_proj.VULContract(
+                    issue_age=int(issue_age),
+                    sex="male" if sex == "male" else "female",
+                    smoker_class=str(st.session_state.get("run_vul_smoker_class", "nonsmoker")),  # type: ignore[arg-type]
+                    face_amount=float(st.session_state.get("run_vul_face_amount", 250_000.0)),
+                    single_premium=float(st.session_state.get("run_vul_single_premium", 25_000.0)),
+                    premium_load_pct=float(st.session_state.get("run_vul_premium_load", 0.06)),
+                    monthly_expense_charge=float(st.session_state.get("run_vul_monthly_expense", 7.50)),
                 )
             else:
                 contract = sp.SPIAContract(
@@ -2724,12 +3044,18 @@ def _render_run_and_results() -> None:
                     "n_sims": int(mc_n_sims),
                     "seed": int(mc_seed),
                 }
-                mc_snap_for_excel = mc_excel_snapshot_from_result(
-                    mc,
-                    annual_drift=float(mc_drift_pct) / 100.0,
-                    annual_vol=float(mc_vol_pct) / 100.0,
-                    s0=float(mc_s0),
-                )
+                # mc_excel_snapshot_from_result currently expects the
+                # SPIA / RILA MC result shape (single_premium etc.). The
+                # new product MC results omit those scalar fields. We
+                # only embed an MC snapshot in the Excel for products
+                # whose MC result is shape-compatible.
+                if hasattr(mc, "single_premium") and hasattr(mc, "annuity_factor"):
+                    mc_snap_for_excel = mc_excel_snapshot_from_result(
+                        mc,
+                        annual_drift=float(mc_drift_pct) / 100.0,
+                        annual_vol=float(mc_vol_pct) / 100.0,
+                        s0=float(mc_s0),
+                    )
             else:
                 st.session_state.pop("pricing_mc", None)
                 st.session_state.pop("pricing_mc_params", None)
@@ -2779,37 +3105,65 @@ def _render_run_and_results() -> None:
         mc_res = st.session_state.get("pricing_mc")
         if mc_res is not None:
             st.subheader("Monte Carlo summary (index-path uncertainty)")
-            n_infeasible_mc = int(getattr(mc_res, "n_infeasible", 0))
-            n_feasible_mc = int(getattr(mc_res, "n_feasible", mc_res.n_sims))
-            if n_infeasible_mc > 0:
-                pct = 100.0 * n_infeasible_mc / max(int(mc_res.n_sims), 1)
-                worst = float(getattr(mc_res, "infeasible_max_loading", 0.0))
-                st.warning(
-                    f"{n_infeasible_mc:,} of {mc_res.n_sims:,} Monte Carlo paths ({pct:.1f}%) "
-                    f"were economically infeasible (PV death benefits per $1 premium + premium "
-                    f"expense rate exceeded 1; worst observed loading {worst:.4f}). Statistics "
-                    "below use only the feasible paths. Reduce participation, cap, MC drift, or "
-                    "horizon to lower the share."
+            # The full SPIA / RILA-shaped MC summary block uses the
+            # ``premium_*`` aggregate fields. The new product MC results
+            # (FIA / VA / IUL / VUL) only expose pv_benefit and the
+            # per-path arrays in v1; render a compact summary for them
+            # and skip the histogram premium chart.
+            has_premium_summary = all(
+                hasattr(mc_res, name)
+                for name in (
+                    "premium_mean", "premium_median", "premium_p05", "premium_p95",
                 )
-            a1, a2, a3, a4 = st.columns(4)
-            a1.metric("Mean premium", f"${mc_res.premium_mean:,.0f}")
-            a2.metric("Median premium", f"${mc_res.premium_median:,.0f}")
-            a3.metric("P5 premium", f"${mc_res.premium_p05:,.0f}")
-            a4.metric("P95 premium", f"${mc_res.premium_p95:,.0f}")
-            st.caption(
-                f"Simulations: {mc_res.n_sims:,} (feasible {n_feasible_mc:,}; infeasible {n_infeasible_mc:,})"
             )
-            prem_arr = np.asarray(mc_res.single_premium, dtype=float)
-            prem_arr = prem_arr[np.isfinite(prem_arr)]
-            if prem_arr.size > 0:
-                hist_counts, hist_edges = np.histogram(prem_arr, bins=40)
-                hist_df = pd.DataFrame(
-                    {
-                        "premium_bin_mid": 0.5 * (hist_edges[:-1] + hist_edges[1:]),
-                        "count": hist_counts,
-                    }
-                ).set_index("premium_bin_mid")
-                st.line_chart(_round_for_visuals(hist_df))
+            if has_premium_summary:
+                n_infeasible_mc = int(getattr(mc_res, "n_infeasible", 0))
+                n_feasible_mc = int(getattr(mc_res, "n_feasible", mc_res.n_sims))
+                if n_infeasible_mc > 0:
+                    pct = 100.0 * n_infeasible_mc / max(int(mc_res.n_sims), 1)
+                    worst = float(getattr(mc_res, "infeasible_max_loading", 0.0))
+                    st.warning(
+                        f"{n_infeasible_mc:,} of {mc_res.n_sims:,} Monte Carlo paths ({pct:.1f}%) "
+                        f"were economically infeasible (PV death benefits per $1 premium + premium "
+                        f"expense rate exceeded 1; worst observed loading {worst:.4f}). Statistics "
+                        "below use only the feasible paths. Reduce participation, cap, MC drift, or "
+                        "horizon to lower the share."
+                    )
+                a1, a2, a3, a4 = st.columns(4)
+                a1.metric("Mean premium", f"${mc_res.premium_mean:,.0f}")
+                a2.metric("Median premium", f"${mc_res.premium_median:,.0f}")
+                a3.metric("P5 premium", f"${mc_res.premium_p05:,.0f}")
+                a4.metric("P95 premium", f"${mc_res.premium_p95:,.0f}")
+                st.caption(
+                    f"Simulations: {mc_res.n_sims:,} (feasible {n_feasible_mc:,}; infeasible {n_infeasible_mc:,})"
+                )
+                prem_arr = np.asarray(mc_res.single_premium, dtype=float)
+                prem_arr = prem_arr[np.isfinite(prem_arr)]
+                if prem_arr.size > 0:
+                    hist_counts, hist_edges = np.histogram(prem_arr, bins=40)
+                    hist_df = pd.DataFrame(
+                        {
+                            "premium_bin_mid": 0.5 * (hist_edges[:-1] + hist_edges[1:]),
+                            "count": hist_counts,
+                        }
+                    ).set_index("premium_bin_mid")
+                    st.line_chart(_round_for_visuals(hist_df))
+            else:
+                # Compact summary for new-product MC results: just show
+                # mean PV(benefit) and (if available) E[AV(T)].
+                pv_b_arr = np.asarray(getattr(mc_res, "pv_benefit", np.array([])), dtype=float)
+                pv_b_arr = pv_b_arr[np.isfinite(pv_b_arr)]
+                cols = st.columns(3)
+                cols[0].metric("MC paths", f"{int(mc_res.n_sims):,}")
+                if pv_b_arr.size > 0:
+                    cols[1].metric("Mean PV(benefit)", f"${pv_b_arr.mean():,.0f}")
+                if hasattr(mc_res, "av_end_mean"):
+                    cols[2].metric("Mean AV(T)", f"${float(mc_res.av_end_mean):,.0f}")
+                st.caption(
+                    "Compact MC summary -- the new product engines expose pv_benefit + "
+                    "per-path arrays only in v1. Future releases may add the full "
+                    "premium-distribution surface used by SPIA / RILA."
+                )
 
         df = _result_dataframe(res)
         st.subheader("Month-by-month projection")
@@ -3100,7 +3454,20 @@ def _render_excel_replicator() -> None:
     # --- Monte Carlo distribution dashboard ---
     mc_res = st.session_state.get("pricing_mc")
     mc_params = st.session_state.get("pricing_mc_params") or {}
-    if mc_res is not None:
+    # The full MC distribution dashboard expects SPIA / RILA-shaped MC
+    # results. New product MC results omit the per-metric arrays this
+    # block iterates over.
+    has_full_mc_surface = mc_res is not None and all(
+        hasattr(mc_res, name)
+        for name in (
+            "single_premium",
+            "pv_benefit",
+            "pv_monthly_expenses",
+            "pv_monthly_total",
+            "annuity_factor",
+        )
+    )
+    if has_full_mc_surface:
         st.divider()
         st.subheader("Monte Carlo distribution statistics")
         n_sims_disp = mc_params.get("n_sims", mc_res.n_sims)

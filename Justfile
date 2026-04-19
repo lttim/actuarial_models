@@ -72,10 +72,11 @@ preflight:
     @cd annuity_model && python -m pytest tests/parity -q
     @echo "[2/4] full unit-test suite"
     @cd annuity_model && python -m pytest -q
-    @echo "[3/4] end-to-end smoke (3 products + Excel validator)"
+    @echo "[3/4] end-to-end smoke (10 products + Excel validator)"
     @cd annuity_model && python scripts/deep_smoke.py
-    @echo "[4/4] tolerance docs in sync with parity_constants.py"
+    @echo "[4/4] tolerance + actuarial-benchmark docs in sync"
     @cd annuity_model && python scripts/render_parity_contract.py --check
+    @cd annuity_model && python scripts/render_actuarial_benchmarks.py --check
     @echo ""
     @echo "READY TO COMMIT: all four canonical gates passed."
 

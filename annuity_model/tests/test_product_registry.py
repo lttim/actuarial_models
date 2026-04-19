@@ -159,10 +159,17 @@ def test_spia_adapter_excel_spec_matches_legacy_builder():
 
 
 def test_unimplemented_product_types_raise():
-    with pytest.raises(NotImplementedError):
-        get_product_adapter(ProductType.WHOLE_LIFE)
-    with pytest.raises(NotImplementedError):
-        get_product_adapter(ProductType.VARIABLE_ANNUITY)
+    """All ten ``ProductType`` members are now implemented (Phase 1-7 of
+    seven-product rollout). We synthesize a fake unregistered enum
+    member to exercise the negative branch of ``get_product_adapter``.
+    """
+    from enum import Enum
+
+    class _FakeProductType(str, Enum):
+        UNKNOWN = "unknown"
+
+    with pytest.raises((NotImplementedError, KeyError)):
+        get_product_adapter(_FakeProductType.UNKNOWN)  # type: ignore[arg-type]
 
 
 def test_term_adapter_price_and_dispatch():

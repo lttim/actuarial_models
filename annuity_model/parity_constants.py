@@ -82,11 +82,72 @@ TERM_MODELCHECK_TOL: Final[float] = 1e-9
 WHATIF_NO_OP_TOL: Final[float] = 1e-9
 """When all what-if shocks are zero, output must match base within this tolerance."""
 
+# ---------------------------------------------------------------------------
+# Seven-product rollout (Phase 0): per-product cell + framework tolerances.
+# Every constant added here is also documented in docs/model_change_log.md
+# (single commit) and rendered into docs/model_parity_contract.md by
+# scripts/render_parity_contract.py. New products MUST import these
+# constants by name -- never inline a literal in a parity test.
+# ---------------------------------------------------------------------------
+
+LIFE_MODELCHECK_TOL: Final[float] = 1e-9
+"""ModelCheck cell tolerance for WL / UL / IUL / VUL liability cashflows.
+
+Same magnitude as ``TERM_MODELCHECK_TOL``: pure-monthly aggregations, no
+intermediate currency rounding."""
+
+ANNUITY_ACCUM_MODELCHECK_TOL: Final[float] = 1e-9
+"""ModelCheck cell tolerance for MYGA / FIA / VA accumulation cashflows.
+
+Same magnitude as ``RILA_PV_TOL`` truncated to atomic-cell scale."""
+
+AV_TOL: Final[float] = 1e-6
+"""Per-month account-value tolerance (UL / IUL / VUL / FIA / VA).
+
+Mirrors ``RILA_AV_TOL`` so a builder switching between RILA-style and
+UL-style AV plumbing does not need to thread two tolerances."""
+
+LAPSE_DECREMENT_TOL: Final[float] = 1e-12
+"""Multiplicative tolerance for combined survival sanity checks.
+
+``cumprod((1 - q_m)(1 - q_w))`` is monotone non-increasing exactly;
+this guards against numerical drift below 1 ulp in the unit tests."""
+
+IUL_PV_TOL: Final[float] = 1e-4
+"""IUL PV / single-premium implicit equation tolerance (USD)."""
+
+VUL_PV_TOL: Final[float] = 1e-4
+"""VUL PV / single-premium implicit equation tolerance (USD)."""
+
+VA_PV_TOL: Final[float] = 1e-4
+"""VA GMDB PV tolerance (USD)."""
+
+MYGA_PV_TOL: Final[float] = 1e-4
+"""MYGA PV tolerance (USD).
+
+Deterministic but kept for symmetry with the other annuity tolerances."""
+
+FIA_PV_TOL: Final[float] = 1e-4
+"""FIA PV tolerance (USD)."""
+
+WL_PV_TOL: Final[float] = 1e-4
+"""Whole life PV tolerance (USD)."""
+
+UL_PV_TOL: Final[float] = 1e-4
+"""UL PV tolerance (USD)."""
+
 __all__ = [
+    "ANNUITY_ACCUM_MODELCHECK_TOL",
+    "AV_TOL",
     "DISINVEST_TIE_BREAK_EPS",
     "EXCEL_DISINVEST_EPSILON",
     "EXCEL_DISINVEST_THRESHOLD",
+    "FIA_PV_TOL",
+    "IUL_PV_TOL",
+    "LAPSE_DECREMENT_TOL",
+    "LIFE_MODELCHECK_TOL",
     "MODELCHECK_TOL",
+    "MYGA_PV_TOL",
     "REINVEST_GAP_EPS",
     "REINVEST_XSR_EPS",
     "RILA_AV_TOL",
@@ -96,5 +157,9 @@ __all__ = [
     "TOL_DOLLAR",
     "TOL_TENOR",
     "T_REM_RESET_EPS",
+    "UL_PV_TOL",
+    "VA_PV_TOL",
+    "VUL_PV_TOL",
     "WHATIF_NO_OP_TOL",
+    "WL_PV_TOL",
 ]

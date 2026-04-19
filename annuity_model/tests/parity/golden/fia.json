@@ -1,0 +1,27 @@
+{
+  "inputs_summary": {
+    "cap": 0.07,
+    "floor": 0.0,
+    "horizon_age": 70,
+    "horizon_years": 10,
+    "index_drift": 0.004,
+    "index_seed": 42,
+    "index_vol": 0.02,
+    "issue_age": 60,
+    "mortality": "synthetic_qx_0.005+1e-5*age",
+    "participation": 0.8,
+    "sex": "male",
+    "single_premium": 100000.0,
+    "spread": 0.0,
+    "yield_rate": 0.04
+  },
+  "metrics": {
+    "annuity_factor": 96.16241798417946,
+    "av_end_T": 132281.42808379055,
+    "n_months": 120,
+    "pv_benefit": 89111.39119849564,
+    "pv_monthly_expenses": 0.0,
+    "single_premium": 100000.0
+  },
+  "product": "fia"
+}

@@ -16,11 +16,18 @@
     "pricing_run_form_state.py is the source of truth and is intentionally",
     "excluded from the count -- the literals there ARE the constants."
   ],
-  "pricing_ui.py": 102,
+  "pricing_ui.py": 167,
   "tests/test_pricing_run_form_state.py": 9,
   "tests/test_pricing_ui_state_normalization.py": 33,
   "tests/ui/conftest.py": 2,
+  "tests/ui/test_apptest_fia.py": 7,
+  "tests/ui/test_apptest_iul.py": 9,
+  "tests/ui/test_apptest_myga.py": 5,
   "tests/ui/test_apptest_rila.py": 6,
   "tests/ui/test_apptest_spia.py": 5,
-  "tests/ui/test_apptest_term.py": 4
+  "tests/ui/test_apptest_term.py": 4,
+  "tests/ui/test_apptest_ul.py": 7,
+  "tests/ui/test_apptest_va.py": 5,
+  "tests/ui/test_apptest_vul.py": 6,
+  "tests/ui/test_apptest_wl.py": 3
 }

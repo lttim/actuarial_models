@@ -82,6 +82,52 @@ class RUN_KEY:
     RILA_FLOOR = "run_rila_floor"
     RILA_RIDER_FEE = "run_rila_rider_fee"
 
+    # MYGA
+    MYGA_SINGLE_PREMIUM = "run_myga_single_premium"
+    MYGA_DECLARED_RATE = "run_myga_declared_rate"
+    MYGA_GUARANTEE_YEARS = "run_myga_guarantee_years"
+
+    # FIA
+    FIA_SINGLE_PREMIUM = "run_fia_single_premium"
+    FIA_PARTICIPATION = "run_fia_participation"
+    FIA_CAP = "run_fia_cap"
+    FIA_FLOOR = "run_fia_floor"
+    FIA_HORIZON_YEARS = "run_fia_horizon_years"
+
+    # VA
+    VA_SINGLE_PREMIUM = "run_va_single_premium"
+    VA_ME_CHARGE = "run_va_me_charge"
+    VA_HORIZON_YEARS = "run_va_horizon_years"
+
+    # WL (Whole Life)
+    WL_FACE_AMOUNT = "run_wl_face_amount"
+    WL_SMOKER_CLASS = "run_wl_smoker_class"
+
+    # UL
+    UL_FACE_AMOUNT = "run_ul_face_amount"
+    UL_SMOKER_CLASS = "run_ul_smoker_class"
+    UL_SINGLE_PREMIUM = "run_ul_single_premium"
+    UL_PREMIUM_LOAD = "run_ul_premium_load"
+    UL_MONTHLY_EXPENSE = "run_ul_monthly_expense"
+    UL_DECLARED_RATE = "run_ul_declared_rate"
+
+    # IUL
+    IUL_FACE_AMOUNT = "run_iul_face_amount"
+    IUL_SMOKER_CLASS = "run_iul_smoker_class"
+    IUL_SINGLE_PREMIUM = "run_iul_single_premium"
+    IUL_PREMIUM_LOAD = "run_iul_premium_load"
+    IUL_MONTHLY_EXPENSE = "run_iul_monthly_expense"
+    IUL_PARTICIPATION = "run_iul_participation"
+    IUL_CAP = "run_iul_cap"
+    IUL_FLOOR = "run_iul_floor"
+
+    # VUL
+    VUL_FACE_AMOUNT = "run_vul_face_amount"
+    VUL_SMOKER_CLASS = "run_vul_smoker_class"
+    VUL_SINGLE_PREMIUM = "run_vul_single_premium"
+    VUL_PREMIUM_LOAD = "run_vul_premium_load"
+    VUL_MONTHLY_EXPENSE = "run_vul_monthly_expense"
+
     # Yield curve / discounting
     Y_MODE = "run_y_mode"
     FLAT_RATE = "run_flat_rate"
@@ -168,6 +214,41 @@ PRICING_RUN_NUMBER_INPUT_KEYS: frozenset[str] = frozenset(
         RUN_KEY.RILA_CAP,
         RUN_KEY.RILA_FLOOR,
         RUN_KEY.RILA_RIDER_FEE,
+        # MYGA
+        RUN_KEY.MYGA_SINGLE_PREMIUM,
+        RUN_KEY.MYGA_DECLARED_RATE,
+        RUN_KEY.MYGA_GUARANTEE_YEARS,
+        # FIA
+        RUN_KEY.FIA_SINGLE_PREMIUM,
+        RUN_KEY.FIA_PARTICIPATION,
+        RUN_KEY.FIA_CAP,
+        RUN_KEY.FIA_FLOOR,
+        RUN_KEY.FIA_HORIZON_YEARS,
+        # VA
+        RUN_KEY.VA_SINGLE_PREMIUM,
+        RUN_KEY.VA_ME_CHARGE,
+        RUN_KEY.VA_HORIZON_YEARS,
+        # WL
+        RUN_KEY.WL_FACE_AMOUNT,
+        # UL
+        RUN_KEY.UL_FACE_AMOUNT,
+        RUN_KEY.UL_SINGLE_PREMIUM,
+        RUN_KEY.UL_PREMIUM_LOAD,
+        RUN_KEY.UL_MONTHLY_EXPENSE,
+        RUN_KEY.UL_DECLARED_RATE,
+        # IUL
+        RUN_KEY.IUL_FACE_AMOUNT,
+        RUN_KEY.IUL_SINGLE_PREMIUM,
+        RUN_KEY.IUL_PREMIUM_LOAD,
+        RUN_KEY.IUL_MONTHLY_EXPENSE,
+        RUN_KEY.IUL_PARTICIPATION,
+        RUN_KEY.IUL_CAP,
+        RUN_KEY.IUL_FLOOR,
+        # VUL
+        RUN_KEY.VUL_FACE_AMOUNT,
+        RUN_KEY.VUL_SINGLE_PREMIUM,
+        RUN_KEY.VUL_PREMIUM_LOAD,
+        RUN_KEY.VUL_MONTHLY_EXPENSE,
     }
 )
 
@@ -335,5 +416,44 @@ def build_run_form_seed_defaults(
         RUN_KEY.RILA_CAP: float(saved_inputs.get("rila_cap", 0.10)),
         RUN_KEY.RILA_FLOOR: float(saved_inputs.get("rila_floor", 0.0)),
         RUN_KEY.RILA_RIDER_FEE: float(saved_inputs.get("rila_rider_fee_annual", 0.01)),
+        # MYGA
+        RUN_KEY.MYGA_SINGLE_PREMIUM: float(saved_inputs.get("myga_single_premium", 100_000.0)),
+        RUN_KEY.MYGA_DECLARED_RATE: float(saved_inputs.get("myga_declared_rate", 0.045)),
+        RUN_KEY.MYGA_GUARANTEE_YEARS: int(saved_inputs.get("myga_guarantee_years", 5)),
+        # FIA
+        RUN_KEY.FIA_SINGLE_PREMIUM: float(saved_inputs.get("fia_single_premium", 100_000.0)),
+        RUN_KEY.FIA_PARTICIPATION: float(saved_inputs.get("fia_participation", 0.80)),
+        RUN_KEY.FIA_CAP: float(saved_inputs.get("fia_cap", 0.07)),
+        RUN_KEY.FIA_FLOOR: float(saved_inputs.get("fia_floor", 0.0)),
+        RUN_KEY.FIA_HORIZON_YEARS: int(saved_inputs.get("fia_horizon_years", 10)),
+        # VA
+        RUN_KEY.VA_SINGLE_PREMIUM: float(saved_inputs.get("va_single_premium", 100_000.0)),
+        RUN_KEY.VA_ME_CHARGE: float(saved_inputs.get("va_me_charge_annual", 0.014)),
+        RUN_KEY.VA_HORIZON_YEARS: int(saved_inputs.get("va_horizon_years", 20)),
+        # WL
+        RUN_KEY.WL_FACE_AMOUNT: float(saved_inputs.get("wl_face_amount", 250_000.0)),
+        RUN_KEY.WL_SMOKER_CLASS: str(saved_inputs.get("wl_smoker_class", "nonsmoker")),
+        # UL
+        RUN_KEY.UL_FACE_AMOUNT: float(saved_inputs.get("ul_face_amount", 250_000.0)),
+        RUN_KEY.UL_SMOKER_CLASS: str(saved_inputs.get("ul_smoker_class", "nonsmoker")),
+        RUN_KEY.UL_SINGLE_PREMIUM: float(saved_inputs.get("ul_single_premium", 25_000.0)),
+        RUN_KEY.UL_PREMIUM_LOAD: float(saved_inputs.get("ul_premium_load_pct", 0.06)),
+        RUN_KEY.UL_MONTHLY_EXPENSE: float(saved_inputs.get("ul_monthly_expense_charge", 7.50)),
+        RUN_KEY.UL_DECLARED_RATE: float(saved_inputs.get("ul_declared_rate_annual", 0.04)),
+        # IUL
+        RUN_KEY.IUL_FACE_AMOUNT: float(saved_inputs.get("iul_face_amount", 250_000.0)),
+        RUN_KEY.IUL_SMOKER_CLASS: str(saved_inputs.get("iul_smoker_class", "nonsmoker")),
+        RUN_KEY.IUL_SINGLE_PREMIUM: float(saved_inputs.get("iul_single_premium", 25_000.0)),
+        RUN_KEY.IUL_PREMIUM_LOAD: float(saved_inputs.get("iul_premium_load_pct", 0.06)),
+        RUN_KEY.IUL_MONTHLY_EXPENSE: float(saved_inputs.get("iul_monthly_expense_charge", 7.50)),
+        RUN_KEY.IUL_PARTICIPATION: float(saved_inputs.get("iul_participation", 1.0)),
+        RUN_KEY.IUL_CAP: float(saved_inputs.get("iul_cap", 0.10)),
+        RUN_KEY.IUL_FLOOR: float(saved_inputs.get("iul_floor", 0.0)),
+        # VUL
+        RUN_KEY.VUL_FACE_AMOUNT: float(saved_inputs.get("vul_face_amount", 250_000.0)),
+        RUN_KEY.VUL_SMOKER_CLASS: str(saved_inputs.get("vul_smoker_class", "nonsmoker")),
+        RUN_KEY.VUL_SINGLE_PREMIUM: float(saved_inputs.get("vul_single_premium", 25_000.0)),
+        RUN_KEY.VUL_PREMIUM_LOAD: float(saved_inputs.get("vul_premium_load_pct", 0.06)),
+        RUN_KEY.VUL_MONTHLY_EXPENSE: float(saved_inputs.get("vul_monthly_expense_charge", 7.50)),
     }
     return defaults

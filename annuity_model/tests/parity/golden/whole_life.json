@@ -1,0 +1,20 @@
+{
+  "inputs_summary": {
+    "face_amount": 250000.0,
+    "horizon_age": 120,
+    "issue_age": 45,
+    "mortality": "synthetic_qx_0.005+1e-5*age",
+    "sex": "male",
+    "smoker_class": "nonsmoker",
+    "spread": 0.0,
+    "yield_rate": 0.04
+  },
+  "metrics": {
+    "annuity_factor": 253.91325492334838,
+    "n_months": 900,
+    "pv_benefit": 29918.664590054592,
+    "pv_monthly_expenses": 0.0,
+    "single_premium": 29918.664590054592
+  },
+  "product": "whole_life"
+}

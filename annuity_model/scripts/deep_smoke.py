@@ -1,5 +1,5 @@
 """
-Deep smoke test for SPIA / Term / RILA workbook export pipeline.
+Deep smoke test for the 10-product workbook export pipeline.
 
 Builds a real .xlsx for each implemented product on disk, opens it back with
 openpyxl, runs the static validator, then inspects ModelCheck for evidence
@@ -24,9 +24,28 @@ if str(REPO_ROOT) not in sys.path:
 import numpy as np
 from openpyxl import load_workbook
 
+import fia_projection as fp
+import iul_projection as iul
+import myga_projection as my
 import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
+import ul_projection as ul
+import va_projection as va
+import vul_projection as vul
+import wl_projection as wl
+from build_fia_excel_workbook import (
+    build_fia_workbook_from_spec,
+    fia_excel_spec_from_launcher,
+)
+from build_iul_excel_workbook import (
+    build_iul_workbook_from_spec,
+    iul_excel_spec_from_launcher,
+)
+from build_myga_excel_workbook import (
+    build_myga_workbook_from_spec,
+    myga_excel_spec_from_launcher,
+)
 from build_pricing_excel_workbook import (
     ExcelPythonSnapshot,
     alm_excel_snapshot_from_result,
@@ -40,6 +59,22 @@ from build_rila_excel_workbook import (
 from build_term_excel_workbook import (
     build_term_workbook_from_spec,
     term_excel_spec_from_launcher,
+)
+from build_ul_excel_workbook import (
+    build_ul_workbook_from_spec,
+    ul_excel_spec_from_launcher,
+)
+from build_va_excel_workbook import (
+    build_va_workbook_from_spec,
+    va_excel_spec_from_launcher,
+)
+from build_vul_excel_workbook import (
+    build_vul_workbook_from_spec,
+    vul_excel_spec_from_launcher,
+)
+from build_wl_excel_workbook import (
+    build_wl_workbook_from_spec,
+    wl_excel_spec_from_launcher,
 )
 from excel_workbook_validator import validate_workbook
 
@@ -232,6 +267,148 @@ def build_rila(*, with_alm: bool = False, label: str = "rila") -> Path:
     return out
 
 
+def _flat_yc(rate: float = 0.04) -> sp.YieldCurve:
+    return sp.YieldCurve.from_flat_rate(rate)
+
+
+def _synth_mort() -> sp.MortalityTableQx:
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
+    return sp.MortalityTableQx(ages, qx)
+
+
+def build_myga() -> Path:
+    contract = my.MYGAContract(
+        issue_age=60, sex="male", single_premium=100_000.0,
+        declared_rate_annual=0.045, guarantee_years=5,
+    )
+    spec = myga_excel_spec_from_launcher(
+        contract=contract, yield_curve=_flat_yc(0.045), mortality=_synth_mort(),
+        horizon_age=70, spread=0.0, valuation_year=2025,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        yield_mode_label="flat", mortality_mode_label="qx",
+        expense_mode_label="manual", expense_annual_inflation=0.0,
+    )
+    out = OUT_DIR / "myga_smoke.xlsx"
+    out.write_bytes(build_myga_workbook_from_spec(spec))
+    return out
+
+
+def build_fia() -> Path:
+    contract = fp.FIAContract(
+        issue_age=60, sex="male", single_premium=100_000.0,
+        participation=0.8, cap=0.07, floor=0.0, horizon_years=10,
+    )
+    n_months = 120
+    rng = np.random.default_rng(42)
+    levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.02, size=n_months))
+    spec = fia_excel_spec_from_launcher(
+        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
+        horizon_age=70, spread=0.0, valuation_year=2025,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        yield_mode_label="flat", mortality_mode_label="qx",
+        expense_mode_label="manual", expense_annual_inflation=0.0,
+        index_s0=100.0, index_levels_at_payment=levels,
+    )
+    out = OUT_DIR / "fia_smoke.xlsx"
+    out.write_bytes(build_fia_workbook_from_spec(spec))
+    return out
+
+
+def build_va() -> Path:
+    contract = va.VAContract(
+        issue_age=55, sex="male", single_premium=100_000.0,
+        me_charge_annual=0.014, horizon_years=20,
+    )
+    n_months = 240
+    rng = np.random.default_rng(42)
+    levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
+    spec = va_excel_spec_from_launcher(
+        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
+        horizon_age=75, spread=0.0, valuation_year=2025,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        yield_mode_label="flat", mortality_mode_label="qx",
+        expense_mode_label="manual", expense_annual_inflation=0.0,
+        index_s0=100.0, index_levels_at_payment=levels,
+    )
+    out = OUT_DIR / "va_smoke.xlsx"
+    out.write_bytes(build_va_workbook_from_spec(spec))
+    return out
+
+
+def build_wl() -> Path:
+    contract = wl.WLContract(
+        issue_age=45, sex="male", smoker_class="nonsmoker", face_amount=250_000.0,
+    )
+    spec = wl_excel_spec_from_launcher(
+        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
+        horizon_age=80, spread=0.0, valuation_year=2025,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        yield_mode_label="flat", mortality_mode_label="qx",
+        expense_mode_label="manual", expense_annual_inflation=0.0,
+    )
+    out = OUT_DIR / "wl_smoke.xlsx"
+    out.write_bytes(build_wl_workbook_from_spec(spec))
+    return out
+
+
+def build_ul() -> Path:
+    contract = ul.ULContract(
+        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
+    )
+    spec = ul_excel_spec_from_launcher(
+        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
+        horizon_age=80, spread=0.0, valuation_year=2025,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        yield_mode_label="flat", mortality_mode_label="qx",
+        expense_mode_label="manual", expense_annual_inflation=0.0,
+    )
+    out = OUT_DIR / "ul_smoke.xlsx"
+    out.write_bytes(build_ul_workbook_from_spec(spec))
+    return out
+
+
+def build_iul() -> Path:
+    contract = iul.IULContract(
+        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
+        participation=1.0, cap=0.10, floor=0.0,
+    )
+    n_months = (80 - 45) * 12
+    rng = np.random.default_rng(42)
+    levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
+    spec = iul_excel_spec_from_launcher(
+        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
+        horizon_age=80, spread=0.0, valuation_year=2025,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        yield_mode_label="flat", mortality_mode_label="qx",
+        expense_mode_label="manual", expense_annual_inflation=0.0,
+        index_s0=100.0, index_levels_at_payment=levels,
+    )
+    out = OUT_DIR / "iul_smoke.xlsx"
+    out.write_bytes(build_iul_workbook_from_spec(spec))
+    return out
+
+
+def build_vul() -> Path:
+    contract = vul.VULContract(
+        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
+    )
+    n_months = (80 - 45) * 12
+    rng = np.random.default_rng(42)
+    levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
+    spec = vul_excel_spec_from_launcher(
+        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
+        horizon_age=80, spread=0.0, valuation_year=2025,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        yield_mode_label="flat", mortality_mode_label="qx",
+        expense_mode_label="manual", expense_annual_inflation=0.0,
+        index_s0=100.0, index_levels_at_payment=levels,
+    )
+    out = OUT_DIR / "vul_smoke.xlsx"
+    out.write_bytes(build_vul_workbook_from_spec(spec))
+    return out
+
+
 def main() -> int:
     t0 = time.perf_counter()
     print(f"[smoke] writing workbooks to {OUT_DIR}")
@@ -242,6 +419,13 @@ def main() -> int:
         ("Term", lambda: build_term()),
         ("RILA (no ALM)", lambda: build_rila(with_alm=False, label="rila_no_alm")),
         ("RILA + ALM", lambda: build_rila(with_alm=True, label="rila_alm")),
+        ("MYGA", lambda: build_myga()),
+        ("FIA", lambda: build_fia()),
+        ("VA", lambda: build_va()),
+        ("WL", lambda: build_wl()),
+        ("UL", lambda: build_ul()),
+        ("IUL", lambda: build_iul()),
+        ("VUL", lambda: build_vul()),
     ]:
         try:
             t = time.perf_counter()

@@ -7,19 +7,44 @@ from typing import Any, Protocol, Union
 
 import numpy as np
 
+import fia_projection as fp
+import iul_projection as iul
+import myga_projection as my
 import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
+import ul_projection as ul
+import va_projection as va
+import vul_projection as vul
+import wl_projection as wl
+from build_fia_excel_workbook import FIAExcelBuildSpec, fia_excel_spec_from_launcher
+from build_iul_excel_workbook import IULExcelBuildSpec, iul_excel_spec_from_launcher
+from build_myga_excel_workbook import MYGAExcelBuildSpec, myga_excel_spec_from_launcher
 from build_pricing_excel_workbook import ExcelBuildSpec, excel_spec_from_launcher
 from build_rila_excel_workbook import RILAExcelBuildSpec, rila_excel_spec_from_launcher
 from build_term_excel_workbook import TermExcelBuildSpec, term_excel_spec_from_launcher
+from build_ul_excel_workbook import ULExcelBuildSpec, ul_excel_spec_from_launcher
+from build_va_excel_workbook import VAExcelBuildSpec, va_excel_spec_from_launcher
+from build_vul_excel_workbook import VULExcelBuildSpec, vul_excel_spec_from_launcher
+from build_wl_excel_workbook import WLExcelBuildSpec, wl_excel_spec_from_launcher
 
 # Union of every contract dataclass currently understood by an adapter.
 # Tightening the ``ProductAdapter`` Protocol from ``contract: object`` to
 # this union (P1, 2026-04) lets mypy catch "wrong product, wrong contract"
 # wiring at the call site instead of at the runtime ``isinstance`` check
 # inside each adapter. New products MUST extend this union when they land.
-ProductContract = Union[sp.SPIAContract, tp.TermLifeContract, rp.RILAContract]
+ProductContract = Union[
+    sp.SPIAContract,
+    tp.TermLifeContract,
+    rp.RILAContract,
+    my.MYGAContract,
+    fp.FIAContract,
+    va.VAContract,
+    wl.WLContract,
+    ul.ULContract,
+    iul.IULContract,
+    vul.VULContract,
+]
 
 
 class ProductType(str, Enum):
@@ -28,6 +53,11 @@ class ProductType(str, Enum):
     RILA = "rila"
     WHOLE_LIFE = "whole_life"
     VARIABLE_ANNUITY = "variable_annuity"
+    MYGA = "myga"
+    FIA = "fia"
+    UNIVERSAL_LIFE = "universal_life"
+    INDEXED_UL = "indexed_ul"
+    VARIABLE_UL = "variable_ul"
 
 
 @dataclass(frozen=True)
@@ -189,12 +219,96 @@ def validate_run_inputs(
     return tuple(errors)
 
 
+def _validate_myga(state: Mapping[str, Any]) -> list[str]:
+    errors: list[str] = []
+    sp_val = state.get("myga_single_premium")
+    rate = state.get("myga_declared_rate")
+    years = state.get("myga_guarantee_years")
+    if sp_val is not None and (not isinstance(sp_val, (int, float)) or float(sp_val) <= 0):
+        errors.append("myga_single_premium must be > 0.")
+    if rate is not None and (not isinstance(rate, (int, float)) or not (-0.5 <= float(rate) <= 1.0)):
+        errors.append("myga_declared_rate must be in [-0.5, 1.0].")
+    if years is not None and (not isinstance(years, (int, float)) or not (1 <= int(years) <= 30)):
+        errors.append("myga_guarantee_years must be in [1, 30].")
+    return errors
+
+
+def _validate_fia(state: Mapping[str, Any]) -> list[str]:
+    errors: list[str] = []
+    cap = state.get("fia_cap")
+    floor = state.get("fia_floor")
+    sp_val = state.get("fia_single_premium")
+    if sp_val is not None and (not isinstance(sp_val, (int, float)) or float(sp_val) <= 0):
+        errors.append("fia_single_premium must be > 0.")
+    if cap is not None and floor is not None and float(cap) < float(floor):
+        errors.append(f"fia cap ({cap}) must be >= floor ({floor}).")
+    return errors
+
+
+def _validate_va(state: Mapping[str, Any]) -> list[str]:
+    errors: list[str] = []
+    sp_val = state.get("va_single_premium")
+    me = state.get("va_me_charge_annual")
+    if sp_val is not None and (not isinstance(sp_val, (int, float)) or float(sp_val) <= 0):
+        errors.append("va_single_premium must be > 0.")
+    if me is not None and not (0.0 <= float(me) <= 0.05):
+        errors.append("va_me_charge_annual must be in [0, 0.05] (5% cap).")
+    return errors
+
+
+def _validate_life_face_and_premium(state: Mapping[str, Any], prefix: str) -> list[str]:
+    errors: list[str] = []
+    face = state.get(f"{prefix}_face_amount")
+    sp_val = state.get(f"{prefix}_single_premium")
+    load = state.get(f"{prefix}_premium_load_pct")
+    if face is not None and (not isinstance(face, (int, float)) or float(face) <= 0):
+        errors.append(f"{prefix}_face_amount must be > 0.")
+    if sp_val is not None and (not isinstance(sp_val, (int, float)) or float(sp_val) <= 0):
+        errors.append(f"{prefix}_single_premium must be > 0.")
+    if load is not None and not (0.0 <= float(load) < 1.0):
+        errors.append(f"{prefix}_premium_load_pct must be in [0, 1).")
+    return errors
+
+
+def _validate_wl(state: Mapping[str, Any]) -> list[str]:
+    errors: list[str] = []
+    face = state.get("wl_face_amount")
+    if face is not None and (not isinstance(face, (int, float)) or float(face) <= 0):
+        errors.append("wl_face_amount must be > 0.")
+    return errors
+
+
+def _validate_ul(state: Mapping[str, Any]) -> list[str]:
+    return _validate_life_face_and_premium(state, "ul")
+
+
+def _validate_iul(state: Mapping[str, Any]) -> list[str]:
+    errors = _validate_life_face_and_premium(state, "iul")
+    cap = state.get("iul_cap")
+    floor = state.get("iul_floor")
+    if cap is not None and floor is not None and float(cap) < float(floor):
+        errors.append(f"iul cap ({cap}) must be >= floor ({floor}).")
+    return errors
+
+
+def _validate_vul(state: Mapping[str, Any]) -> list[str]:
+    return _validate_life_face_and_premium(state, "vul")
+
+
 # Per-product validator registry. A new product MAY add an entry that
 # returns the list of additional error messages (after the cross-product
 # checks have run). Keeping it as a dict-of-callables keeps the dispatch
 # branch-free; tests/test_meta_invariants.py asserts every implemented
 # product is either present or explicitly absent.
-_PRODUCT_VALIDATORS: dict[ProductType, Callable[[Mapping[str, Any]], list[str]]] = {}
+_PRODUCT_VALIDATORS: dict[ProductType, Callable[[Mapping[str, Any]], list[str]]] = {
+    ProductType.MYGA: _validate_myga,
+    ProductType.FIA: _validate_fia,
+    ProductType.VARIABLE_ANNUITY: _validate_va,
+    ProductType.WHOLE_LIFE: _validate_wl,
+    ProductType.UNIVERSAL_LIFE: _validate_ul,
+    ProductType.INDEXED_UL: _validate_iul,
+    ProductType.VARIABLE_UL: _validate_vul,
+}
 
 
 @dataclass(frozen=True)
@@ -544,12 +658,238 @@ class RILAProductAdapter:
 
 _RILA_ADAPTER = RILAProductAdapter()
 
+
+# ---------------------------------------------------------------------------
+# Seven new product adapters (Phase 1-7 of seven_product_rollout_plan.md).
+# Each adapter follows the SPIA/Term/RILA pattern: isinstance-check the
+# contract, dispatch to the engine, accept the union of legacy adapter
+# kwargs, and route Monte Carlo via the dedicated function (or raise
+# NotImplementedError for products without MC).
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _SimpleAccumulationAdapter:
+    """Shared adapter for products whose engines take the same kwargs.
+
+    All four accumulation products (MYGA / FIA / VA) AND the three life
+    products (WL / UL / IUL / VUL) share the price() signature; only the
+    contract type and engine function differ. Codifying the dispatch
+    here cuts ~150 LOC of repetitive adapter boilerplate.
+
+    Sub-classed below as ``_make_adapter(<ProductType>, <ContractCls>,
+    <price_fn>, <mc_fn or None>, <spec_fn>, <SpecCls>)``.
+    """
+
+    product_type_value: ProductType
+    display_name_value: str
+    contract_type: type
+    price_fn: Callable[..., Any]
+    mc_fn: Callable[..., Any] | None
+    spec_fn: Callable[..., Any]
+    spec_type: type
+
+    @property
+    def product_type(self) -> ProductType:
+        return self.product_type_value
+
+    @property
+    def display_name(self) -> str:
+        return self.display_name_value
+
+    def is_available(self) -> bool:
+        return True
+
+    def price(
+        self,
+        *,
+        contract: object,
+        yield_curve: sp.YieldCurve,
+        mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
+        horizon_age: int,
+        spread: float,
+        valuation_year: int | None,
+        expenses: sp.ExpenseAssumptions | None,
+        expenses_csv_path: str,
+        index_scenario_csv_path: str | None,
+        expense_annual_inflation: float,
+    ) -> object:
+        if not isinstance(contract, self.contract_type):
+            raise TypeError(
+                f"{self.display_name_value} adapter requires "
+                f"{self.contract_type.__name__}, got {type(contract).__name__}."
+            )
+        return self.price_fn(
+            contract=contract,
+            yield_curve=yield_curve,
+            mortality=mortality,
+            horizon_age=horizon_age,
+            spread=spread,
+            valuation_year=valuation_year,
+            expenses=expenses,
+            expenses_csv_path=expenses_csv_path,
+            index_scenario_csv_path=index_scenario_csv_path,
+            expense_annual_inflation=expense_annual_inflation,
+        )
+
+    def price_monte_carlo(
+        self,
+        *,
+        contract: object,
+        yield_curve: sp.YieldCurve,
+        mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
+        horizon_age: int,
+        spread: float,
+        valuation_year: int | None,
+        expenses: sp.ExpenseAssumptions | None,
+        expenses_csv_path: str,
+        expense_annual_inflation: float,
+        n_sims: int,
+        annual_drift: float,
+        annual_vol: float,
+        seed: int,
+        s0: float,
+    ) -> object:
+        if self.mc_fn is None:
+            raise NotImplementedError(
+                f"{self.display_name_value} does not support Monte Carlo in this release."
+            )
+        if not isinstance(contract, self.contract_type):
+            raise TypeError(
+                f"{self.display_name_value} adapter requires "
+                f"{self.contract_type.__name__}, got {type(contract).__name__}."
+            )
+        return self.mc_fn(
+            contract=contract,
+            yield_curve=yield_curve,
+            mortality=mortality,
+            horizon_age=horizon_age,
+            spread=spread,
+            valuation_year=valuation_year,
+            expenses=expenses,
+            expenses_csv_path=expenses_csv_path,
+            expense_annual_inflation=expense_annual_inflation,
+            n_sims=n_sims,
+            annual_drift=annual_drift,
+            annual_vol=annual_vol,
+            seed=seed,
+            s0=s0,
+        )
+
+    def excel_spec_from_run(
+        self,
+        *,
+        contract: object,
+        yield_curve: sp.YieldCurve,
+        mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
+        horizon_age: int,
+        spread: float,
+        valuation_year: int,
+        expenses: sp.ExpenseAssumptions,
+        yield_mode_label: str,
+        mortality_mode_label: str,
+        expense_mode_label: str,
+        index_s0: float,
+        index_levels_at_payment: np.ndarray,
+        expense_annual_inflation: float,
+    ) -> Any:
+        if not isinstance(contract, self.contract_type):
+            raise TypeError(
+                f"{self.display_name_value} adapter requires "
+                f"{self.contract_type.__name__}, got {type(contract).__name__}."
+            )
+        return self.spec_fn(
+            contract=contract,
+            yield_curve=yield_curve,
+            mortality=mortality,
+            horizon_age=horizon_age,
+            spread=spread,
+            valuation_year=valuation_year,
+            expenses=expenses,
+            yield_mode_label=yield_mode_label,
+            mortality_mode_label=mortality_mode_label,
+            expense_mode_label=expense_mode_label,
+            index_s0=index_s0,
+            index_levels_at_payment=index_levels_at_payment,
+            expense_annual_inflation=expense_annual_inflation,
+        )
+
+
+_MYGA_ADAPTER = _SimpleAccumulationAdapter(
+    product_type_value=ProductType.MYGA,
+    display_name_value="MYGA",
+    contract_type=my.MYGAContract,
+    price_fn=my.price_myga_single_premium,
+    mc_fn=None,
+    spec_fn=myga_excel_spec_from_launcher,
+    spec_type=MYGAExcelBuildSpec,
+)
+_FIA_ADAPTER = _SimpleAccumulationAdapter(
+    product_type_value=ProductType.FIA,
+    display_name_value="FIA",
+    contract_type=fp.FIAContract,
+    price_fn=fp.price_fia_single_premium,
+    mc_fn=fp.price_fia_single_premium_monte_carlo,
+    spec_fn=fia_excel_spec_from_launcher,
+    spec_type=FIAExcelBuildSpec,
+)
+_VA_ADAPTER = _SimpleAccumulationAdapter(
+    product_type_value=ProductType.VARIABLE_ANNUITY,
+    display_name_value="Variable Annuity",
+    contract_type=va.VAContract,
+    price_fn=va.price_va_single_premium,
+    mc_fn=va.price_va_single_premium_monte_carlo,
+    spec_fn=va_excel_spec_from_launcher,
+    spec_type=VAExcelBuildSpec,
+)
+_WL_ADAPTER = _SimpleAccumulationAdapter(
+    product_type_value=ProductType.WHOLE_LIFE,
+    display_name_value="Whole Life",
+    contract_type=wl.WLContract,
+    price_fn=wl.price_wl_single_premium,
+    mc_fn=None,
+    spec_fn=wl_excel_spec_from_launcher,
+    spec_type=WLExcelBuildSpec,
+)
+_UL_ADAPTER = _SimpleAccumulationAdapter(
+    product_type_value=ProductType.UNIVERSAL_LIFE,
+    display_name_value="Universal Life",
+    contract_type=ul.ULContract,
+    price_fn=ul.price_ul_single_premium,
+    mc_fn=None,
+    spec_fn=ul_excel_spec_from_launcher,
+    spec_type=ULExcelBuildSpec,
+)
+_IUL_ADAPTER = _SimpleAccumulationAdapter(
+    product_type_value=ProductType.INDEXED_UL,
+    display_name_value="Indexed UL",
+    contract_type=iul.IULContract,
+    price_fn=iul.price_iul_single_premium,
+    mc_fn=iul.price_iul_single_premium_monte_carlo,
+    spec_fn=iul_excel_spec_from_launcher,
+    spec_type=IULExcelBuildSpec,
+)
+_VUL_ADAPTER = _SimpleAccumulationAdapter(
+    product_type_value=ProductType.VARIABLE_UL,
+    display_name_value="Variable UL",
+    contract_type=vul.VULContract,
+    price_fn=vul.price_vul_single_premium,
+    mc_fn=vul.price_vul_single_premium_monte_carlo,
+    spec_fn=vul_excel_spec_from_launcher,
+    spec_type=VULExcelBuildSpec,
+)
+
 _PRODUCT_DISPLAY_NAME: dict[ProductType, str] = {
     ProductType.SPIA: "SPIA",
     ProductType.TERM_LIFE: "Term Life (20Y)",
     ProductType.RILA: "RILA (accumulation)",
-    ProductType.WHOLE_LIFE: "Whole Life (coming soon)",
-    ProductType.VARIABLE_ANNUITY: "Variable Annuity (coming soon)",
+    ProductType.WHOLE_LIFE: "Whole Life (single premium)",
+    ProductType.VARIABLE_ANNUITY: "Variable Annuity (single premium)",
+    ProductType.MYGA: "MYGA (multi-year guaranteed)",
+    ProductType.FIA: "FIA (fixed indexed annuity)",
+    ProductType.UNIVERSAL_LIFE: "Universal Life (single premium)",
+    ProductType.INDEXED_UL: "Indexed UL (IUL, single premium)",
+    ProductType.VARIABLE_UL: "Variable UL (VUL, single premium)",
 }
 
 _PRODUCT_CAPABILITIES: dict[ProductType, ProductCapabilities] = {
@@ -568,22 +908,47 @@ _PRODUCT_CAPABILITIES: dict[ProductType, ProductCapabilities] = {
     ProductType.VARIABLE_ANNUITY: ProductCapabilities(
         supports_economic_scenario=True, supports_monte_carlo=True
     ),
+    ProductType.MYGA: ProductCapabilities(
+        supports_economic_scenario=False, supports_monte_carlo=False
+    ),
+    ProductType.FIA: ProductCapabilities(
+        supports_economic_scenario=True, supports_monte_carlo=True
+    ),
+    ProductType.UNIVERSAL_LIFE: ProductCapabilities(
+        supports_economic_scenario=False, supports_monte_carlo=False
+    ),
+    ProductType.INDEXED_UL: ProductCapabilities(
+        supports_economic_scenario=True, supports_monte_carlo=True
+    ),
+    ProductType.VARIABLE_UL: ProductCapabilities(
+        supports_economic_scenario=True, supports_monte_carlo=True
+    ),
 }
 
 _PRODUCT_MORTALITY_MODE_OPTIONS: dict[ProductType, tuple[str, ...]] = {
     ProductType.SPIA: ("synthetic", "qx_csv", "rp2014_mp2016"),
     ProductType.TERM_LIFE: ("us_ssa_2015_period", "qx_csv", "synthetic"),
     ProductType.RILA: ("synthetic", "qx_csv", "rp2014_mp2016"),
-    ProductType.WHOLE_LIFE: ("synthetic", "qx_csv"),
+    ProductType.WHOLE_LIFE: ("cso_2017_ult", "qx_csv", "synthetic"),
     ProductType.VARIABLE_ANNUITY: ("synthetic", "qx_csv", "rp2014_mp2016"),
+    ProductType.MYGA: ("synthetic", "qx_csv", "rp2014_mp2016"),
+    ProductType.FIA: ("synthetic", "qx_csv", "rp2014_mp2016"),
+    ProductType.UNIVERSAL_LIFE: ("cso_2017_ult", "qx_csv", "synthetic"),
+    ProductType.INDEXED_UL: ("cso_2017_ult", "qx_csv", "synthetic"),
+    ProductType.VARIABLE_UL: ("cso_2017_ult", "qx_csv", "synthetic"),
 }
 
 _PRODUCT_DEFAULT_MORTALITY_MODE: dict[ProductType, str] = {
     ProductType.SPIA: "rp2014_mp2016",
     ProductType.TERM_LIFE: "us_ssa_2015_period",
     ProductType.RILA: "rp2014_mp2016",
-    ProductType.WHOLE_LIFE: "synthetic",
+    ProductType.WHOLE_LIFE: "cso_2017_ult",
     ProductType.VARIABLE_ANNUITY: "rp2014_mp2016",
+    ProductType.MYGA: "rp2014_mp2016",
+    ProductType.FIA: "rp2014_mp2016",
+    ProductType.UNIVERSAL_LIFE: "cso_2017_ult",
+    ProductType.INDEXED_UL: "cso_2017_ult",
+    ProductType.VARIABLE_UL: "cso_2017_ult",
 }
 
 _MORTALITY_MODE_LABELS: dict[str, str] = {
@@ -591,6 +956,7 @@ _MORTALITY_MODE_LABELS: dict[str, str] = {
     "qx_csv": "Static q_x CSV",
     "rp2014_mp2016": "RP-2014 Healthy Male + MP-2016 (xlsx or cached CSV)",
     "us_ssa_2015_period": "US SSA 2015 period life table (sex-specific default for Term)",
+    "cso_2017_ult": "2017 CSO Ultimate (sex × smoker, placeholder synthetic CSV)",
 }
 
 _TERM_CONTRACT_UI_CONFIG = TermContractUIConfig(
@@ -686,14 +1052,39 @@ _PRODUCT_UI_CONFIG: dict[ProductType, ProductUIConfig] = {
         recalc_workbook_filename="rila_recalc_model.xlsx",
     ),
     ProductType.WHOLE_LIFE: ProductUIConfig(
-        selected_info_message="Selected product is scaffolded but not implemented yet.",
+        selected_info_message="Whole Life (single premium): premium solved as PV of benefits, mortality from CSO 2017 Ultimate placeholder.",
         projection_csv_filename="pricing_projection_whole_life.csv",
         recalc_workbook_filename="whole_life_recalc_model.xlsx",
     ),
     ProductType.VARIABLE_ANNUITY: ProductUIConfig(
-        selected_info_message="Selected product is scaffolded but not implemented yet.",
+        selected_info_message="Variable Annuity (single premium): GMDB = max(AV, premium). Sub-account is deterministic CSV by default; Monte Carlo simulates GBM.",
         projection_csv_filename="pricing_projection_variable_annuity.csv",
         recalc_workbook_filename="variable_annuity_recalc_model.xlsx",
+    ),
+    ProductType.MYGA: ProductUIConfig(
+        selected_info_message="MYGA (multi-year guaranteed annuity): single premium accumulates at the declared rate for the guarantee period.",
+        projection_csv_filename="pricing_projection_myga.csv",
+        recalc_workbook_filename="myga_recalc_model.xlsx",
+    ),
+    ProductType.FIA: ProductUIConfig(
+        selected_info_message="FIA (fixed indexed annuity): annual point-to-point credit with cap, floor, and participation. Floor 0 by default.",
+        projection_csv_filename="pricing_projection_fia.csv",
+        recalc_workbook_filename="fia_recalc_model.xlsx",
+    ),
+    ProductType.UNIVERSAL_LIFE: ProductUIConfig(
+        selected_info_message="Universal Life (single premium): monthly cycle of credit -> COI -> expense charge. Type A death benefit.",
+        projection_csv_filename="pricing_projection_universal_life.csv",
+        recalc_workbook_filename="universal_life_recalc_model.xlsx",
+    ),
+    ProductType.INDEXED_UL: ProductUIConfig(
+        selected_info_message="Indexed UL (IUL): UL mechanics with annual point-to-point crediting on segment anniversaries.",
+        projection_csv_filename="pricing_projection_indexed_ul.csv",
+        recalc_workbook_filename="indexed_ul_recalc_model.xlsx",
+    ),
+    ProductType.VARIABLE_UL: ProductUIConfig(
+        selected_info_message="Variable UL (VUL): UL mechanics with sub-account return as credit (deterministic CSV or GBM Monte Carlo).",
+        projection_csv_filename="pricing_projection_variable_ul.csv",
+        recalc_workbook_filename="variable_ul_recalc_model.xlsx",
     ),
 }
 
@@ -706,6 +1097,13 @@ _PRODUCT_ADAPTERS: dict[ProductType, ProductAdapter] = {
     ProductType.SPIA: _SPIA_ADAPTER,
     ProductType.TERM_LIFE: _TERM_ADAPTER,
     ProductType.RILA: _RILA_ADAPTER,
+    ProductType.MYGA: _MYGA_ADAPTER,
+    ProductType.FIA: _FIA_ADAPTER,
+    ProductType.VARIABLE_ANNUITY: _VA_ADAPTER,
+    ProductType.WHOLE_LIFE: _WL_ADAPTER,
+    ProductType.UNIVERSAL_LIFE: _UL_ADAPTER,
+    ProductType.INDEXED_UL: _IUL_ADAPTER,
+    ProductType.VARIABLE_UL: _VUL_ADAPTER,
 }
 
 
@@ -736,8 +1134,13 @@ def product_options_for_ui() -> list[ProductType]:
         ProductType.SPIA,
         ProductType.TERM_LIFE,
         ProductType.RILA,
-        ProductType.WHOLE_LIFE,
+        ProductType.MYGA,
+        ProductType.FIA,
         ProductType.VARIABLE_ANNUITY,
+        ProductType.WHOLE_LIFE,
+        ProductType.UNIVERSAL_LIFE,
+        ProductType.INDEXED_UL,
+        ProductType.VARIABLE_UL,
     ]
 
 
@@ -801,12 +1204,52 @@ def _term_pricing_metrics(result: Any) -> tuple[PricingMetric, ...]:
     )
 
 
+def _accumulation_pricing_metrics(result: Any) -> tuple[PricingMetric, ...]:
+    """Shared accumulation-product metrics (MYGA / FIA / VA)."""
+    av_end = float(getattr(result, "account_value_end_month", np.array([0.0]))[-1])
+    return (
+        PricingMetric(label="Single premium (input)", value=float(result.single_premium), is_money=True),
+        PricingMetric(label="PV benefit (death+maturity)", value=float(result.pv_benefit), is_money=True),
+        PricingMetric(label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True),
+        PricingMetric(label="Account value at horizon", value=av_end, is_money=True),
+    )
+
+
+def _life_single_premium_metrics(result: Any) -> tuple[PricingMetric, ...]:
+    """Shared life-product metrics (WL / UL / IUL / VUL)."""
+    av_end = float(getattr(result, "account_value_end_month", np.array([0.0]))[-1])
+    return (
+        PricingMetric(label="Single premium", value=float(result.single_premium), is_money=True),
+        PricingMetric(label="PV claims (face × death-prob)", value=float(result.pv_benefit), is_money=True),
+        PricingMetric(label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True),
+        PricingMetric(label="Account value at horizon", value=av_end, is_money=True),
+    )
+
+
+def _wl_pricing_metrics(result: Any) -> tuple[PricingMetric, ...]:
+    """WL has no AV; show face amount instead."""
+    face = float(getattr(result, "face_amount", 0.0))
+    return (
+        PricingMetric(label="Single premium (NSP + expenses)", value=float(result.single_premium), is_money=True),
+        PricingMetric(label="PV claims (face × death-prob)", value=float(result.pv_benefit), is_money=True),
+        PricingMetric(label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True),
+        PricingMetric(label="Face amount", value=face, is_money=True),
+    )
+
+
 # Per-product pricing-metric formatters. Adding a new product means one
 # additional entry here; the dispatcher stays branch-free.
 _PRICING_METRIC_FORMATTERS: dict[ProductType, Callable[[Any], tuple[PricingMetric, ...]]] = {
     ProductType.SPIA: _spia_pricing_metrics,
     ProductType.TERM_LIFE: _term_pricing_metrics,
     ProductType.RILA: _rila_pricing_metrics,
+    ProductType.MYGA: _accumulation_pricing_metrics,
+    ProductType.FIA: _accumulation_pricing_metrics,
+    ProductType.VARIABLE_ANNUITY: _accumulation_pricing_metrics,
+    ProductType.WHOLE_LIFE: _wl_pricing_metrics,
+    ProductType.UNIVERSAL_LIFE: _life_single_premium_metrics,
+    ProductType.INDEXED_UL: _life_single_premium_metrics,
+    ProductType.VARIABLE_UL: _life_single_premium_metrics,
 }
 
 

@@ -1,0 +1,22 @@
+{
+  "inputs_summary": {
+    "declared_rate_annual": 0.045,
+    "guarantee_years": 5,
+    "horizon_age": 70,
+    "issue_age": 60,
+    "mortality": "synthetic_qx_0.005+1e-5*age",
+    "sex": "male",
+    "single_premium": 100000.0,
+    "spread": 0.0,
+    "yield_rate": 0.045
+  },
+  "metrics": {
+    "annuity_factor": 52.896326505811295,
+    "av_end_T": 124618.19376531313,
+    "n_months": 60,
+    "pv_benefit": 99516.36444404567,
+    "pv_monthly_expenses": 0.0,
+    "single_premium": 100000.0
+  },
+  "product": "myga"
+}

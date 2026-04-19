@@ -118,8 +118,22 @@ class RILAMonteCarloResult:
 
 
 def segment_credited_return(*, raw: float, participation: float, cap: float, floor: float) -> float:
-    x = float(participation) * float(raw)
-    return float(max(float(floor), min(float(cap), x)))
+    """Per-segment crediting for RILA's annual point-to-point.
+
+    Public name preserved for back-compat (RILA golden JSON depends on
+    byte-identical behavior); internally delegates to
+    :class:`crediting.AnnualPointToPointCapped` so the strategy is
+    shared with FIA / IUL (Section 1.2 of
+    ``docs/seven_product_rollout_plan.md``).
+    """
+    from crediting import AnnualPointToPointCapped
+
+    strategy = AnnualPointToPointCapped(
+        participation=float(participation),
+        cap=float(cap),
+        floor=float(floor),
+    )
+    return float(strategy.credit_segment(raw_index_return=float(raw)))
 
 
 def levels_end_by_policy_month(*, s0: float, levels_payment: np.ndarray) -> np.ndarray:

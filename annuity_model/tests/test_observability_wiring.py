@@ -33,9 +33,16 @@ import functools
 import numpy as np
 import pytest
 
+import fia_projection as fp
+import iul_projection as iul
+import myga_projection as my
 import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
+import ul_projection as ul
+import va_projection as va
+import vul_projection as vul
+import wl_projection as wl
 
 # (qualified-name-for-error-messages, callable). The qualified name is
 # what the test prints when the wiring breaks; a clear name pointing at
@@ -60,6 +67,29 @@ TRACED_ENTRY_POINTS: list[tuple[str, object]] = [
     (
         "rila_projection.price_rila_single_premium_monte_carlo",
         rp.price_rila_single_premium_monte_carlo,
+    ),
+    ("myga_projection.price_myga_single_premium", my.price_myga_single_premium),
+    ("fia_projection.price_fia_single_premium", fp.price_fia_single_premium),
+    (
+        "fia_projection.price_fia_single_premium_monte_carlo",
+        fp.price_fia_single_premium_monte_carlo,
+    ),
+    ("va_projection.price_va_single_premium", va.price_va_single_premium),
+    (
+        "va_projection.price_va_single_premium_monte_carlo",
+        va.price_va_single_premium_monte_carlo,
+    ),
+    ("wl_projection.price_wl_single_premium", wl.price_wl_single_premium),
+    ("ul_projection.price_ul_single_premium", ul.price_ul_single_premium),
+    ("iul_projection.price_iul_single_premium", iul.price_iul_single_premium),
+    (
+        "iul_projection.price_iul_single_premium_monte_carlo",
+        iul.price_iul_single_premium_monte_carlo,
+    ),
+    ("vul_projection.price_vul_single_premium", vul.price_vul_single_premium),
+    (
+        "vul_projection.price_vul_single_premium_monte_carlo",
+        vul.price_vul_single_premium_monte_carlo,
     ),
 ]
 

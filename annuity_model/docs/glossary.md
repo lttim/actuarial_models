@@ -18,6 +18,64 @@ expected-claims minus expected-premiums per month.
 whose account value tracks an equity index with a participation rate, cap, and
 buffer/floor on segment crediting. Modelled in `rila_projection.py`.
 
+**MYGA -- Multi-Year Guaranteed Annuity.** Single-premium fixed deferred annuity
+that guarantees an annual declared rate for the guarantee period (typically 3, 5,
+or 7 years). Liability cashflow shape: maturity payout at horizon weighted by
+survival, plus in-period death payouts at AV[t]. Modelled in
+`myga_projection.py`.
+
+**FIA -- Fixed Indexed Annuity.** Single-premium deferred annuity whose
+crediting rate is the cap-and-floor-bounded participation × annual point-to-point
+index return. Floor is typically 0 (no negative crediting). Maturity payout = AV
+at horizon. Modelled in `fia_projection.py`.
+
+**VA -- Variable Annuity.** Single-premium deferred annuity backed by a
+sub-account modelled as either a deterministic CSV or a GBM Monte Carlo path.
+Mortality and expense charges (M&E) deduct monthly from AV. GMDB =
+`max(AV, premium)` payable at death. Modelled in `va_projection.py`.
+
+**WL -- Whole Life (single premium).** Permanent life policy paying a level
+death benefit for life. v1: single-premium paid-up. Default mortality: 2017 CSO
+Ultimate (sex × smoker, placeholder synthetic table). Modelled in
+`wl_projection.py`.
+
+**UL -- Universal Life.** Single-premium UL with explicit COI per month. Cycle:
+load → declared-rate credit → COI (`q_x_m × NAR`) → expense charge. Type A death
+benefit (`max(face, AV)`). AV depletion terminates the contract. Modelled in
+`ul_projection.py`.
+
+**IUL -- Indexed UL.** Universal Life variant whose monthly credit comes from
+an annual point-to-point credit on segment anniversaries (capped + floored).
+Otherwise identical to UL. Modelled in `iul_projection.py`.
+
+**VUL -- Variable UL.** Universal Life variant whose monthly credit is the
+sub-account simple return. Otherwise identical to UL. Modelled in
+`vul_projection.py`.
+
+**GMDB -- Guaranteed Minimum Death Benefit.** A floor under the death benefit
+that protects the policyholder from sub-account losses. Common bases:
+return-of-premium (`max(AV, premium)`), max-anniversary (high-water mark).
+Used by VA in v1.
+
+**NAR -- Net Amount at Risk.** The portion of the death benefit NOT covered by
+the account value: `NAR = max(0, DB - AV)`. The COI charge is computed against
+this amount, not the full face.
+
+**COI -- Cost of Insurance.** The monthly mortality charge in UL / IUL / VUL:
+`COI = q_x_m × NAR`. Deducted from the account value each month between credit
+and expense.
+
+**M&E -- Mortality and Expense charge.** A flat annual percentage of AV
+withdrawn from the sub-account each month in a VA. Industry typical ~140 bps.
+
+**Segment crediting.** The mechanism for crediting an indexed product on
+segment anniversaries (typically 12 months for the v1 platform). Computed as
+`max(floor, min(cap, participation × raw_index_return))`.
+
+**Account value (AV).** The notional balance of an UL / IUL / VUL / FIA / VA
+contract; never negative. The monthly cycle that evolves it lives in
+`account_value.py`.
+
 ## Pricing & cashflow primitives
 
 **q_x.** One-year mortality probability for a person aged exactly `x` -- the
