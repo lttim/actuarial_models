@@ -34,33 +34,140 @@ from product_registry import (
     get_term_contract_ui_config,
 )
 
+class RUN_KEY:
+    """Canonical Streamlit ``st.session_state`` keys for the Pricing Run page.
+
+    Why a namespace class instead of bare module constants?
+    -------------------------------------------------------
+    * Discoverability: an IDE auto-complete on ``RUN_KEY.<TAB>`` enumerates
+      every legal key, so a typo (``RUN_KEY.ISSUE_AG``) becomes a static
+      ``AttributeError`` instead of a silent ``st.session_state.get`` miss.
+    * Single source of truth: :data:`RUN_STATE_KEY_NAMES` (the frozenset of
+      string values) is derived from this class via reflection so adding a
+      key in *one* place propagates to the ratchet test, the
+      ``PRICING_RUN_NUMBER_INPUT_KEYS`` subset, and any downstream consumer
+      that imports the namespace.
+    * Migration ratchet: ``tests/test_run_state_key_drift.py`` walks every
+      ``.py`` in the repo and compares per-file occurrences of these
+      string literals against a committed baseline. New code MUST use
+      the symbols below; legacy ``pricing_ui.py`` literals are baselined
+      and the count is allowed to *decrease* over time (the
+      ``ui/MIGRATION.md`` decomposition deletes them naturally).
+
+    Adding a new Pricing Run widget? Add a class attribute below, add it
+    to ``build_run_form_seed_defaults`` if it needs a default, and (if
+    it's a ``st.number_input``) add the new symbol to
+    ``PRICING_RUN_NUMBER_INPUT_KEYS``. The ratchet test will pick it up
+    on the next run.
+    """
+
+    # Identity / common
+    PRODUCT_TYPE = "run_product_type"
+    ISSUE_AGE = "run_issue_age"
+    SEX = "run_sex"
+
+    # SPIA-specific
+    SPIA_BENEFIT_ANNUAL = "run_spia_benefit_annual"
+
+    # Term-specific
+    TERM_BENEFIT_ANNUAL = "run_term_benefit_annual"
+    TERM_MONTHLY_PREMIUM = "run_term_monthly_premium"
+    TERM_LENGTH = "run_term_length"
+    TERM_PREMIUM_MODE = "run_term_premium_mode"
+    TERM_BENEFIT_TIMING = "run_term_benefit_timing"
+
+    # RILA-specific
+    RILA_PARTICIPATION = "run_rila_participation"
+    RILA_CAP = "run_rila_cap"
+    RILA_FLOOR = "run_rila_floor"
+    RILA_RIDER_FEE = "run_rila_rider_fee"
+
+    # Yield curve / discounting
+    Y_MODE = "run_y_mode"
+    FLAT_RATE = "run_flat_rate"
+    ZERO_CSV = "run_zero_csv"
+    PAR_CSV = "run_par_csv"
+    COUPON_FREQ = "run_coupon_freq"
+    SPREAD = "run_spread"
+
+    # Mortality
+    M_MODE = "run_m_mode"
+    QX_CSV = "run_qx_csv"
+    RP_XLSX = "run_rp_xlsx"
+    RP_OUT = "run_rp_out"
+    MP_XLSX = "run_mp_xlsx"
+    MP_OUT = "run_mp_out"
+
+    # Expenses
+    EXPENSE_MODE = "run_expense_mode"
+    EXPENSES_CSV = "run_expenses_csv"
+    POLICY_EXPENSE = "run_policy_expense"
+    PREMIUM_EXPENSE_PCT = "run_premium_expense_pct"
+    MONTHLY_EXPENSE = "run_monthly_expense"
+    EXPENSE_INFLATION_PCT = "run_expense_inflation_pct"
+
+    # Horizon / valuation
+    HORIZON_AGE = "run_horizon_age"
+    VALUATION_YEAR = "run_valuation_year"
+
+    # Index scenario
+    USE_INDEX = "run_use_index"
+    INDEX_CSV = "run_index_csv"
+
+    # Monte Carlo
+    MC_ENABLE = "run_mc_enable"
+    MC_N_SIMS = "run_mc_n_sims"
+    MC_SEED = "run_mc_seed"
+    MC_DRIFT_PCT = "run_mc_drift_pct"
+    MC_VOL_PCT = "run_mc_vol_pct"
+    MC_S0 = "run_mc_s0"
+
+
+def _all_run_key_names() -> frozenset[str]:
+    """Reflectively enumerate every ``"run_..."`` constant on :class:`RUN_KEY`.
+
+    Drives the ratchet test and any other consumer that needs the
+    canonical set. We deliberately re-derive on every import (rather than
+    caching) so adding a class attribute to :class:`RUN_KEY` is the
+    *only* edit required.
+    """
+    names: set[str] = set()
+    for attr in vars(RUN_KEY).values():
+        if isinstance(attr, str) and attr.startswith("run_"):
+            names.add(attr)
+    return frozenset(names)
+
+
+RUN_STATE_KEY_NAMES: frozenset[str] = _all_run_key_names()
+
+
 # Keys managed by :func:`run_number_input`. Do not ``setdefault`` these on the Pricing Run page
 # — doing so puts them in ``_new_session_state`` before the widget runs, and passing ``value=``
 # to ``st.number_input`` triggers Streamlit's "default value + Session State API" warning.
 PRICING_RUN_NUMBER_INPUT_KEYS: frozenset[str] = frozenset(
     {
-        "run_issue_age",
-        "run_spia_benefit_annual",
-        "run_term_benefit_annual",
-        "run_term_monthly_premium",
-        "run_flat_rate",
-        "run_coupon_freq",
-        "run_policy_expense",
-        "run_premium_expense_pct",
-        "run_monthly_expense",
-        "run_valuation_year",
-        "run_horizon_age",
-        "run_spread",
-        "run_expense_inflation_pct",
-        "run_mc_n_sims",
-        "run_mc_seed",
-        "run_mc_drift_pct",
-        "run_mc_vol_pct",
-        "run_mc_s0",
-        "run_rila_participation",
-        "run_rila_cap",
-        "run_rila_floor",
-        "run_rila_rider_fee",
+        RUN_KEY.ISSUE_AGE,
+        RUN_KEY.SPIA_BENEFIT_ANNUAL,
+        RUN_KEY.TERM_BENEFIT_ANNUAL,
+        RUN_KEY.TERM_MONTHLY_PREMIUM,
+        RUN_KEY.FLAT_RATE,
+        RUN_KEY.COUPON_FREQ,
+        RUN_KEY.POLICY_EXPENSE,
+        RUN_KEY.PREMIUM_EXPENSE_PCT,
+        RUN_KEY.MONTHLY_EXPENSE,
+        RUN_KEY.VALUATION_YEAR,
+        RUN_KEY.HORIZON_AGE,
+        RUN_KEY.SPREAD,
+        RUN_KEY.EXPENSE_INFLATION_PCT,
+        RUN_KEY.MC_N_SIMS,
+        RUN_KEY.MC_SEED,
+        RUN_KEY.MC_DRIFT_PCT,
+        RUN_KEY.MC_VOL_PCT,
+        RUN_KEY.MC_S0,
+        RUN_KEY.RILA_PARTICIPATION,
+        RUN_KEY.RILA_CAP,
+        RUN_KEY.RILA_FLOOR,
+        RUN_KEY.RILA_RIDER_FEE,
     }
 )
 
@@ -166,63 +273,67 @@ def build_run_form_seed_defaults(
         seeded_term_monthly_premium = term_ui_default_monthly_premium
 
     defaults: dict[str, Any] = {
-        "run_product_type": product_default,
-        "run_issue_age": int(saved_inputs.get("issue_age", 65)),
-        "run_sex": str(saved_inputs.get("sex", "male")),
-        "run_term_monthly_premium": seeded_term_monthly_premium,
-        "run_y_mode": str(meta.get("yield_mode", "par_bootstrap")),
-        "run_m_mode": str(
+        RUN_KEY.PRODUCT_TYPE: product_default,
+        RUN_KEY.ISSUE_AGE: int(saved_inputs.get("issue_age", 65)),
+        RUN_KEY.SEX: str(saved_inputs.get("sex", "male")),
+        RUN_KEY.TERM_MONTHLY_PREMIUM: seeded_term_monthly_premium,
+        RUN_KEY.Y_MODE: str(meta.get("yield_mode", "par_bootstrap")),
+        RUN_KEY.M_MODE: str(
             meta.get("mortality_mode", get_product_default_mortality_mode(default_product_type))
         ),
-        "run_expense_mode": str(meta.get("expense_mode", "csv")),
-        "run_horizon_age": int(saved_inputs.get("horizon_age", 110)),
-        "run_valuation_year": int(saved_inputs.get("valuation_year", 2025)),
-        "run_spread": float(saved_inputs.get("spread", 0.0)),
-        "run_use_index": bool(saved_inputs.get("use_index", True)),
-        "run_index_csv": str(
+        RUN_KEY.EXPENSE_MODE: str(meta.get("expense_mode", "csv")),
+        RUN_KEY.HORIZON_AGE: int(saved_inputs.get("horizon_age", 110)),
+        RUN_KEY.VALUATION_YEAR: int(saved_inputs.get("valuation_year", 2025)),
+        RUN_KEY.SPREAD: float(saved_inputs.get("spread", 0.0)),
+        RUN_KEY.USE_INDEX: bool(saved_inputs.get("use_index", True)),
+        RUN_KEY.INDEX_CSV: str(
             saved_inputs.get("index_scenario_csv_path") or sp.DEFAULT_SP500_SCENARIO_CSV
         ),
-        "run_expense_inflation_pct": float(
+        RUN_KEY.EXPENSE_INFLATION_PCT: float(
             saved_inputs.get("expense_annual_inflation", 0.025) * 100.0
         ),
-        "run_mc_enable": bool(saved_inputs.get("mc_enabled", True)),
-        "run_mc_n_sims": int(saved_inputs.get("mc_n_sims", 100)),
-        "run_mc_seed": int(saved_inputs.get("mc_seed", 42)),
-        "run_mc_drift_pct": float(saved_inputs.get("mc_annual_drift", 0.06) * 100.0),
-        "run_mc_vol_pct": float(saved_inputs.get("mc_annual_vol", 0.15) * 100.0),
-        "run_mc_s0": float(saved_inputs.get("mc_s0", 100.0)),
-        "run_qx_csv": _nonblank_str(saved_inputs, "mortality_qx_csv", sp.DEFAULT_MORTALITY_QX_CSV),
-        "run_rp_xlsx": _nonblank_str(saved_inputs, "mortality_rp_xlsx", sp.DEFAULT_RP2014_XLSX),
-        "run_rp_out": _nonblank_str(
+        RUN_KEY.MC_ENABLE: bool(saved_inputs.get("mc_enabled", True)),
+        RUN_KEY.MC_N_SIMS: int(saved_inputs.get("mc_n_sims", 100)),
+        RUN_KEY.MC_SEED: int(saved_inputs.get("mc_seed", 42)),
+        RUN_KEY.MC_DRIFT_PCT: float(saved_inputs.get("mc_annual_drift", 0.06) * 100.0),
+        RUN_KEY.MC_VOL_PCT: float(saved_inputs.get("mc_annual_vol", 0.15) * 100.0),
+        RUN_KEY.MC_S0: float(saved_inputs.get("mc_s0", 100.0)),
+        RUN_KEY.QX_CSV: _nonblank_str(
+            saved_inputs, "mortality_qx_csv", sp.DEFAULT_MORTALITY_QX_CSV
+        ),
+        RUN_KEY.RP_XLSX: _nonblank_str(saved_inputs, "mortality_rp_xlsx", sp.DEFAULT_RP2014_XLSX),
+        RUN_KEY.RP_OUT: _nonblank_str(
             saved_inputs, "mortality_rp_out_csv", sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV
         ),
-        "run_mp_xlsx": _nonblank_str(saved_inputs, "mortality_mp_xlsx", sp.DEFAULT_MP2016_XLSX),
-        "run_mp_out": _nonblank_str(
+        RUN_KEY.MP_XLSX: _nonblank_str(saved_inputs, "mortality_mp_xlsx", sp.DEFAULT_MP2016_XLSX),
+        RUN_KEY.MP_OUT: _nonblank_str(
             saved_inputs, "mortality_mp_out_csv", sp.DEFAULT_MP2016_MALE_IMPROVEMENT_CSV
         ),
         # Separate keys per product; fallbacks match historical expander defaults.
-        "run_spia_benefit_annual": float(saved_inputs.get("benefit_annual", 100_000.0)),
-        "run_term_benefit_annual": float(
+        RUN_KEY.SPIA_BENEFIT_ANNUAL: float(saved_inputs.get("benefit_annual", 100_000.0)),
+        RUN_KEY.TERM_BENEFIT_ANNUAL: float(
             saved_inputs.get("benefit_annual", term_ui.default_death_benefit)
         ),
-        "run_term_length": str(saved_inputs.get("term_length", term_ui.term_length_options[0])),
-        "run_term_premium_mode": str(
+        RUN_KEY.TERM_LENGTH: str(
+            saved_inputs.get("term_length", term_ui.term_length_options[0])
+        ),
+        RUN_KEY.TERM_PREMIUM_MODE: str(
             saved_inputs.get("term_premium_mode", term_ui.premium_mode_options[0])
         ),
-        "run_term_benefit_timing": str(
+        RUN_KEY.TERM_BENEFIT_TIMING: str(
             saved_inputs.get("term_benefit_timing", term_ui.benefit_timing_options[0])
         ),
-        "run_flat_rate": 0.04,
-        "run_zero_csv": sp.DEFAULT_ZERO_CURVE_CSV,
-        "run_par_csv": sp.DEFAULT_PAR_CURVE_CSV,
-        "run_coupon_freq": 2,
-        "run_expenses_csv": sp.DEFAULT_EXPENSES_CSV,
-        "run_policy_expense": 0.0,
-        "run_premium_expense_pct": 0.0,
-        "run_monthly_expense": 0.0,
-        "run_rila_participation": float(saved_inputs.get("rila_participation", 1.0)),
-        "run_rila_cap": float(saved_inputs.get("rila_cap", 0.10)),
-        "run_rila_floor": float(saved_inputs.get("rila_floor", 0.0)),
-        "run_rila_rider_fee": float(saved_inputs.get("rila_rider_fee_annual", 0.01)),
+        RUN_KEY.FLAT_RATE: 0.04,
+        RUN_KEY.ZERO_CSV: sp.DEFAULT_ZERO_CURVE_CSV,
+        RUN_KEY.PAR_CSV: sp.DEFAULT_PAR_CURVE_CSV,
+        RUN_KEY.COUPON_FREQ: 2,
+        RUN_KEY.EXPENSES_CSV: sp.DEFAULT_EXPENSES_CSV,
+        RUN_KEY.POLICY_EXPENSE: 0.0,
+        RUN_KEY.PREMIUM_EXPENSE_PCT: 0.0,
+        RUN_KEY.MONTHLY_EXPENSE: 0.0,
+        RUN_KEY.RILA_PARTICIPATION: float(saved_inputs.get("rila_participation", 1.0)),
+        RUN_KEY.RILA_CAP: float(saved_inputs.get("rila_cap", 0.10)),
+        RUN_KEY.RILA_FLOOR: float(saved_inputs.get("rila_floor", 0.0)),
+        RUN_KEY.RILA_RIDER_FEE: float(saved_inputs.get("rila_rider_fee_annual", 0.01)),
     }
     return defaults

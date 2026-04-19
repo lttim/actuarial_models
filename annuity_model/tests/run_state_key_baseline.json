@@ -1,0 +1,26 @@
+{
+  "_README": [
+    "Per-file baseline of raw 'run_*' string-literal occurrences referencing",
+    "canonical RUN_KEY values from pricing_run_form_state.py.",
+    "",
+    "tests/test_run_state_key_drift.py is a one-way ratchet:",
+    "  * Counts in any file MUST NOT increase.",
+    "  * Counts MAY decrease as code migrates to RUN_KEY.<NAME>.",
+    "  * A file not listed here MUST contain zero canonical literals.",
+    "",
+    "To shrink a baseline after migrating literals, re-run the helper:",
+    "  UPDATE_RUN_STATE_BASELINE=1 python -m pytest tests/test_run_state_key_drift.py",
+    "and commit the resulting diff. CODEOWNERS protects this file (it ratchets",
+    "a process discipline; only loosening requires sign-off).",
+    "",
+    "pricing_run_form_state.py is the source of truth and is intentionally",
+    "excluded from the count -- the literals there ARE the constants."
+  ],
+  "pricing_ui.py": 102,
+  "tests/test_pricing_run_form_state.py": 9,
+  "tests/test_pricing_ui_state_normalization.py": 33,
+  "tests/ui/conftest.py": 2,
+  "tests/ui/test_apptest_rila.py": 6,
+  "tests/ui/test_apptest_spia.py": 5,
+  "tests/ui/test_apptest_term.py": 4
+}
