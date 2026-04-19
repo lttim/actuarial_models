@@ -10,6 +10,186 @@ ALM rules, RILA crediting) MUST also be logged in
 
 ## [Unreleased]
 
+### Added
+- **Always-on UI smoke gate (``tests/ui/test_apptest_full_workflow.py``,
+  19 tests).** Closes the gap between the per-product
+  ``test_apptest_<product>.py`` files (which only assert that the
+  Pricing Run form RENDERS for each product) and the actual
+  user-visible workflow. New coverage runs on every default
+  ``pytest`` invocation (no opt-in marker), no skips on modern
+  streamlit installs:
+
+  1. **Boot** -- ``pricing_ui.py`` AND the Streamlit Cloud entry
+     point ``streamlit_app.py`` must render on first paint with zero
+     script-level exceptions. The Cloud entry was previously
+     untested; a regression there would have shipped silently.
+  2. **Per-section render** -- parametrized over every routable
+     sidebar section (``overview``, ``run``, ``alm``, ``what_if``,
+     ``excel_replicator``); each must render its empty state without
+     raising, catching the bug class where a session-state lookup
+     KeyErrors before the user has done anything.
+  3. **End-to-end pricing run** -- per product (SPIA / Term / RILA),
+     click "Run pricing" with deterministic inputs and assert
+     ``st.session_state['pricing_res' / 'pricing_contract' /
+     'pricing_meta']`` are populated. This is the functionality test
+     -- the core action of the app must work.
+  4. **Downstream pages after pricing** -- after a real run, navigate
+     to ALM and Excel Replicator and assert no exception. Catches the
+     bug class where a downstream page assumes a key the success
+     path forgot to write for a particular product.
+  5. **Excel download surface** -- ``st.session_state['pricing_xlsx_bytes']``
+     (the bytes the ``st.download_button`` serves) must pass strict
+     ``excel_workbook_validator``. UI-side complement to
+     ``tests/test_excel_export_validation.py`` (engine-side gate).
+
+  Total runtime ~13 s on a 2024-era laptop. Module-level skip applies
+  only when ``streamlit.testing.v1`` is unimportable (streamlit < 1.28),
+  which is impossible under the pinned ``requirements.lock``.
+- **Per-product "Excel recalc matches Python" gate
+  (``tests/parity/test_excel_recalc_per_product.py``, 7 tests).**
+  Two complementary layers, both parametrized over every implemented
+  product so a new product cannot ship without engaging both:
+
+  1. ``test_python_cached_modelcheck_values_match_engine_<product>`` --
+     **always runs, no skip.** Builds a small workbook for every
+     product (SPIA 12 mo, Term 60 mo, RILA 60 mo) and asserts that
+     the literal Python values the builder bakes into ModelCheck
+     column B equal the engine outputs within ``MODELCHECK_TOL`` /
+     ``TERM_MODELCHECK_TOL`` / ``RILA_PV_TOL``. This is the gate that
+     fires on every developer machine, every CI shard, every PR --
+     it catches the bug class where a builder refactor writes
+     stale/rounded numbers into the workbook column the user actually
+     reads in Excel.
+  2. ``test_libreoffice_recalc_matches_engine_<product>`` --
+     LibreOffice-headless recalc, parametrized per product (the
+     pre-existing ``test_runtime_excel_recalc.py`` only covered
+     SPIA). Runs in CI (parity-gate workflow installs
+     ``libreoffice-calc``) and on developer laptops with ``soffice``
+     on PATH; skips with a clear install hint otherwise. This is the
+     strongest gate -- it actually invokes the spreadsheet engine
+     end users open these workbooks in, catching builder bugs that
+     no static check can see (e.g. an off-by-one SUMPRODUCT range).
+
+  A coverage invariant
+  (``test_every_implemented_product_has_a_recalc_case``) ensures the
+  always-on layer fires for every product registered in
+  ``product_registry.implemented_product_types``. Both layers live
+  under ``tests/parity/`` so they're already inside the default
+  ``pytest tests/ tests/parity/`` invocation -- no CI workflow change
+  required.
+- **Drop-in branch-protection profile for the second-CODEOWNER day
+  (`.github/branch-protection.with-second-reviewer.json`).** Mirrors
+  the active `branch-protection.json` byte-for-byte except for the
+  ``required_pull_request_reviews`` block, which flips on
+  ``required_approving_review_count = 1``,
+  ``require_code_owner_reviews = true``,
+  ``dismiss_stale_reviews = true``, and
+  ``require_last_push_approval = true``. Pinned by
+  ``tests/test_branch_protection_drift.py`` (5 cases): asserts the
+  active profile stays null until activation day, asserts the deferred
+  profile actually requires reviews, and asserts every other key
+  (status checks, linear history, force-push policy, conversation
+  resolution) stays in lockstep across the two files. The full
+  activation checklist -- onboard reviewer / team, uncomment the
+  ``TODO(second-owner)`` lines in ``.github/CODEOWNERS``, swap the
+  profile, then collapse the deferred file after one clean release
+  cycle -- is documented in
+  ``annuity_model/docs/CODEOWNERS_RATIONALE.md``, section
+  "Second-CODEOWNER upgrade path".
+- **ALM funding-ratio property invariants per product
+  (`tests/test_property_invariants.py`).** Six new Hypothesis-driven
+  tests, two per product (SPIA / Term / RILA), pin two laws across
+  the legal demographic + curve space:
+  (1) the engine's surplus / funding-ratio identity
+  ``surplus == AMV - LiabPV - borrowing_balance`` and
+  ``FR == AMV / (LiabPV + borrowing_balance)`` (positive denom only);
+  and (2) at month 0, ``AMV[0]`` -- and, when the liability
+  denominator is informative, ``FR[0]`` -- must strictly increase in
+  ``initial_asset_market_value``. Both the "+ debt" denom convention
+  and the per-product parametrisation are deliberate: the former
+  matches the engine's "debt is senior" treatment so a future change
+  to net-of-debt accounting can't pass silently, and the latter
+  catches a regression that quietly bypasses the
+  ``run_alm_projection_from_pricing_result`` dispatch for any single
+  product.
+- **`scripts/audit_session_state.py`: prerequisite enabler for the
+  ``ui/MIGRATION.md`` per-page split.** Walks ``pricing_ui.py``'s AST,
+  enumerates every ``st.session_state[...]`` / ``.get`` /
+  ``.setdefault`` / ``key=`` reference inside each ``_render_<page>``
+  function, and produces both a human-readable summary and a JSON
+  report. Records whether each key is referenced via raw literal vs
+  the ``RUN_KEY`` symbol so migration progress is measurable. The
+  ``--fail-on-cross-page --allow-cross-page <keys>`` mode is the CI
+  gate for the actual per-page split: it refuses any new shared key
+  outside an explicit allow-list. Today's audit identifies 18
+  cross-page keys (the post-pricing result bundle and ALM caches);
+  documented as the migration's next blocker in
+  ``ui/MIGRATION.md``. The end-to-end per-page split itself remains
+  deferred -- ``pricing_ui.py`` is 4,467 LOC vs the planned 1.5k
+  trigger threshold. Backed by ``tests/test_audit_session_state.py``
+  (10 cases including subscript / method / widget-key / RUN_KEY
+  paths, cross-page detection, and the CI-gate mode).
+- **OpenTelemetry `@traced(...)` wired onto every parity-critical entry
+  point.** ``_observability.traced`` previously existed but was applied
+  nowhere -- production OTel deployments were silent. Decorated:
+  - ``pricing_projection.price_spia_single_premium`` (deterministic + MC)
+  - ``pricing_projection.run_alm_projection`` (legacy SPIA wrapper),
+    ``run_alm_projection_from_liability_path`` (generic), and
+    ``run_alm_projection_from_pricing_result`` (router)
+  - ``term_projection.price_term_life_level_monthly``
+  - ``rila_projection.price_rila_single_premium`` (deterministic + MC)
+  Each span name is dotted (``pricing.spia.deterministic``,
+  ``alm.from_liability_path``, ...) so the trace tree groups cleanly by
+  product / surface. Backed by ``tests/test_observability_wiring.py``
+  (12 cases): a parametrized meta-invariant asserts every entry point
+  in ``TRACED_ENTRY_POINTS`` carries the ``__wrapped__`` marker
+  ``functools.wraps`` produces, plus behavioural smokes that the no-op
+  fallback is a true pass-through and that the configured span name
+  reaches the tracer when OTel IS available.
+- **`RUN_KEY` namespace + literal-drift ratchet for Pricing Run session
+  state.** ``pricing_run_form_state.RUN_KEY`` now exposes every
+  Streamlit ``st.session_state`` key for the Pricing Run page as a
+  class-level constant (``RUN_KEY.ISSUE_AGE``, ``RUN_KEY.SPIA_BENEFIT_ANNUAL``,
+  ...). New code MUST reference these symbols rather than the raw
+  ``"run_*"`` literal -- IDE rename works, typos become
+  ``AttributeError``, and the canonical set is reflectively derived as
+  ``RUN_STATE_KEY_NAMES``. ``pricing_run_form_state.py`` itself is
+  fully migrated. ``pricing_ui.py`` retains its 102 historical
+  literals; ``tests/test_run_state_key_drift.py`` is a one-way ratchet
+  that compares per-file canonical-literal counts against
+  ``tests/run_state_key_baseline.json`` and fails if any file's count
+  *increases*. The baseline shrinks naturally as the
+  ``ui/MIGRATION.md`` decomposition deletes legacy literals.
+- **PR-level mutmut gate over the parity-critical surface**
+  (`.github/workflows/mutmut-pr.yml` + `scripts/mutmut_pr_gate.py` +
+  `mutmut_thresholds.toml`). The nightly mutmut workflow continues to
+  run the full surface as a non-blocking artifact; the new PR-level gate
+  runs only on the *touched subset* of parity-critical files (engines,
+  builders, validator, registries) and fails the PR if any file exceeds
+  its survivor cap. Default cap is zero; per-file overrides require a
+  one-line justification + CODEOWNERS sign-off, and `mutmut_thresholds.toml`
+  is covered by the same blanket protection that guards
+  `parity_constants.py`. Backed by `tests/test_mutmut_pr_gate.py` (13
+  cases including a meta-invariant that asserts the PR gate's
+  `MUTMUT_SURFACE` is line-for-line identical to the nightly workflow's
+  `paths_to_mutate` list, so the two surfaces cannot drift apart).
+  Path filter on the workflow itself short-circuits the job in well
+  under a minute on PRs that touch no parity-critical code.
+
+### Changed
+- **Coverage gate is now a one-way ratchet driven by `pyproject.toml`.**
+  The historical `coverage report --fail-under=55` literal in
+  `.github/workflows/ci.yml` has been replaced with
+  `python scripts/ratchet_coverage.py`, which reads
+  `[tool.coverage.report].fail_under` from `annuity_model/pyproject.toml`
+  and enforces it. Single source of truth -- no more silent drift between
+  the workflow and the project file. To raise the floor after improving
+  coverage, run `python scripts/ratchet_coverage.py --update` locally; the
+  script refuses to lower the floor (manual edit + reviewer sign-off
+  required, and CODEOWNERS protects `pyproject.toml`). Backed by
+  `tests/test_ratchet_coverage.py` (9 cases covering pass/fail/update/
+  refuse/missing-key paths).
+
 ### Security / Governance
 - **Branch protection enabled on `main`** (P5 Wave 7, terminal step of the
   Phase-5 hardening sweep -- direct-to-main commits stop here). Configured

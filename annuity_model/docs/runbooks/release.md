@@ -96,6 +96,31 @@ If a release goes bad in the field:
 3. File a `regression: <summary>` issue and require a `model_change_log.md`
    entry on the rollback PR.
 
+## Branch protection refresh
+
+The required CI status checks are declared in
+[`.github/branch-protection.json`](../../../.github/branch-protection.json).
+Whenever you add or rename a CI job, re-apply protection so GitHub knows it
+must wait on the new context (otherwise PRs will hang forever waiting on a
+status that never reports, or worse, merge without it):
+
+```bash
+gh api -X PUT repos/:owner/:repo/branches/main/protection \
+  --input .github/branch-protection.json
+```
+
+Currently required (verify with `gh api repos/:owner/:repo/branches/main/protection`):
+
+* `tests (<os> / py3.11|py3.12)` matrix from `ci.yml`
+* `pre-commit (lint + format + mypy)` from `ci.yml`
+* `docker build + deep_smoke in container` from `ci.yml`
+* `parity + validator (ubuntu / py3.12)` from `parity-gate.yml`
+  (always-on PR gate as of P0 hardening 2026-04 — no path filter)
+* `build-and-deploy` from `docs.yml`
+
+If a required context goes stale (e.g. job rename), apply the JSON immediately
+in the same PR that renames the job.
+
 ## Related
 
 * [debug_validator_failure.md](debug_validator_failure.md)

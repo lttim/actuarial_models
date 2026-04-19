@@ -26,6 +26,23 @@ maintainers don't accidentally weaken a load-bearing gate.
 | `recalc_excel_shared.py`                      | Recalc helper used by parity tests; bug here masks formula errors.        |
 | `product_excel.py`                            | Dispatcher across the three builders.                                     |
 
+## Load-bearing internals (added P0 hardening 2026-04)
+
+These were previously covered only by the default `* @lttim` line. Listed
+explicitly so reviewers see them flagged as parity/UI critical:
+
+| Path                                          | Why                                                                       |
+|-----------------------------------------------|---------------------------------------------------------------------------|
+| `liability_layouts.py`                        | Single source of truth for liability column letters per product. RILA `M` vs SPIA/Term `S` lives here; a typo breaks every workbook. |
+| `liability_dispatch.py`                       | Pricing-result -> LiabilityPath converter registry. Renaming a result class without updating the registered key silently breaks ALM. |
+| `excel_runtime_recalc.py`                     | LibreOffice headless wrapper that drives the runtime Excel recalc gate.   |
+| `data_registry.py`                            | Versioned data + sha256 lock for mortality/yield CSVs. A silent dataset bump invalidates parity. |
+| `pricing_ui.py`                               | Monolithic Streamlit UI. Bug class includes silently dropping widget values into hard-coded contract fields (see Term wiring fix). |
+| `streamlit_app.py`                            | App entry point; reroutes / launcher logic.                               |
+| `pricing_run_form_state.py`                   | Run-form session-state defaults & numeric input wrapping. Affects every product's UI inputs. |
+| `_logging.py`                                 | Structured logging configuration; controls what reaches operators.        |
+| `_observability.py`                           | OpenTelemetry tracing decorator. P3 wiring will route engine entry points through this. |
+
 ## Parity contracts and tests
 
 | Path                                          | Why                                                                       |
@@ -63,3 +80,46 @@ maintainers don't accidentally weaken a load-bearing gate.
 3. Add a row to the appropriate table here with a one-sentence rationale.
 4. If you are adding a new product, also add the new builder and the new
    parity test path.
+
+## Second-CODEOWNER upgrade path
+
+The repo currently has exactly one CODEOWNER (`@lttim`). GitHub blocks
+self-approval on protected branches, so requiring `>= 1` reviewer in
+`.github/branch-protection.json` would deadlock every PR. The active
+profile therefore sets `required_pull_request_reviews = null`. This is a
+*deferred* gate, not a missing one: every piece of infrastructure
+needed to flip it on is already committed. To activate:
+
+1. **Onboard the second reviewer.** Either an individual maintainer with
+   actuarial signoff authority, or a GitHub team. The placeholder
+   handle this repo references is `@lttim/actuarial-reviewers`; if you
+   create the team under a different handle, do a one-shot
+   find-and-replace across `.github/CODEOWNERS`,
+   `.github/branch-protection.with-second-reviewer.json`, this file,
+   and `annuity_model/docs/CHANGELOG.md`.
+2. **Uncomment the CODEOWNERS hooks.** Every parity-critical override
+   in `.github/CODEOWNERS` carries a `TODO(second-owner):` comment with
+   the literal line to uncomment. Drop the `# TODO(second-owner):`
+   prefix on each one in a single PR.
+3. **Swap the branch-protection profile.** Apply
+   `.github/branch-protection.with-second-reviewer.json` instead of the
+   current `.github/branch-protection.json`:
+
+   ```bash
+   gh api -X PUT repos/:owner/:repo/branches/main/protection \
+     --input .github/branch-protection.with-second-reviewer.json
+   ```
+
+   The two profiles differ ONLY in
+   `required_pull_request_reviews` -- the status-checks list, linear
+   history requirement, force-push policy, and conversation-resolution
+   gate are byte-identical between the two files.
+   `tests/test_branch_protection_drift.py` enforces that. If you ever
+   add a status check or change a flag, update both files in the same
+   PR or the drift test will fail.
+4. **Promote the deferred file to active.** Once the second-reviewer
+   profile has been live for one full release cycle without rollback,
+   replace the contents of `.github/branch-protection.json` with the
+   contents of `.github/branch-protection.with-second-reviewer.json`
+   and delete the latter. The drift test will be removed in the same
+   PR.

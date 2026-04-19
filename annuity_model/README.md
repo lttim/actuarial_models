@@ -99,9 +99,9 @@ flowchart TD
     Pages --> UIcore
 ```
 
-## Adding a new product (FIA, VA-GLWB, ...) -- the 2-file walkthrough
+## Adding a new product (FIA, VA-GLWB, ...) -- the 5-step walkthrough
 
-1. **Engine + adapter (file 1):** create `annuity_model/<product>_projection.py`
+1. **Engine + adapter:** create `annuity_model/<product>_projection.py`
    exposing `<Product>Contract`, `price_<product>(...)`, and a
    `liability_path_from_<product>_projection(...)` function. At module bottom,
    register the converter:
@@ -111,7 +111,7 @@ flowchart TD
    register_liability_path_converter("MyProductProjectionResult", liability_path_from_my_product_projection)
    ```
 
-2. **Excel builder + layout (file 2):** create
+2. **Excel builder + layout:** create
    `annuity_model/build_<product>_excel_workbook.py`. Add the column letters to
    `LIABILITY_LAYOUTS` in `liability_layouts.py` (this is the registry, not a
    new file). Use `liability_layout_for("<product_code>")` everywhere instead
@@ -121,11 +121,19 @@ flowchart TD
    `ProductAdapter` instance, and add it to the `_PRODUCT_ADAPTERS` /
    `_PRICING_METRIC_FORMATTERS` dicts.
 
-4. **Add a parity test under `tests/parity/test_<product>_parity.py`** -- copy
+4. **Publish a unified `ProductDefinition`:** create
+   `annuity_model/products/<name>/{__init__.py, schema.py, engine.py, excel.py, ui.py}`
+   following the SPIA template. The four submodules are re-export shims over
+   the legacy modules; `__init__.py` calls `register_product(ProductDefinition(...))`.
+   The meta-tests in `tests/test_products_registry.py` and
+   `tests/test_products_subpackage_shims.py` enforce that the legacy registries
+   and the unified view stay bijective.
+
+5. **Add a parity test under `tests/parity/test_<product>_parity.py`** -- copy
    `test_term_parity.py` as a template. Import tolerances from
    `parity_constants` only.
 
-That's it. `pricing_projection.py` should not change.
+`pricing_projection.py` should not change.
 
 ## Daily commands
 

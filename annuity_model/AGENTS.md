@@ -3,6 +3,13 @@
 This project implements SPIA, Term Life, and RILA (accumulation) pricing with ALM projection
 and two synchronised calculation engines where applicable: Python and Excel.
 
+> **AI coding agents:** read [`docs/AI_AGENT_PREFLIGHT.md`](docs/AI_AGENT_PREFLIGHT.md)
+> *first*. It contains the source-of-truth map, decision tree, and hard
+> rules an autonomous agent must follow on this repo. This file
+> (`AGENTS.md`) remains the canonical owner of the four-gate list below;
+> the pre-flight doc just routes agents to the right runbook before they
+> get there.
+
 ## Non-negotiable parity requirement
 
 Every code change must maintain zero-discrepancy between the Python ALM engine and the
@@ -31,6 +38,28 @@ python scripts/render_parity_contract.py --check
 ```
 
 All four must exit 0.
+
+Two always-on gates inside gate (2) above are worth calling out explicitly
+because they catch the bug classes the parity engine cannot:
+
+* **`tests/ui/test_apptest_full_workflow.py`** — runs Streamlit's
+  `AppTest` harness end-to-end against `pricing_ui.py` AND
+  `streamlit_app.py` (the Streamlit Cloud entry). Asserts every
+  sidebar section renders without exceptions, that clicking
+  "Run pricing" populates `st.session_state['pricing_res']` for
+  every implemented product, and that the Excel download bytes pass
+  strict `excel_workbook_validator`. If you touch `pricing_ui.py`,
+  any product adapter, or the workbook builder dispatch, this gate
+  is your first signal.
+* **`tests/parity/test_excel_recalc_per_product.py`** — per-product
+  Excel↔Python recalc gate. The "always-on" layer asserts the
+  Python literals the builder bakes into ModelCheck column B equal
+  the engine within `MODELCHECK_TOL` for every product (no skip);
+  the LibreOffice layer (skipped without `soffice` on PATH; runs in
+  CI parity-gate) actually recalculates the workbook through the
+  reference spreadsheet engine. The pre-existing
+  `tests/parity/test_runtime_excel_recalc.py` is the SPIA-only
+  ancestor — the per-product file supersedes it.
 
 If a task changes Excel-generating code, ALSO open the regenerated workbook
 in Excel (or run `recalc_excel_shared.recalculate_workbook`) and verify the
