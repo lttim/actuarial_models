@@ -160,15 +160,16 @@ def test_streamlit_cloud_entry_boots_without_exception(streamlit_apptest_module)
 # Per-section render tests (parametrized)
 # ---------------------------------------------------------------------------
 #
-# SECTION_ORDER from pricing_ui.py is ["overview", "run", "alm",
-# "what_if", "excel_replicator", "tests"]. We test every section EXCEPT
-# "tests" -- that section, when rendered, executes the project's own
-# pytest suite live inside the page, which would recursively re-enter
-# the test runner and obliterate the timing budget.
+# Base SECTION_ORDER from pricing_ui.py omits "portfolio"; the live sidebar
+# inserts ``"portfolio"`` after ``"run"`` when portfolio v1 is enabled. We test
+# every navigable section EXCEPT "tests" -- that section, when rendered,
+# executes the project's own pytest suite live inside the page, which would
+# recursively re-enter the test runner and obliterate the timing budget.
 
 _SECTIONS_TO_RENDER: list[str] = [
     "overview",
     "run",
+    "portfolio",
     "alm",
     "what_if",
     "excel_replicator",
@@ -178,7 +179,9 @@ _SECTIONS_TO_RENDER: list[str] = [
 @pytest.mark.ui
 @pytest.mark.parametrize("section", _SECTIONS_TO_RENDER)
 def test_each_sidebar_section_renders_without_exception(
-    streamlit_apptest_module, section: str
+    streamlit_apptest_module,
+    section: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Selecting each sidebar section must complete without raising.
 
@@ -188,6 +191,10 @@ def test_each_sidebar_section_renders_without_exception(
     pricing yet" branch (the harder one -- it has to render an
     informative empty state, not crash on a missing key).
     """
+    if section == "portfolio":
+        # Sidebar lists Portfolio only when ``portfolio_v1_enabled()``; pin on
+        # so this parametrized gate matches CI / launcher defaults.
+        monkeypatch.setenv("ANNUITY_MODEL_PORTFOLIO_V1", "1")
     AppTest = streamlit_apptest_module
     at = load_pricing_ui(AppTest)
     _navigate_to_section(at, section)
@@ -455,6 +462,45 @@ def test_excel_download_workbook_passes_strict_validation(
         "Formula' on open. Issues:\n"
         + "\n".join(f"  - {iss}" for iss in issues[:25])
         + ("" if len(issues) <= 25 else f"\n  ... {len(issues) - 25} more.")
+    )
+
+
+@pytest.mark.ui
+def test_portfolio_manual_product_type_change_renders_without_exception(
+    streamlit_apptest_module,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Changing a manual row's product must not assign session keys after widgets bind.
+
+    Regression: ``_portfolio_push_defaults_to_session`` wrote
+    ``portfolio_row_<id>_product_type`` after the product ``st.selectbox``
+    for that key was already instantiated, which Streamlit rejects with
+    ``StreamlitAPIException``. CSV-only portfolio tests never exercised
+    this path.
+    """
+    monkeypatch.setenv("ANNUITY_MODEL_PORTFOLIO_V1", "1")
+    AppTest = streamlit_apptest_module
+    at = load_pricing_ui(AppTest)
+    _navigate_to_section(at, "portfolio")
+    assert_no_exceptions(at, context="render portfolio section")
+
+    add_btn = [b for b in at.button if b.key == "portfolio_manual_add_button"]
+    assert add_btn, "Add policy button missing"
+    add_btn[0].click().run()
+    assert_no_exceptions(at, context="add portfolio manual row")
+
+    pt_boxes = [
+        s
+        for s in at.selectbox
+        if getattr(s, "key", None)
+        and str(s.key).startswith("portfolio_row_")
+        and str(s.key).endswith("_product_type")
+    ]
+    assert pt_boxes, "manual portfolio product_type selectbox missing"
+    pt_boxes[0].set_value("term_life").run()
+    assert_no_exceptions(
+        at,
+        context="change portfolio manual row product from SPIA to term_life",
     )
 
 

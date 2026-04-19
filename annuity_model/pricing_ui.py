@@ -4711,12 +4711,25 @@ def _portfolio_wipe_row_keys(row_id: str, *, except_keys: frozenset[str] | None 
             del st.session_state[k]
 
 
-def _portfolio_push_defaults_to_session(row_id: str, d: dict[str, Any]) -> None:
-    """Write non-None defaults to session; None removes the key so widgets use fresh seeds."""
+def _portfolio_push_defaults_to_session(
+    row_id: str,
+    d: dict[str, Any],
+    *,
+    skip_session_keys: frozenset[str] | None = None,
+) -> None:
+    """Write non-None defaults to session; None removes the key so widgets use fresh seeds.
+
+    Keys listed in *skip_session_keys* are not written or popped. Use this when a
+    widget for that key was already instantiated in the current run (Streamlit
+    forbids assigning ``st.session_state[widget_key]`` after the widget exists).
+    """
     pfx = _portfolio_row_prefix(row_id)
+    skip = skip_session_keys or frozenset()
     for col in PORTFOLIO_INFORCE_SCRATCH_COLUMNS:
         v = d.get(col)
         key = pfx + col
+        if key in skip:
+            continue
         if v is None:
             st.session_state.pop(key, None)
         else:
@@ -4963,7 +4976,11 @@ def _render_portfolio_section() -> None:
                 }
                 newd = default_inforce_scratch_row(ProductType(sel), preserve=preserve)
                 _portfolio_wipe_row_keys(row_id, except_keys=frozenset({pfx + "product_type"}))
-                _portfolio_push_defaults_to_session(row_id, newd)
+                _portfolio_push_defaults_to_session(
+                    row_id,
+                    newd,
+                    skip_session_keys=frozenset({pfx + "product_type"}),
+                )
             st.session_state[meta_pt_prev] = sel
 
             opts_pid = _portfolio_policy_id_options(row_ids, row_id)
