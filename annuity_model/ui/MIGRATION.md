@@ -1,5 +1,24 @@
 # UI decomposition — migration map
 
+> **Status (2026-04, post P1+P2 hardening sweep):** still gated. The
+> hardening roadmap conditioned the per-page split on
+> `pricing_ui.py < 1.5k LOC after P1/P2 extractions`. Today's count
+> (run `wc -l pricing_ui.py`) is **4,467 LOC** -- shrinkage from the
+> 4,118 reference figure below was offset by P0 Term-widget wiring
+> (`term_years`, `premium_mode`, `benefit_timing`) and assorted
+> hardening additions.
+>
+> **Prerequisite enabler delivered:** Step 3 of the migration rules
+> below ("session-state audit script") is now live at
+> `scripts/audit_session_state.py` (backed by
+> `tests/test_audit_session_state.py`). Today's audit shows 18
+> cross-page session-state keys -- mostly the post-pricing result
+> bundle (`pricing_res`, `pricing_contract`, `pricing_meta`,
+> `pricing_run_id`, `pricing_mc_params`, `alm_last*`). Those are the
+> keys the per-page split MUST namespace before it can land safely;
+> the audit script's `--fail-on-cross-page --allow-cross-page ...`
+> flags are designed for use as a CI gate during the migration.
+
 `pricing_ui.py` is currently 4,118 LOC across 49 top-level functions. It is
 also the only place where Streamlit `st.session_state` keys are minted, so a
 naive split would silently break what-if/excel-replicator state plumbing.

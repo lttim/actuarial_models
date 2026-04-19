@@ -57,12 +57,25 @@ from product_excel import build_product_workbook
 # Product registry --------------------------------------------------------
 from product_registry import (
     ProductAdapter,
+    ProductContract,
     ProductType,
     get_pricing_metrics,
     get_product_adapter,
     get_product_capabilities,
     product_label,
     product_options_for_ui,
+    validate_run_inputs,
+)
+
+# Unified per-product definitions (P1, 2026-04). Consolidates the five
+# legacy per-product registries into one immutable ProductDefinition per
+# product. Auto-discovers shims under annuity_model/products/. See
+# annuity_model/products/__init__.py for the rationale.
+from products import (
+    ProductDefinition,
+    discover_products,
+    get_product_definition,
+    iter_product_definitions,
 )
 from rila_projection import (
     RILAContract,
@@ -86,6 +99,8 @@ __all__ = [
     "LiabilityLayout",
     "MortalityTableQx",
     "ProductAdapter",
+    "ProductContract",
+    "ProductDefinition",
     "ProductType",
     "RILAContract",
     "SPIAContract",
@@ -94,10 +109,13 @@ __all__ = [
     "alm_default_allocation_spec",
     "build_product_workbook",
     "configure_logging",
+    "discover_products",
     "get_logger",
     "get_pricing_metrics",
     "get_product_adapter",
     "get_product_capabilities",
+    "get_product_definition",
+    "iter_product_definitions",
     "liability_layout_for",
     "liability_path_from_rila_projection",
     "liability_path_from_spia_projection",
@@ -111,6 +129,7 @@ __all__ = [
     "run_alm_projection_from_liability_path",
     "run_alm_projection_from_pricing_result",
     "validate_formula",
+    "validate_run_inputs",
     "validate_workbook",
     "validate_workbook_or_raise",
 ]

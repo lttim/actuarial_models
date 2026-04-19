@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Protocol, Union
 
 import numpy as np
 
@@ -13,6 +13,13 @@ import term_projection as tp
 from build_pricing_excel_workbook import ExcelBuildSpec, excel_spec_from_launcher
 from build_rila_excel_workbook import RILAExcelBuildSpec, rila_excel_spec_from_launcher
 from build_term_excel_workbook import TermExcelBuildSpec, term_excel_spec_from_launcher
+
+# Union of every contract dataclass currently understood by an adapter.
+# Tightening the ``ProductAdapter`` Protocol from ``contract: object`` to
+# this union (P1, 2026-04) lets mypy catch "wrong product, wrong contract"
+# wiring at the call site instead of at the runtime ``isinstance`` check
+# inside each adapter. New products MUST extend this union when they land.
+ProductContract = Union[sp.SPIAContract, tp.TermLifeContract, rp.RILAContract]
 
 
 class ProductType(str, Enum):
@@ -54,6 +61,27 @@ class ProductUIConfig:
 
 
 class ProductAdapter(Protocol):
+    """Per-product pricing adapter Protocol.
+
+    Tightened in P1 (2026-04):
+
+    * ``contract`` is now :data:`ProductContract` (a union of every known
+      contract dataclass) instead of ``object``. mypy catches mis-wired
+      contracts at the call site; the existing runtime ``isinstance``
+      checks inside each adapter implementation stay as a defense in
+      depth.
+    * Added :meth:`validate_run_inputs`, an optional pre-flight that the
+      Streamlit UI invokes before constructing a contract from the
+      session-state dict. Adapters that have no constraints can leave
+      the default no-op (the Protocol satisfaction does not require
+      overriding it).
+
+    The result types stay typed as ``object`` at the Protocol level only
+    because the four concrete return types (SPIA / Term / RILA pricing
+    + monte carlo + spec) form a heterogeneous matrix; downstream code
+    narrows by ``isinstance`` against the concrete result class.
+    """
+
     @property
     def product_type(self) -> ProductType: ...
 
@@ -65,7 +93,7 @@ class ProductAdapter(Protocol):
     def price(
         self,
         *,
-        contract: object,
+        contract: ProductContract,
         yield_curve: sp.YieldCurve,
         mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
         horizon_age: int,
@@ -80,7 +108,7 @@ class ProductAdapter(Protocol):
     def price_monte_carlo(
         self,
         *,
-        contract: object,
+        contract: ProductContract,
         yield_curve: sp.YieldCurve,
         mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
         horizon_age: int,
@@ -99,7 +127,7 @@ class ProductAdapter(Protocol):
     def excel_spec_from_run(
         self,
         *,
-        contract: object,
+        contract: ProductContract,
         yield_curve: sp.YieldCurve,
         mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
         horizon_age: int,
@@ -113,6 +141,60 @@ class ProductAdapter(Protocol):
         index_levels_at_payment: np.ndarray,
         expense_annual_inflation: float,
     ) -> ExcelBuildSpec | TermExcelBuildSpec | RILAExcelBuildSpec: ...
+
+
+def validate_run_inputs(
+    product_type: ProductType, state: Mapping[str, Any]
+) -> tuple[str, ...]:
+    """Per-product pre-flight for Streamlit run-form session state.
+
+    Returns a tuple of human-readable error messages; empty tuple means
+    the inputs are well-formed and the run may proceed. The Streamlit
+    UI may surface the messages via ``st.error`` and refuse to construct
+    the contract dataclass.
+
+    P1 (2026-04) introduces this hook as a *single source of truth* for
+    "is this run launchable" so the validation does not get scattered
+    across pricing_ui.py with stringly-typed conditionals. Today the
+    function applies only the cross-product invariants below; per-product
+    rules (e.g. RILA cap > floor) can be folded in via the
+    ``_PRODUCT_VALIDATORS`` registry.
+
+    Cross-product invariants (always enforced):
+
+    * ``issue_age`` and ``horizon_age`` must both be present and integer.
+    * ``horizon_age > issue_age`` (otherwise the projection is empty).
+
+    Per-product extensions land in :data:`_PRODUCT_VALIDATORS`.
+    """
+    errors: list[str] = []
+
+    issue_age = state.get("issue_age")
+    horizon_age = state.get("horizon_age")
+    if issue_age is None:
+        errors.append("issue_age is required.")
+    if horizon_age is None:
+        errors.append("horizon_age is required.")
+    if isinstance(issue_age, (int, float)) and isinstance(horizon_age, (int, float)):
+        if int(horizon_age) <= int(issue_age):
+            errors.append(
+                f"horizon_age ({int(horizon_age)}) must be strictly greater than "
+                f"issue_age ({int(issue_age)}); otherwise the projection horizon is empty."
+            )
+
+    extra = _PRODUCT_VALIDATORS.get(product_type)
+    if extra is not None:
+        errors.extend(extra(state))
+
+    return tuple(errors)
+
+
+# Per-product validator registry. A new product MAY add an entry that
+# returns the list of additional error messages (after the cross-product
+# checks have run). Keeping it as a dict-of-callables keeps the dispatch
+# branch-free; tests/test_meta_invariants.py asserts every implemented
+# product is either present or explicitly absent.
+_PRODUCT_VALIDATORS: dict[ProductType, Callable[[Mapping[str, Any]], list[str]]] = {}
 
 
 @dataclass(frozen=True)
@@ -514,11 +596,78 @@ _MORTALITY_MODE_LABELS: dict[str, str] = {
 _TERM_CONTRACT_UI_CONFIG = TermContractUIConfig(
     death_benefit_label="Death benefit ($)",
     default_death_benefit=250_000.0,
+    # NOTE: option tuples are kept in sync with the parser maps below by
+    # ``test_pricing_ui_term_config.test_term_ui_config_options_match_parser_maps``.
     term_length_options=("20 years",),
     premium_mode_options=("Level monthly",),
     benefit_timing_options=("EOY death benefit",),
     default_monthly_premium=250.0,
 )
+
+
+# UI-label → engine-value mappings for the Term contract.
+#
+# The Streamlit selectboxes display human-readable labels (e.g. "20 years"),
+# but the ``TermLifeContract`` engine dataclass takes typed scalars
+# (``term_years: int``, ``premium_mode: Literal["level_monthly"]``,
+# ``benefit_timing: Literal["eoy_death"]``). These maps are the *single source
+# of truth* for that translation; ``pricing_ui.py`` MUST round-trip every
+# widget value through them rather than hard-coding ``term_years=20`` etc.
+#
+# When new options are added to ``TermContractUIConfig.*_options``, add the
+# matching label here in the same PR. ``test_pricing_ui_term_config.py``
+# enforces that every option label is parseable.
+_TERM_LENGTH_YEARS_BY_LABEL: dict[str, int] = {
+    "20 years": 20,
+}
+_TERM_PREMIUM_MODE_BY_LABEL: dict[str, str] = {
+    "Level monthly": "level_monthly",
+}
+_TERM_BENEFIT_TIMING_BY_LABEL: dict[str, str] = {
+    "EOY death benefit": "eoy_death",
+}
+
+
+def parse_term_length_label_to_years(label: str) -> int:
+    try:
+        return _TERM_LENGTH_YEARS_BY_LABEL[label]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unknown Term length label {label!r}; "
+            f"add a mapping in product_registry._TERM_LENGTH_YEARS_BY_LABEL."
+        ) from exc
+
+
+def parse_term_premium_mode_label(label: str) -> str:
+    try:
+        return _TERM_PREMIUM_MODE_BY_LABEL[label]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unknown Term premium mode label {label!r}; "
+            f"add a mapping in product_registry._TERM_PREMIUM_MODE_BY_LABEL."
+        ) from exc
+
+
+def parse_term_benefit_timing_label(label: str) -> str:
+    try:
+        return _TERM_BENEFIT_TIMING_BY_LABEL[label]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unknown Term benefit timing label {label!r}; "
+            f"add a mapping in product_registry._TERM_BENEFIT_TIMING_BY_LABEL."
+        ) from exc
+
+
+def term_length_label_options() -> tuple[str, ...]:
+    return tuple(_TERM_LENGTH_YEARS_BY_LABEL.keys())
+
+
+def term_premium_mode_label_options() -> tuple[str, ...]:
+    return tuple(_TERM_PREMIUM_MODE_BY_LABEL.keys())
+
+
+def term_benefit_timing_label_options() -> tuple[str, ...]:
+    return tuple(_TERM_BENEFIT_TIMING_BY_LABEL.keys())
 
 _PRODUCT_UI_CONFIG: dict[ProductType, ProductUIConfig] = {
     ProductType.SPIA: ProductUIConfig(
@@ -662,7 +811,21 @@ _PRICING_METRIC_FORMATTERS: dict[ProductType, Callable[[Any], tuple[PricingMetri
 
 
 def get_pricing_metrics(product_type: ProductType, result: Any) -> tuple[PricingMetric, ...]:
-    formatter = _PRICING_METRIC_FORMATTERS.get(product_type, _spia_pricing_metrics)
+    """Return the per-product pricing metric tuple.
+
+    No silent fallback: if a product is implemented (in
+    ``implemented_product_types()``) but missing from
+    ``_PRICING_METRIC_FORMATTERS``, we raise a ``KeyError`` with a clear
+    pointer to the registry instead of silently returning SPIA-shaped metrics
+    that would mislead the UI. The completeness invariant is enforced by
+    ``tests/test_metric_formatter_completeness.py``.
+    """
+    formatter = _PRICING_METRIC_FORMATTERS.get(product_type)
+    if formatter is None:
+        raise KeyError(
+            f"No pricing-metric formatter registered for {product_type.value!r}; "
+            f"add an entry in product_registry._PRICING_METRIC_FORMATTERS."
+        )
     return formatter(result)
 
 

@@ -6,6 +6,7 @@ from typing import Literal
 import numpy as np
 
 import pricing_projection as sp
+from _observability import traced
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,7 @@ class TermLifeProjectionResult:
     expected_claim_cashflows: np.ndarray
 
 
+@traced("pricing.term.deterministic")
 def price_term_life_level_monthly(
     *,
     contract: TermLifeContract,

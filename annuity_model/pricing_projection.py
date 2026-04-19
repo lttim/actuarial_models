@@ -49,6 +49,7 @@ import numpy as np
 import pandas as pd
 
 from _logging import get_logger
+from _observability import traced
 
 _log = get_logger(__name__)
 
@@ -991,6 +992,7 @@ def simulate_index_levels_gbm(
     return levels
 
 
+@traced("pricing.spia.deterministic")
 def price_spia_single_premium(
     *,
     contract: SPIAContract,
@@ -1154,6 +1156,7 @@ def price_spia_single_premium(
     )
 
 
+@traced("pricing.spia.monte_carlo")
 def price_spia_single_premium_monte_carlo(
     *,
     contract: SPIAContract,
@@ -1861,6 +1864,7 @@ def _alm_maybe_rebalance(
     return cash, faces
 
 
+@traced("alm.from_liability_path")
 def run_alm_projection_from_liability_path(
     *,
     liability_path: LiabilityPath,
@@ -2101,6 +2105,7 @@ def run_alm_projection_from_liability_path(
     )
 
 
+@traced("alm.spia_compat_wrapper")
 def run_alm_projection(
     *,
     pricing: SPIAProjectionResult,
@@ -2131,9 +2136,10 @@ def run_alm_projection(
     )
 
 
+@traced("alm.from_pricing_result")
 def run_alm_projection_from_pricing_result(
     *,
-    pricing: SPIAProjectionResult | Any,
+    pricing: Any,
     yield_curve: YieldCurve,
     spread: float,
     assumptions: ALMAssumptions,
@@ -2149,21 +2155,17 @@ def run_alm_projection_from_pricing_result(
     function stays product-agnostic. Adding a new product means importing the
     new engine somewhere on the startup path -- not editing this function.
 
-    SPIA still uses the dedicated :func:`run_alm_projection` path because its
-    monthly cashflows interact with index-scenario expense inflation that the
-    generic LiabilityPath engine does not yet model.
+    Implementation note (2026-04, P1 cleanup): the previous version
+    branched on ``isinstance(pricing, SPIAProjectionResult)`` and forwarded
+    SPIA to the legacy :func:`run_alm_projection` wrapper. That wrapper
+    itself only forwards to :func:`run_alm_projection_from_liability_path`
+    via :func:`liability_path_from_spia_projection` -- the exact same path
+    the dispatch registry takes. The SPIA branch was therefore *dead* and
+    is removed. Behavior is unchanged; the function is now branch-free
+    and product-agnostic. The legacy :func:`run_alm_projection` SPIA
+    wrapper is kept as a backward-compat shim for callers that pass
+    ``pricing=`` positionally.
     """
-    if isinstance(pricing, SPIAProjectionResult):
-        return run_alm_projection(
-            pricing=pricing,
-            yield_curve=yield_curve,
-            spread=spread,
-            assumptions=assumptions,
-            initial_asset_market_value=initial_asset_market_value,
-            asset_curve=asset_curve,
-            liability_curve=liability_curve,
-            liability_cashflows=liability_cashflows,
-        )
     from liability_dispatch import liability_path_for, registered_typenames
 
     typename = type(pricing).__name__

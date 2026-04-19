@@ -6,6 +6,7 @@ from typing import Literal
 import numpy as np
 
 import pricing_projection as sp
+from _observability import traced
 
 
 @dataclass(frozen=True)
@@ -174,6 +175,7 @@ def _rila_claims_rel_per_premium_dollar(
     return claims, av_end, cred_m
 
 
+@traced("pricing.rila.deterministic")
 def price_rila_single_premium(
     *,
     contract: RILAContract,
@@ -354,6 +356,7 @@ from liability_dispatch import register_liability_path_converter  # noqa: E402
 register_liability_path_converter("RILAProjectionResult", liability_path_from_rila_projection)
 
 
+@traced("pricing.rila.monte_carlo")
 def price_rila_single_premium_monte_carlo(
     *,
     contract: RILAContract,
