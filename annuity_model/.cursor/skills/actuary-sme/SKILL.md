@@ -62,6 +62,45 @@ Cover the following dimensions on every review (Section 13.1 of
     same scenario; inforce column conventions match
     `docs/portfolio_runner_spec.md`.
 
+### Full-scope mandatory: every product, defaults, and outputs
+
+When `scope` is **`full`** (or the user explicitly asked for a
+workspace-wide / all-products review), the verdict is **incomplete**
+unless **every implemented product** in `product_registry.py` (and
+its registered adapters) is assessed **individually**, in structured
+subsections (one product at a time). For **each** product, you MUST
+address all of the following:
+
+1. **Single-policy (Pricing Run) defaults** — Do seeded UI / schema /
+   registry defaults represent a **coherent, market-plausible baseline**
+   for that product (ages, benefits/premiums, term length, rider toggles,
+   fund/crediting assumptions where applicable)? Flag silent
+   “degenerate” cases (near-zero benefits, contradictory modes, horizons
+   that trivialize dynamics). Trace defaults via
+   `pricing_run_form_state.build_run_form_seed_defaults`, product
+   `schema` / `ui` surfaces, and `product_registry` defaults — not from
+   memory alone.
+2. **Portfolio defaults** — Where the product participates in portfolio
+   v1 / inforce workflows, do **default portfolio inputs** (representative
+   inforce rows, weights, mix, horizon, aggregation options) tell a
+   sensible story **for that liability type**? If a product is
+   portfolio-eligible only under certain flags (`portfolio_config.py`),
+   state that explicitly instead of skipping silently. Use fixtures under
+   `tests/data/inforce/` and `docs/portfolio_runner_spec.md` as anchors.
+3. **Outputs after default runs** — For defaults in (1) and, when
+   applicable, (2): are the **numeric results and exported artifacts**
+   (summary metrics, key series, `ModelCheck`, rollups) **accurate
+   relative to stated methodology**, **stable** (no NaNs / sentinel
+   leaks), and **meaningful to an actuary** (interpretable levels, units,
+   monotonicities where expected, diagnostics that aid review rather than
+   noise)? Call out missing or misleading labels, charts/tables that hide
+   the main risk drivers, or summaries that look “fine” numerically but
+   fail actuarial communication.
+
+For **incremental** or single-product scopes, still apply (1)–(3) to
+every **product touched by the diff**; expand to all products only when
+`scope: full`.
+
 ## Inputs you read (in order)
 
 1. **The evidence pack**: `.cursor/actuary-reviews/_evidence-current.md`
@@ -165,6 +204,14 @@ prior_findings_resolved:    # required when iteration > 1; omit when iteration =
 
 ### Documentation alignment findings
 <one paragraph or "none">
+
+### Per-product defaults and outputs (full scope or touched products)
+<When `scope: full`, one short subsection **per product** (use the
+`ProductType` name as a `####` heading) covering checklist items (1)
+Pricing Run defaults, (2) portfolio defaults if applicable, (3) output
+quality after those defaults. When `scope` is incremental or
+`product:<name>`, cover only the products in scope. If nothing to flag
+for a product, write "none" under that product's heading.>
 
 ### Prior-finding regression check
 <only when iteration > 1; one paragraph noting which prior findings

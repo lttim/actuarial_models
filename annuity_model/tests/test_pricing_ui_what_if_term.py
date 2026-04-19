@@ -136,7 +136,9 @@ def test_build_alm_mc_scenario_reprices_rila_on_single_path():
     ages = np.arange(0, 121, dtype=int)
     qx = np.full_like(ages, 0.015, dtype=float)
     mort = sp.MortalityTableQx(ages, qx)
-    expenses = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    # RILA single-premium solve requires a positive expense numerator when
+    # premium_expense_rate is zero; all-zero expenses yield a collapsed premium.
+    expenses = sp.ExpenseAssumptions(1.0, 0.0, 0.0)
     base = rp.price_rila_single_premium(
         contract=contract,
         yield_curve=yc,
