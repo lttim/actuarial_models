@@ -50,11 +50,26 @@ from excel_workbook_validator import (
 
 
 def _validate_xlsx_bytes(raw: bytes) -> None:
+    """End-to-end gate: workbook must pass strict-mode validation.
+
+    Strict mode (added 2026-04) additionally rejects calls to Excel
+    functions that are neither registered in
+    ``excel_workbook_validator.FUNCTION_ARITIES`` nor explicitly allow-listed
+    in ``_STRICT_MODE_ALLOWED_UNREGISTERED``. This catches typos like
+    ``AVERGE`` (Excel will repair to ``#NAME?`` silently) and unintentional
+    new built-in dependencies before they reach a builder. The non-strict
+    code path remains available for partial / WIP workbooks where the
+    caller knowingly uses a built-in we have not enumerated yet.
+    """
     wb = load_workbook(io.BytesIO(raw), data_only=False)
-    issues = validate_workbook(wb)
+    issues = validate_workbook(wb, strict=True)
     assert issues == [], (
-        "Workbook contains formulas Excel will flag with 'Removed Records: "
-        "Formula' on load:\n"
+        "Workbook failed strict-mode validation. Excel may flag with "
+        "'Removed Records: Formula' on load, OR you used a function not yet "
+        "registered in excel_workbook_validator.FUNCTION_ARITIES. "
+        "If the function is intentional, register its arity (or add to "
+        "_STRICT_MODE_ALLOWED_UNREGISTERED if it doesn't need an arity check). "
+        "Issues:\n"
         + "\n".join(f"  - {iss}" for iss in issues[:25])
         + ("" if len(issues) <= 25 else f"\n  ... and {len(issues) - 25} more.")
     )
@@ -311,6 +326,78 @@ def test_validator_workbook_passes_on_clean_workbook():
     ws["C1"] = "=SUM(A1:A10)"
     ws["D1"] = "=IFERROR(VLOOKUP(A1,A:B,2,FALSE),0)"
     validate_workbook_or_raise(wb)
+
+
+def test_strict_mode_flags_unknown_excel_function():
+    """Strict mode rejects calls to unregistered functions (typo guard)."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["A1"] = 1
+    ws["A2"] = 2
+    ws["A3"] = 3
+    ws["B1"] = "=AVERGE(A1:A3)"
+
+    issues_lax = validate_workbook(wb, strict=False)
+    assert issues_lax == [], (
+        "non-strict mode must remain quiet on unknown functions; got: " + repr(issues_lax)
+    )
+    issues_strict = validate_workbook(wb, strict=True)
+    assert any("AVERGE" in i.message for i in issues_strict), (
+        "strict mode must flag the typo'd function name; got: " + repr(issues_strict)
+    )
+
+
+def test_strict_mode_or_raise_propagates_unknown_function():
+    """``validate_workbook_or_raise(..., strict=True)`` raises on unknown funcs."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["A1"] = "=BOGUSFN(1, 2)"
+    validate_workbook_or_raise(wb, strict=False)
+    with pytest.raises(ExcelWorkbookValidationError) as excinfo:
+        validate_workbook_or_raise(wb, strict=True)
+    assert "BOGUSFN" in str(excinfo.value)
+
+
+def test_strict_mode_accepts_all_registered_functions():
+    """Strict mode is not allowed to flag a function that *is* registered."""
+    import openpyxl
+
+    from excel_workbook_validator import FUNCTION_ARITIES
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["A1"] = 1
+    ws["B1"] = '=IF(A1=0,"zero","nonzero")'
+    ws["C1"] = "=SUM(A1:A10)"
+    ws["D1"] = "=IFERROR(VLOOKUP(A1,A:B,2,FALSE),0)"
+    ws["E1"] = "=SUMPRODUCT(A1:A3,A1:A3)"
+    issues = validate_workbook(wb, strict=True)
+    assert issues == [], (
+        "strict mode flagged a registered function; FUNCTION_ARITIES has "
+        f"{len(FUNCTION_ARITIES)} entries. Issues: {issues!r}"
+    )
+
+
+def test_strict_mode_template_cache_isolated_from_lax():
+    """Strict and lax results must not bleed through the formula-template cache."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["A1"] = "=NEWFANGLED(1, 2)"
+    lax = validate_workbook(wb, strict=False)
+    strict = validate_workbook(wb, strict=True)
+    assert lax == []
+    assert any("NEWFANGLED" in i.message for i in strict)
+    lax_again = validate_workbook(wb, strict=False)
+    assert lax_again == [], (
+        "lax mode must stay clean even after strict mode populated the cache; "
+        "got: " + repr(lax_again)
+    )
 
 
 def test_validator_flags_trailing_empty_arg():

@@ -1,0 +1,26 @@
+{
+  "inputs_summary": {
+    "cap": 0.09,
+    "expense_inflation": 0.01,
+    "floor": -0.02,
+    "horizon_age": 85,
+    "index_drift": 0.004,
+    "index_seed": 42,
+    "index_vol": 0.02,
+    "issue_age": 55,
+    "mortality": "synthetic_qx_0.008+2e-5*age",
+    "participation": 0.85,
+    "rider_fee_annual": 0.008,
+    "sex": "male",
+    "spread": 0.0,
+    "yield_rate": 0.035
+  },
+  "metrics": {
+    "annuity_factor": 198.77685082886063,
+    "n_months": 360,
+    "pv_benefit": 1480.1924417638083,
+    "pv_monthly_expenses": 5603.481232631726,
+    "single_premium": 7083.673674395534
+  },
+  "product": "rila"
+}

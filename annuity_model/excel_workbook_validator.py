@@ -608,8 +608,89 @@ def _formula_template(formula: str) -> str:
     return _DIGIT_RUN_RE.sub("#", formula)
 
 
-def validate_workbook(workbook: object) -> list[FormulaIssue]:
+# Excel built-ins that this project intentionally does NOT register in
+# ``FUNCTION_ARITIES`` (because we never validate their argument count) but
+# that *are* legitimate Excel functions. Strict mode treats any other
+# unregistered call as a typo or unintended new dependency. Add a name here
+# only after confirming Excel actually accepts it.
+_STRICT_MODE_ALLOWED_UNREGISTERED: frozenset[str] = frozenset(
+    {
+        # Arithmetic / aggregate built-ins not enumerated in FUNCTION_ARITIES
+        # because they are never the source of a "Removed Records" repair --
+        # they accept any positive arg count, but listing them in the arity
+        # table would force an unhelpful (1, None) bound.
+        "SUMIF",
+        "SUMIFS",
+        "COUNTIF",
+        "COUNTIFS",
+        "AVERAGEIF",
+        "AVERAGEIFS",
+        "INDIRECT",
+    }
+)
+
+
+def _unknown_function_calls(
+    sheet: str, cell: str, formula: str, *, _stripped: str | None = None
+) -> list[FormulaIssue]:
+    """Return one FormulaIssue per call site referencing an unknown function.
+
+    "Unknown" = not in :data:`FUNCTION_ARITIES`, not in
+    :data:`_STRICT_MODE_ALLOWED_UNREGISTERED`, and not a sheet-name token
+    (we filter these out in the call-site walker already).
+    """
+    if not isinstance(formula, str) or not formula.startswith("="):
+        return []
+    body = _strip_outer_eq(formula)
+    stripped = _stripped if _stripped is not None else _strip_strings_and_brackets(body)
+    issues: list[FormulaIssue] = []
+    seen: set[str] = set()
+    for name, _open_idx, _close_idx in _function_calls(body, stripped=stripped):
+        if name in seen:
+            continue
+        seen.add(name)
+        if name in FUNCTION_ARITIES:
+            continue
+        if name in _STRICT_MODE_ALLOWED_UNREGISTERED:
+            continue
+        issues.append(
+            FormulaIssue(
+                sheet=sheet,
+                cell=cell,
+                formula=formula,
+                message=(
+                    f"unknown Excel function {name!r}; not registered in "
+                    "excel_workbook_validator.FUNCTION_ARITIES nor allow-listed in "
+                    "_STRICT_MODE_ALLOWED_UNREGISTERED. Either it is a typo "
+                    "(e.g. 'AVERGE') that Excel will repair to #NAME?, or it is "
+                    "a real new built-in -- in which case register its arity "
+                    "in FUNCTION_ARITIES so future validations can check arg "
+                    "counts."
+                ),
+            )
+        )
+    return issues
+
+
+def validate_workbook(workbook: object, *, strict: bool = False) -> list[FormulaIssue]:
     """Walk every cell in an openpyxl Workbook; return all formula issues found.
+
+    Parameters
+    ----------
+    workbook
+        An openpyxl ``Workbook``.
+    strict
+        When ``True``, additionally flag any call to an Excel function that is
+        not registered in :data:`FUNCTION_ARITIES` and not allow-listed in
+        :data:`_STRICT_MODE_ALLOWED_UNREGISTERED`. Strict mode is the right
+        setting for end-to-end Excel-export tests (it catches typos like
+        ``AVERGE`` and unintended new dependencies before they reach the
+        validator's silent-pass path), but it is too noisy for partial /
+        WIP workbooks where the calling code knows it is using a built-in
+        the project hasn't enumerated yet.
+
+    Implementation notes
+    --------------------
 
     The hot path applies two layers of caching to keep validation under a second
     even on RILA workbooks with 75 000+ formulas:
@@ -624,10 +705,13 @@ def validate_workbook(workbook: object) -> list[FormulaIssue]:
       validate each distinct template once and replay the resulting issue
       messages for subsequent cells. Issue ``cell`` and ``formula`` fields stay
       cell-specific so error reports remain precise.
+
+    The ``strict`` flag is keyed into the template cache so the same workbook
+    re-validated with and without strict mode does not collide.
     """
     issues: list[FormulaIssue] = []
     populated = _populated_columns_per_sheet(workbook)
-    template_cache: dict[str, list[str]] = {}
+    template_cache: dict[tuple[str, bool], list[str]] = {}
     for ws in getattr(workbook, "worksheets", []):
         sheet = str(getattr(ws, "title", "?"))
         sparse = getattr(ws, "_cells", None)
@@ -639,8 +723,8 @@ def validate_workbook(workbook: object) -> list[FormulaIssue]:
             v = cell.value
             if not isinstance(v, str) or not v.startswith("="):
                 continue
-            template = _formula_template(v)
-            cached = template_cache.get(template)
+            template_key = (_formula_template(v), strict)
+            cached = template_cache.get(template_key)
             if cached is not None:
                 if cached:
                     issues.extend(
@@ -660,13 +744,25 @@ def validate_workbook(workbook: object) -> list[FormulaIssue]:
                     stripped=stripped,
                 )
             )
-            template_cache[template] = [iss.message for iss in cell_issues]
+            if strict:
+                cell_issues.extend(
+                    _unknown_function_calls(
+                        sheet, cell.coordinate, v, _stripped=stripped
+                    )
+                )
+            template_cache[template_key] = [iss.message for iss in cell_issues]
             issues.extend(cell_issues)
     return issues
 
 
-def validate_workbook_or_raise(workbook: object) -> None:
-    """Validate a workbook; raise :class:`ExcelWorkbookValidationError` if any issue found."""
-    issues = validate_workbook(workbook)
+def validate_workbook_or_raise(workbook: object, *, strict: bool = False) -> None:
+    """Validate a workbook; raise :class:`ExcelWorkbookValidationError` if any issue found.
+
+    See :func:`validate_workbook` for the meaning of ``strict``. The ``strict``
+    keyword is intentionally keyword-only so existing
+    ``validate_workbook_or_raise(wb)`` callers remain source-compatible
+    (every workbook builder calls the no-arg form before ``wb.save(...)``).
+    """
+    issues = validate_workbook(workbook, strict=strict)
     if issues:
         raise ExcelWorkbookValidationError(issues)

@@ -1,0 +1,23 @@
+{
+  "inputs_summary": {
+    "benefit_timing": "eoy_death",
+    "death_benefit": 250000.0,
+    "horizon_age": 60,
+    "issue_age": 40,
+    "monthly_premium": 200.0,
+    "mortality": "synthetic_qx_0.005+1e-5*age",
+    "premium_mode": "level_monthly",
+    "sex": "male",
+    "spread": 0.0,
+    "term_years": 20,
+    "yield_rate": 0.04
+  },
+  "metrics": {
+    "annuity_factor": 157.38786236665385,
+    "n_months": 240,
+    "pv_benefit": 17685.250082619023,
+    "pv_monthly_expenses": -31477.572473330772,
+    "single_premium": -13792.32239071175
+  },
+  "product": "term_life"
+}

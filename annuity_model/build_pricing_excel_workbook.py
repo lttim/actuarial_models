@@ -390,9 +390,19 @@ def excel_spec_from_launcher(
 
 
 def _write_inputs(ws, spec: ExcelBuildSpec) -> None:
+    """Write the SPIA Inputs sheet.
+
+    Uses the declarative :class:`InputsSheetSpec` writer for the canonical
+    title + key-value rows + Notes pane that all three product builders
+    share. Product-specific extras (the "Derived" formula block at A21+,
+    SPIA-only) stay inline below -- the helper deliberately does not
+    handle ad-hoc product-specific blocks.
+    """
+    # Local import to avoid a top-level cycle (excel_builder_helpers
+    # itself re-exports symbols from this module).
+    from excel_builder_helpers import InputsSheetSpec, write_inputs_sheet
+
     ws.title = "Inputs"
-    ws["A1"] = "SPIA Inputs (matches model launcher / Python)"
-    ws["A1"].font = Font(bold=True, size=12)
 
     mort_cell = "rp_mp" if spec.mortality_excel_mode == "rp_mp" else "static"
 
@@ -413,38 +423,34 @@ def _write_inputs(ws, spec: ExcelBuildSpec) -> None:
         ("Expense mode (documentation)", spec.expense_mode_label),
         ("Expense annual inflation (decimal)", spec.expense_annual_inflation),
     ]
+    notes = (
+        "Rates are decimals unless labeled otherwise.",
+        "Valuation date: 12/31 of Valuation Year (RP+MP path).",
+        "Mortality Excel Mode: rp_mp uses MP-2016 sums; static uses Base Qx only.",
+        "Discount factors use log-linear interpolation on DF nodes (matches Python YieldCurve).",
+        "Benefits: return indexation from IndexScenario; expenses: monthly CPI-style from B17.",
+        "Changing horizon/issue age does not auto-resize sheets; regenerate from the launcher.",
+        "Spread B9 is added to zero rates. Negative B9 lowers discount yields and raises PV—must match launcher.",
+        f"See ModelCheck: Python snapshot vs {LIABILITY_SHEET_NAME}! formulas; large |Difference| means inputs/recalc issues.",
+    )
+    write_inputs_sheet(
+        ws,
+        InputsSheetSpec(
+            title="SPIA Inputs (matches model launcher / Python)",
+            rows=rows,
+            notes=notes,
+        ),
+    )
 
-    # Data starts row 3: labels col A, values col B
-    for i, (k, v) in enumerate(rows, start=3):
-        ws[f"A{i}"] = k
-        ws[f"B{i}"] = v
-
+    # SPIA-specific "Derived" block. Stays inline because the helper only
+    # owns the canonical key-value table; product-specific formula blocks
+    # live in their builder.
     ws["A21"] = "Derived"
     ws["A21"].font = Font(bold=True)
     ws["A22"] = "Monthly base benefit (pre-index)"
     ws["B22"] = "=B5/B6"
     ws["A23"] = "Liability sheet months (info; grid is fixed at build)"
     ws["B23"] = "=MAX(1,ROUND((B8-B3)*B6,0))"
-
-    ws["D3"] = "Notes"
-    ws["D4"] = "Rates are decimals unless labeled otherwise."
-    ws["D5"] = "Valuation date: 12/31 of Valuation Year (RP+MP path)."
-    ws["D6"] = "Mortality Excel Mode: rp_mp uses MP-2016 sums; static uses Base Qx only."
-    ws["D7"] = (
-        "Discount factors use log-linear interpolation on DF nodes (matches Python YieldCurve)."
-    )
-    ws["D8"] = (
-        "Benefits: return indexation from IndexScenario; expenses: monthly CPI-style from B17."
-    )
-    ws["D9"] = (
-        "Changing horizon/issue age does not auto-resize sheets; regenerate from the launcher."
-    )
-    ws["D10"] = (
-        "Spread B9 is added to zero rates. Negative B9 lowers discount yields and raises PV—must match launcher."
-    )
-    ws["D11"] = (
-        f"See ModelCheck: Python snapshot vs {LIABILITY_SHEET_NAME}! formulas; large |Difference| means inputs/recalc issues."
-    )
 
 
 def _write_simple_table(ws, title: str, df: pd.DataFrame) -> None:
@@ -543,20 +549,24 @@ def _write_projection(ws, n_months: int, y_last_row: int, idx_last_row: int) -> 
         else:
             ws[f"V{r}"] = f"=SUMPRODUCT(S{r + 1}:S{last},O{r + 1}:O{last})/(N{r}*O{r})"
 
-    ws["W3"] = "Summary"
-    ws["W3"].font = Font(bold=True)
-    ws["W4"] = "PV Benefits"
-    ws["X4"] = f"=SUM(T{first}:T{last})"
-    ws["W5"] = "PV Monthly Expenses"
-    ws["X5"] = f"=SUM(U{first}:U{last})"
-    ws["W6"] = "Annuity Factor"
-    ws["X6"] = f"=SUMPRODUCT(N{first}:N{last},O{first}:O{last})"
-    ws["W7"] = "PV Monthly Total"
-    ws["X7"] = "=X4+X5"
-    ws["W8"] = "Single Premium"
-    ws["X8"] = "=(Inputs!$B$10+X7)/(1-Inputs!$B$11)"
-    ws["W9"] = "Reserve at t=0"
-    ws["X9"] = "=X7"
+    from excel_builder_helpers import (
+        LiabilitySummaryBlockSpec,
+        write_liability_summary_block,
+    )
+
+    write_liability_summary_block(
+        ws,
+        LiabilitySummaryBlockSpec(
+            rows=(
+                (4, "PV Benefits", f"=SUM(T{first}:T{last})"),
+                (5, "PV Monthly Expenses", f"=SUM(U{first}:U{last})"),
+                (6, "Annuity Factor", f"=SUMPRODUCT(N{first}:N{last},O{first}:O{last})"),
+                (7, "PV Monthly Total", "=X4+X5"),
+                (8, "Single Premium", "=(Inputs!$B$10+X7)/(1-Inputs!$B$11)"),
+                (9, "Reserve at t=0", "=X7"),
+            ),
+        ),
+    )
 
     ws["A2"] = "ReserveAtT0"
     ws["B2"] = 0

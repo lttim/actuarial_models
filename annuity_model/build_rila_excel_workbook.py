@@ -20,11 +20,15 @@ from excel_builder_helpers import (
     LIABILITY_SHEET_NAME,
     ALMExcelSnapshot,
     ExcelPythonSnapshot,
+    InputsSheetSpec,
+    LiabilitySummaryBlockSpec,
     alm_excel_downsample_snapshot,
     alm_excel_truncate_snapshot,
     inject_alm_projection_formula_cached_values,
     liability_layout_for,
     write_alm_projection_sheet,
+    write_inputs_sheet,
+    write_liability_summary_block,
     write_model_check_sheet,
 )
 from recalc_excel_shared import (
@@ -194,8 +198,6 @@ def build_rila_workbook_from_spec(
     wb = Workbook()
     ws_in = wb.active
     ws_in.title = SHEET_INPUTS
-    ws_in["A1"] = "RILA Inputs (matches model launcher / Python)"
-    ws_in["A1"].font = Font(bold=True, size=12)
     rows = [
         ("Issue age", spec.contract.issue_age),
         ("Participation", spec.contract.participation),
@@ -213,9 +215,13 @@ def build_rila_workbook_from_spec(
         ("Mortality mode (documentation)", spec.mortality_mode_label),
         ("Expense mode (documentation)", spec.expense_mode_label),
     ]
-    for i, (k, v) in enumerate(rows, start=3):
-        ws_in[f"A{i}"] = k
-        ws_in[f"B{i}"] = v
+    write_inputs_sheet(
+        ws_in,
+        InputsSheetSpec(
+            title="RILA Inputs (matches model launcher / Python)",
+            rows=rows,
+        ),
+    )
 
     nm = (
         f"=MIN(MAX(1,ROUND(({_in_addr('B', _IN_ROW_HORIZON)}"
@@ -388,20 +394,23 @@ def build_rila_workbook_from_spec(
         for c in (2, 3, 4, 5, 6, 15):
             ws_pr.cell(row=r, column=c).number_format = "0.000000"
 
-    ws_pr["W3"] = "Summary"
-    ws_pr["W3"].font = Font(bold=True)
-    ws_pr["W4"] = "PV benefits (claims)"
-    ws_pr["X4"] = f"=SUM(P{first}:P{last_cap_row})"
-    ws_pr["W5"] = "PV expenses"
-    ws_pr["X5"] = f"=SUM(Q{first}:Q{last_cap_row})"
-    ws_pr["W6"] = "Σ l_end · v (annuity-style factor)"
-    ws_pr["X6"] = f"=SUMPRODUCT(D{first}:D{last_cap_row},O{first}:O{last_cap_row})"
-    ws_pr["W7"] = "PV total (ben+exp)"
-    ws_pr["X7"] = "=X4+X5"
-    ws_pr["W8"] = "Single premium (export)"
-    ws_pr["X8"] = f"={SHEET_INPUTS}!$B${_IN_ROW_PREMIUM}"
-    ws_pr["W9"] = "Reserve at t=0"
-    ws_pr["X9"] = "=X7"
+    write_liability_summary_block(
+        ws_pr,
+        LiabilitySummaryBlockSpec(
+            rows=(
+                (4, "PV benefits (claims)", f"=SUM(P{first}:P{last_cap_row})"),
+                (5, "PV expenses", f"=SUM(Q{first}:Q{last_cap_row})"),
+                (
+                    6,
+                    "Σ l_end · v (annuity-style factor)",
+                    f"=SUMPRODUCT(D{first}:D{last_cap_row},O{first}:O{last_cap_row})",
+                ),
+                (7, "PV total (ben+exp)", "=X4+X5"),
+                (8, "Single premium (export)", f"={SHEET_INPUTS}!$B${_IN_ROW_PREMIUM}"),
+                (9, "Reserve at t=0", "=X7"),
+            ),
+        ),
+    )
 
     alm_layout = None
     alm_snap_for_book = None
