@@ -49,12 +49,39 @@
 /annuity_model/recalc_excel_shared.py           @lttim
 /annuity_model/product_excel.py                 @lttim
 
+# --- Load-bearing internals (P0 hardening 2026-04) ---
+# These files were previously only covered by the catch-all `*` rule above
+# but are critical to the platform contract -- a silent change to any of
+# them can break parity, the UI, or the dispatch surface. Promoting them
+# to explicit lines means a CODEOWNERS-required review before merge and a
+# clear signal to reviewers that these paths are load-bearing.
+/annuity_model/liability_layouts.py             @lttim
+/annuity_model/liability_dispatch.py            @lttim
+/annuity_model/excel_runtime_recalc.py          @lttim
+/annuity_model/data_registry.py                 @lttim
+/annuity_model/pricing_ui.py                    @lttim
+/annuity_model/streamlit_app.py                 @lttim
+/annuity_model/pricing_run_form_state.py        @lttim
+/annuity_model/_logging.py                      @lttim
+/annuity_model/_observability.py                @lttim
+
 # Parity contracts and the parity test suite are the model's public guarantees.
 # Tightening or relaxing tolerances always needs an actuarial sign-off.
 /annuity_model/docs/model_parity_contract.md    @lttim
 /annuity_model/docs/rila_parity_contract.md     @lttim
 /annuity_model/docs/parity_test_checklist.md    @lttim
 /annuity_model/tests/parity/                    @lttim
+# Golden ModelCheck snapshots: byte-exact pinned per-product metrics.
+# Touching these JSONs is the same as widening a parity tolerance and
+# MUST be reviewed by the actuarial owner. The test that gates them is
+# tests/parity/test_golden_modelcheck.py.
+/annuity_model/tests/parity/golden/             @lttim
+# mutmut PR-gate thresholds: raising any cap weakens the mutation gate
+# on parity-critical engines. Same review discipline as parity tolerances.
+/annuity_model/mutmut_thresholds.toml           @lttim
+# RUN_KEY drift ratchet: raising any per-file baseline reverses the
+# pricing_ui.py migration progress and must be reviewed.
+/annuity_model/tests/run_state_key_baseline.json @lttim
 
 # --- Agent guidance ---
 # Editing AGENTS.md or the .cursor/rules/ files changes how every future

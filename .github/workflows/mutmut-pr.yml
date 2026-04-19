@@ -1,0 +1,135 @@
+name: mutmut-pr (touched-files mutation gate)
+
+# PR-level mutation gate over the parity-critical surface. Complements
+# `mutmut-nightly.yml` (which runs the full surface as an artifact-only
+# baseline). This job runs ONLY on PRs that actually touch one of the
+# files in `MUTMUT_SURFACE` (defined in
+# `annuity_model/scripts/mutmut_pr_gate.py`); otherwise it short-circuits
+# in well under a minute.
+#
+# Why a separate workflow?
+#   * Time budget: even a touched-files-only mutmut run can take 10-15
+#     minutes on a single engine; co-tenanting it with the cross-OS
+#     pytest matrix would inflate p95 PR feedback time for every PR,
+#     including docs-only ones.
+#   * Failure semantics: this gate is allowed to be the *slowest*
+#     required check. The pytest matrix returns first; if that fails,
+#     the author iterates without ever paying the mutmut cost.
+#   * Required-status-checks decoupling: if mutmut becomes flaky on a
+#     given mutmut release, we can drop just this workflow from
+#     `branch-protection.json` without affecting the other gates.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      # Only run when one of the parity-critical files actually changed.
+      # The `MUTMUT_SURFACE` allow-list in scripts/mutmut_pr_gate.py is
+      # the source of truth; any change there should also be mirrored
+      # here. `tests/test_mutmut_pr_gate.py::test_surface_matches_nightly_workflow`
+      # catches surface drift between the gate and the nightly; the
+      # path filter below is a (deliberate) sub-set that limits when
+      # this expensive job spins up.
+      - "annuity_model/pricing_projection.py"
+      - "annuity_model/term_projection.py"
+      - "annuity_model/rila_projection.py"
+      - "annuity_model/alm_excel_ladder.py"
+      - "annuity_model/build_pricing_excel_workbook.py"
+      - "annuity_model/build_rila_excel_workbook.py"
+      - "annuity_model/build_term_excel_workbook.py"
+      - "annuity_model/excel_workbook_validator.py"
+      - "annuity_model/product_excel.py"
+      - "annuity_model/product_registry.py"
+      # Also re-run when the gate machinery itself changes -- a bug in
+      # the gate could otherwise hide a real regression.
+      - "annuity_model/scripts/mutmut_pr_gate.py"
+      - "annuity_model/mutmut_thresholds.toml"
+      - ".github/workflows/mutmut-pr.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  # Cancel superseded mutmut runs on the same PR -- only the latest
+  # commit matters for the gate.
+  group: mutmut-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mutmut-touched:
+    name: mutmut (touched parity-critical files)
+    runs-on: ubuntu-latest
+    # Single-engine PRs typically finish in <15min; the absolute worst
+    # case (a PR touching every parity-critical file) is bounded by the
+    # nightly's 60min ceiling. We deliberately set a tighter cap here so
+    # a runaway expansion is caught at PR review, not the next morning.
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: annuity_model
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Need at least the PR base + head so the touched-files diff
+          # below resolves correctly. `fetch-depth: 0` is the simplest
+          # safe choice; the perf cost is negligible on this small repo.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install runtime + dev dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.lock -r requirements-dev.txt
+
+      - name: Compute touched parity-critical files
+        id: diff
+        # Diff against the PR's true base SHA (not whatever main happens
+        # to be at run time). All paths are emitted relative to
+        # annuity_model/, which is what mutmut_pr_gate.py expects via
+        # --touched-files.
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          # Run from repo root for the diff so paths come out
+          # repo-relative; we then strip the `annuity_model/` prefix.
+          all=$(cd .. && git diff --name-only "$base" "$head" \
+              | grep -E '^annuity_model/[^/]+\.py$' \
+              | sed 's#^annuity_model/##' || true)
+          # Newline-separated -> space-separated for argv friendliness;
+          # GitHub Actions multi-line outputs need the heredoc form.
+          {
+            echo "files<<EOF"
+            echo "$all"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "Touched .py under annuity_model/:"
+          echo "$all" | sed 's/^/  - /'
+
+      - name: Run mutmut PR gate
+        # The gate itself filters --touched-files down to MUTMUT_SURFACE
+        # and short-circuits if the intersection is empty. We pass the
+        # full touched set deliberately so the script's no-op message
+        # appears in CI logs, which is useful for diagnosing "why didn't
+        # this run on my PR" confusion.
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2046  # word-splitting is intentional
+          python scripts/mutmut_pr_gate.py --touched-files \
+              $(echo "${{ steps.diff.outputs.files }}" | tr '\n' ' ')
+
+      - name: Upload mutmut artifacts on failure
+        # Survivor diffs are the actionable artifact -- without them the
+        # author just sees "X survivors over cap" with no path to fix.
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutmut-pr-${{ github.run_id }}
+          path: |
+            annuity_model/mutants
+          retention-days: 14
+          if-no-files-found: warn

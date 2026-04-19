@@ -47,6 +47,17 @@ from tests.parity.excel_formula_sim import (  # noqa: E402
     excel_disinvest_shortest_first,
 )
 
+try:  # noqa: E402
+    from excel_runtime_recalc import (
+        libreoffice_available,
+        read_recalculated_cells,
+        recalc_workbook,
+    )
+
+    _HAS_RUNTIME_RECALC = True
+except ImportError:  # pragma: no cover -- defensive
+    _HAS_RUNTIME_RECALC = False
+
 
 def _default_scenario() -> tuple[
     sp.SPIAContract,
@@ -89,14 +100,106 @@ def _row_for_month(
     return row
 
 
+def _excel_states_via_libreoffice(
+    *,
+    contract: sp.SPIAContract,
+    yc: sp.YieldCurve,
+    mort: sp.MortalityTableQx,
+    alm: sp.ALMAssumptions,
+    expenses: sp.ExpenseAssumptions,
+    pricing: sp.SPIAProjectionResult,
+    py_alm: sp.ALMResult,
+    horizon_age: int,
+    n_months: int,
+) -> list[dict[str, float]] | None:
+    """Build a SPIA + ALM workbook, recalc via LibreOffice, and read the
+    cached per-month ALM_Projection cells. Returns one dict per month with
+    asset_mv / liab_pv / surplus / borrowing pulled from the cached cells.
+
+    Returns ``None`` if LibreOffice is not available so callers can fall
+    back to a clearly-marked NaN trace instead of silently mirroring Python.
+    """
+    if not _HAS_RUNTIME_RECALC or not libreoffice_available():
+        return None
+
+    # Local imports to keep parity_trace usable when build_pricing_excel_workbook
+    # transitively breaks (e.g. mid-refactor); the trace falls back gracefully
+    # rather than refusing to run.
+    from build_pricing_excel_workbook import (
+        ALM_PROJECTION_FIRST_DATA_ROW,
+        alm_excel_snapshot_from_result,
+        build_workbook_from_spec,
+        excel_spec_from_launcher,
+    )
+
+    spec = excel_spec_from_launcher(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        spread=0.0,
+        valuation_year=2025,
+        expenses=expenses,
+        yield_mode_label="flat",
+        mortality_mode_label="qx",
+        expense_mode_label="manual",
+        index_s0=100.0,
+        index_levels_at_payment=np.full(int(pricing.times_years.shape[0]), 100.0),
+        expense_annual_inflation=0.0,
+    )
+    alm_snap = alm_excel_snapshot_from_result(py_alm, alm)
+    blob = build_workbook_from_spec(
+        spec, alm_snapshot=alm_snap, alm_assumptions=alm
+    )
+
+    recalculated = recalc_workbook(blob, timeout=180.0)
+    addrs: list[str] = []
+    # Columns on ALM_Projection: C=Asset MV, D=Liability PV, E=Borrowing,
+    # F=Surplus. First data row = ALM_PROJECTION_FIRST_DATA_ROW (=13).
+    for i in range(n_months):
+        r = ALM_PROJECTION_FIRST_DATA_ROW + i
+        addrs.extend(
+            [
+                f"ALM_Projection!C{r}",
+                f"ALM_Projection!D{r}",
+                f"ALM_Projection!E{r}",
+                f"ALM_Projection!F{r}",
+            ]
+        )
+    cells = read_recalculated_cells(recalculated, addrs)
+
+    out: list[dict[str, float]] = []
+    nan = float("nan")
+    for i in range(n_months):
+        r = ALM_PROJECTION_FIRST_DATA_ROW + i
+
+        def _f(addr: str) -> float:
+            v = cells.get(addr)
+            try:
+                return float(v) if v is not None else nan
+            except (TypeError, ValueError):
+                return nan
+
+        out.append(
+            {
+                "asset_mv": _f(f"ALM_Projection!C{r}"),
+                "liab_pv": _f(f"ALM_Projection!D{r}"),
+                "borrowing": _f(f"ALM_Projection!E{r}"),
+                "surplus": _f(f"ALM_Projection!F{r}"),
+            }
+        )
+    return out
+
+
 def _trace(horizon_months: int) -> list[dict[str, object]]:
     contract, yc, mort, alm, expenses = _default_scenario()
 
+    horizon_age = contract.issue_age + (horizon_months // 12) + 1
     pricing = sp.price_spia_single_premium(
         contract=contract,
         yield_curve=yc,
         mortality=mort,
-        horizon_age=contract.issue_age + (horizon_months // 12) + 1,
+        horizon_age=horizon_age,
         spread=0.0,
         expenses=expenses,
         expense_annual_inflation=0.0,
@@ -105,8 +208,35 @@ def _trace(horizon_months: int) -> list[dict[str, object]]:
         pricing=pricing, yield_curve=yc, spread=0.0, assumptions=alm
     )
 
-    rows: list[dict[str, object]] = []
     n = min(horizon_months, py.surplus.shape[0])
+
+    excel_states: list[dict[str, float]] | None = None
+    try:
+        excel_states = _excel_states_via_libreoffice(
+            contract=contract,
+            yc=yc,
+            mort=mort,
+            alm=alm,
+            expenses=expenses,
+            pricing=pricing,
+            py_alm=py,
+            horizon_age=horizon_age,
+            n_months=n,
+        )
+    except Exception as exc:  # noqa: BLE001 -- soffice is unreliable on dev laptops
+        sys.stderr.write(
+            f"warning: LibreOffice recalc failed ({exc!r}); "
+            f"Excel-side columns will be NaN for this trace.\n"
+        )
+
+    if excel_states is None:
+        sys.stderr.write(
+            "warning: LibreOffice not available; Excel-side trace columns "
+            "are NaN. Install libreoffice-calc to enable real Excel recalc.\n"
+        )
+
+    rows: list[dict[str, object]] = []
+    nan = float("nan")
     for m in range(n):
         py_state = {
             "asset_mv": float(py.asset_market_value[m]),
@@ -114,10 +244,18 @@ def _trace(horizon_months: int) -> list[dict[str, object]]:
             "surplus": float(py.surplus[m]),
             "borrowing": float(py.borrowing_balance[m]),
         }
-        # The Excel-side trace today mirrors the Python-side state because
-        # full Excel-formula evaluation is gated by xlcalculator (P4 work).
-        # When that lands, replace ``xl_state`` with the recomputed values.
-        xl_state = dict(py_state)
+        if excel_states is not None and m < len(excel_states):
+            xl_state = {
+                "asset_mv": excel_states[m]["asset_mv"],
+                "liab_pv": excel_states[m]["liab_pv"],
+                "surplus": excel_states[m]["surplus"],
+                "borrowing": excel_states[m]["borrowing"],
+            }
+        else:
+            # Sentinel NaN -- callers see this in the diff_* columns and know
+            # the Excel side did not contribute. Critically we DO NOT mirror
+            # py_state, so a green trace cannot accidentally hide drift.
+            xl_state = {k: nan for k in py_state}
         rows.append(_row_for_month(m + 1, py_state, xl_state))
     return rows
 
@@ -138,10 +276,23 @@ def export_trace(output_path: Path, *, steps: int, threshold: float) -> int:
 
     sys.stdout.write(f"Trace written to {output_path} ({len(rows)} rows)\n")
 
+    import math
+
     breaches: list[tuple[int, str, float]] = []
+    nan_diffs: list[tuple[int, str]] = []
     for row in rows:
         for key, val in row.items():
-            if key.startswith("diff_") and isinstance(val, float) and abs(val) > threshold:
+            if not key.startswith("diff_"):
+                continue
+            if not isinstance(val, float):
+                continue
+            if math.isnan(val):
+                # NaN diff means the Excel side could not contribute -- record
+                # so the user sees that the trace is one-sided rather than
+                # treating "abs(nan) > threshold == False" as a pass.
+                nan_diffs.append((int(row["month"]), key))  # type: ignore[arg-type]
+                continue
+            if abs(val) > threshold:
                 breaches.append((int(row["month"]), key, val))  # type: ignore[arg-type]
 
     if breaches:
@@ -151,6 +302,14 @@ def export_trace(output_path: Path, *, steps: int, threshold: float) -> int:
         if len(breaches) > 25:
             sys.stdout.write(f"  ... {len(breaches) - 25} more\n")
         return 1
+
+    if nan_diffs:
+        sys.stdout.write(
+            f"All numeric diffs within tolerance ({threshold}), but "
+            f"{len(nan_diffs)} entries are NaN (Excel side missing). "
+            f"Install libreoffice-calc to populate the Excel side.\n"
+        )
+        return 0
 
     sys.stdout.write(f"All metrics within tolerance ({threshold}).\n")
     return 0

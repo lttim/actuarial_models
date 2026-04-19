@@ -62,6 +62,23 @@ bench:
 ci: lint test smoke docs-check
     @echo "All CI gates passed locally."
 
+# AI-agent / contributor pre-merge gate: run the four canonical gates from
+# annuity_model/AGENTS.md in order and print "READY TO COMMIT" only when all
+# four exit 0. The PR template (.github/pull_request_template.md) lists the
+# same four gates as checkboxes; this recipe is the one-liner that ticks
+# them all in a single command.
+preflight:
+    @echo "[1/4] parity gate"
+    @cd annuity_model && python -m pytest tests/parity -q
+    @echo "[2/4] full unit-test suite"
+    @cd annuity_model && python -m pytest -q
+    @echo "[3/4] end-to-end smoke (3 products + Excel validator)"
+    @cd annuity_model && python scripts/deep_smoke.py
+    @echo "[4/4] tolerance docs in sync with parity_constants.py"
+    @cd annuity_model && python scripts/render_parity_contract.py --check
+    @echo ""
+    @echo "READY TO COMMIT: all four canonical gates passed."
+
 # Container build + smoke (requires Docker).
 docker-smoke:
     docker build -t annuity-model:dev .

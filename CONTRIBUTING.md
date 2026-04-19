@@ -35,6 +35,11 @@ All five must exit 0. CI will rerun them on every push to your PR.
 
 1. **Never weaken a tolerance to make a test pass.** Tolerances live in
    `parity_constants.py` and route through CODEOWNERS + `model_change_log.md`.
+   This is mechanically enforced in CI by
+   [`annuity_model/scripts/check_parity_constants_changelog.py`](annuity_model/scripts/check_parity_constants_changelog.py)
+   in the `pre-commit (lint + format + mypy)` job — any PR that modifies
+   `parity_constants.py` without also touching `docs/model_change_log.md`
+   fails the gate.
 2. **Every `wb.save(...)` is preceded by `validate_workbook_or_raise(wb)`.**
    The static validator is the only thing protecting users from malformed
    Excel formulas.

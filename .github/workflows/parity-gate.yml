@@ -4,27 +4,17 @@ name: parity-gate
 # requires this to be green before any PR can merge to main. Keep it lean:
 # parity tests + the static Excel validator are the only invariants that
 # absolutely cannot regress.
+#
+# Always-on policy (P0 hardening, 2026-04): this workflow runs on EVERY PR
+# regardless of which paths changed. Path filters were removed because new
+# product builders (e.g. ``build_<newproduct>_excel_workbook.py``) would
+# otherwise silently bypass the gate until someone remembered to update the
+# trigger glob. The job is also listed in
+# ``.github/branch-protection.json`` as a required status check.
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "annuity_model/pricing_projection.py"
-      - "annuity_model/term_projection.py"
-      - "annuity_model/rila_projection.py"
-      - "annuity_model/alm_excel_ladder.py"
-      - "annuity_model/build_*_excel_workbook.py"
-      - "annuity_model/excel_workbook_validator.py"
-      - "annuity_model/product_registry.py"
-      - "annuity_model/product_excel.py"
-      - "annuity_model/recalc_excel_shared.py"
-      - "annuity_model/tests/parity/**"
-      - "annuity_model/docs/*parity*.md"
-      - "annuity_model/parity_constants.py"
-      - "annuity_model/requirements*.txt"
-      - "annuity_model/requirements.lock"
-      - "annuity_model/pyproject.toml"
-      - ".github/workflows/parity-gate.yml"
   workflow_dispatch: {}
 
 permissions:
@@ -51,6 +41,11 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.lock -r requirements-dev.txt
+      - name: Install LibreOffice (runtime Excel recalc gate)
+        # Powers tests/parity/test_runtime_excel_recalc.py via
+        # excel_runtime_recalc.py. ~250 MB install but cached on the runner
+        # image. See docs/runbooks/runtime_excel_recalc_gate.md.
+        run: sudo apt-get update && sudo apt-get install -y libreoffice-calc
       - name: Parity tests (fast-fail, verbose)
         run: pytest tests/parity/ -x -v --tb=short
       - name: Static Excel formula validator (export + validate every product)

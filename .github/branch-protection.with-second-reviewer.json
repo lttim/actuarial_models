@@ -1,0 +1,33 @@
+{
+  "_comment": "PROFILE B (deferred activation). Drop-in replacement for branch-protection.json once a second CODEOWNER (or the @lttim/actuarial-reviewers team) exists. Differences vs. the active profile are CONFINED to required_pull_request_reviews -- everything else (status checks, linear history, force-push policy, conversation resolution) MUST stay byte-identical, and tests/test_branch_protection_drift.py asserts that drift. Apply when ready: gh api -X PUT repos/:owner/:repo/branches/main/protection --input .github/branch-protection.with-second-reviewer.json. See annuity_model/docs/CODEOWNERS_RATIONALE.md, section 'Second-CODEOWNER upgrade path', for the full activation checklist (CODEOWNERS uncomment + team creation + this profile swap, in that order).",
+  "required_status_checks": {
+    "strict": true,
+    "contexts": [
+      "tests (ubuntu-latest / py3.12)",
+      "tests (ubuntu-latest / py3.11)",
+      "tests (macos-14 / py3.12)",
+      "tests (macos-14 / py3.11)",
+      "tests (windows-latest / py3.12)",
+      "tests (windows-latest / py3.11)",
+      "pre-commit (lint + format + mypy)",
+      "docker build + deep_smoke in container",
+      "build-and-deploy",
+      "parity + validator (ubuntu / py3.12)"
+    ]
+  },
+  "enforce_admins": false,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 1,
+    "require_code_owner_reviews": true,
+    "dismiss_stale_reviews": true,
+    "require_last_push_approval": true
+  },
+  "restrictions": null,
+  "required_linear_history": true,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "required_conversation_resolution": true,
+  "lock_branch": false,
+  "allow_fork_syncing": false,
+  "block_creations": false
+}

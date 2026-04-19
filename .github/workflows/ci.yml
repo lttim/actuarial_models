@@ -22,6 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Need full history so the parity_constants <-> model_change_log
+          # guard can diff against the PR's true base SHA.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -32,6 +36,16 @@ jobs:
           pip install -r annuity_model/requirements.lock -r annuity_model/requirements-dev.txt pre-commit
       - name: Run pre-commit on all files
         run: pre-commit run --all-files --show-diff-on-failure
+      - name: Enforce parity_constants <-> model_change_log discipline
+        # Mechanical enforcement of the rule documented in CONTRIBUTING.md
+        # and parity_test_checklist.md: any change to parity_constants.py
+        # must be accompanied by an entry in model_change_log.md so reviewers
+        # can verify the justification and parity trace.
+        if: github.event_name == 'pull_request'
+        run: |
+          python annuity_model/scripts/check_parity_constants_changelog.py \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}"
 
   test:
     name: tests (${{ matrix.os }} / py${{ matrix.python-version }})
@@ -56,18 +70,16 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.lock -r requirements-dev.txt coverage[toml]
       - name: pytest with coverage
-        # `fail-under=55` is a ratchet, not the aspiration. Today's true
-        # coverage is ~59.6% and is dominated by pricing_ui.py (4103 LOC of
-        # Streamlit code that the test suite cannot exercise without a
-        # streamlit-tester harness, planned in the ui/ migration). The P0-P4
-        # commit set fail-under=85 aspirationally and CI never went green
-        # on it. Lower the bar to just below today's actual so it acts as a
-        # one-way ratchet: any new code without tests trips this gate.
-        # Restoration plan to 75-85% is tracked under the ui decomposition
-        # follow-up (annuity_model/ui/MIGRATION.md).
+        # The coverage gate is a one-way ratchet. The floor lives in
+        # annuity_model/pyproject.toml under [tool.coverage.report].fail_under
+        # and is enforced by scripts/ratchet_coverage.py so the threshold
+        # has a single source of truth (no more workflow vs. pyproject drift).
+        # See the script's docstring for how to bump the floor in a follow-up
+        # PR after improving coverage.
         run: |
           coverage run -m pytest tests/ tests/parity/ -q
-          coverage report --fail-under=55
+          coverage report
+          python scripts/ratchet_coverage.py --coverage-cmd python -m coverage
           coverage xml -o coverage.xml
       - name: Parity contract docs in sync with parity_constants
         run: python scripts/render_parity_contract.py --check

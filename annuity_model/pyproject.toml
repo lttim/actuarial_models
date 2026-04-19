@@ -112,25 +112,72 @@ exclude = [
 ]
 
 # --- Strict-mode core: the parity-critical surface area ---
-# Mypy is run strict on these modules in pre-commit and CI. Adding a new
-# product means adding its engine + builder modules to this list.
+# Mypy is run strict on these modules in pre-commit and CI.
 #
-# `pricing_projection` was restored to strict in 2026-04 (Wave 2.1) by adding
-# TypeGuard narrowing on `_is_numeric`, an explicit Mortality union annotation,
-# replacing pd.io.common.file_exists with os.path.exists, and float-narrowing
-# the np.flatnonzero loop index. `alm_excel_ladder` was restored to strict in
-# 2026-04 (Wave 2.2) by introducing typed `Ci()`/`Cl()` accessors that narrow
-# the `int | list[int]` union returned by the internal `C()` column registry,
-# annotating the `ws: Worksheet` parameter, and replacing inline `lambda i, d=di`
-# closures with named factory helpers so mypy can infer the parameter type.
+# We split the strict surface into two override blocks so the lists stay
+# self-documenting:
+#
+#   1. Hand-curated load-bearing core modules. These are the legacy flat
+#      modules that the entire product platform pivots on (engines,
+#      Excel-formula generators, validators, registries). Adding a new
+#      module here is a load-bearing decision.
+#
+#   2. A glob over `products.*.engine` (and `products.*.excel`). The new
+#      products subpackage layout (`annuity_model/products/<name>/...`)
+#      means any new product gets strict-mode coverage automatically as
+#      soon as it lands its `engine.py` shim -- no second commit to
+#      pyproject.toml required. tests/test_mypy_strict_glob.py asserts
+#      the glob actually covers every implemented product.
+#
+# Historical notes:
+#   `pricing_projection` was restored to strict in 2026-04 (Wave 2.1) by adding
+#   TypeGuard narrowing on `_is_numeric`, an explicit Mortality union annotation,
+#   replacing pd.io.common.file_exists with os.path.exists, and float-narrowing
+#   the np.flatnonzero loop index. `alm_excel_ladder` was restored to strict in
+#   2026-04 (Wave 2.2) by introducing typed `Ci()`/`Cl()` accessors that narrow
+#   the `int | list[int]` union returned by the internal `C()` column registry,
+#   annotating the `ws: Worksheet` parameter, and replacing inline `lambda i, d=di`
+#   closures with named factory helpers so mypy can infer the parameter type.
 [[tool.mypy.overrides]]
 module = [
+    # --- Calculation engines (Python source-of-truth) ---
     "pricing_projection",
-    "alm_excel_ladder",
     "term_projection",
     "rila_projection",
+    # --- Excel formula generation + workbook builders ---
+    "alm_excel_ladder",
+    "build_pricing_excel_workbook",
+    "build_term_excel_workbook",
+    "build_rila_excel_workbook",
+    "excel_builder_helpers",
     "excel_workbook_validator",
+    # --- Product registries + dispatch ---
     "product_registry",
+    "product_excel",
+    "liability_dispatch",
+    "liability_layouts",
+]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_unreachable = true
+no_implicit_reexport = true
+
+# Glob pattern: every per-product subpackage module is strict by construction.
+# `products.*.engine` matches `products.spia.engine`, `products.term.engine`,
+# `products.rila.engine`, and any future `products.<new>.engine` automatically.
+# Same for the Excel-builder shims under `.excel`. The shims are currently
+# thin re-exports, so the strict mode mostly enforces import discipline -- but
+# once the engines physically migrate into these files (P5 Wave 3.3) the same
+# pattern keeps them strict without further pyproject churn.
+[[tool.mypy.overrides]]
+module = [
+    "products",
+    "products.*",
+    "products.*.engine",
+    "products.*.excel",
+    "products.*.schema",
+    "products.*.ui",
 ]
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
@@ -171,3 +218,20 @@ exclude_lines = [
     "raise NotImplementedError",
     "@overload",
 ]
+# RATCHET FLOOR -- single source of truth for the coverage gate.
+#
+# `scripts/ratchet_coverage.py` reads this value, runs the test-derived
+# `coverage report --format=total`, and fails if the actual percentage drops
+# below `fail_under`. CI invokes the script instead of passing a literal
+# `--fail-under` so the gate cannot drift between this file and the workflow.
+#
+# Bumping the floor is a deliberate, reviewer-gated act:
+#   * Run `python scripts/ratchet_coverage.py --update` locally.
+#   * Commit the resulting `fail_under = X` change in the same PR as the new
+#     tests that justify it. The script will refuse to lower the floor; only
+#     manual edits can do that, and CODEOWNERS protects this file.
+#
+# History: started at 55.0 (covered ~59.6% headline, dominated by
+# pricing_ui.py uncovered Streamlit code). The ratchet is one-way upward to
+# prevent silent regressions when new code lands without tests.
+fail_under = 55.0

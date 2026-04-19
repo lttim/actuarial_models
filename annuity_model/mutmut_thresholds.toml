@@ -1,0 +1,47 @@
+# mutmut PR-level survivor thresholds
+# =====================================
+# Per-file caps on the number of *surviving* mutants permitted before
+# `scripts/mutmut_pr_gate.py` fails the gate. Survivors are mutants whose
+# behavioural change was NOT detected by the test suite -- i.e. coverage
+# gaps with teeth.
+#
+# Philosophy
+# ----------
+# The default is **zero** for every file in the parity-critical surface.
+# Any non-zero entry is a deliberate, reviewed concession that:
+#   1. We have inspected the surviving mutants in the nightly run, and
+#   2. We have either (a) a tracked follow-up to kill them, or
+#      (b) a documented reason they are not killable with a finite test
+#          (e.g. defensive `assert False, "unreachable"` paths, formatter
+#          tail-ifs that exist for typing).
+#
+# Any *increase* to a threshold below requires CODEOWNERS approval (this
+# file is covered by the same blanket rule that protects parity_constants
+# and product_registry).
+#
+# Wiring
+# ------
+# - `scripts/mutmut_pr_gate.py` reads this file at run time.
+# - `tests/test_mutmut_pr_gate.py` asserts every key in `[thresholds.per_file]`
+#   resolves to a real source file under `MUTMUT_SURFACE`, so a rename
+#   never silently drops the cap.
+# - `.github/workflows/mutmut-pr.yml` invokes the gate with the touched
+#   subset of files; non-touched files are skipped entirely (nightly
+#   covers full-surface runs).
+
+[thresholds]
+# Default cap when a file is not explicitly listed below. Hard zero so
+# any new survivor in any newly touched file fails the gate.
+default = 0
+
+[thresholds.per_file]
+# Add per-file overrides ONLY with a one-line justification comment
+# directly above the entry, in the form:
+#
+#   # <reason>; tracked-issue: #<num>; baseline: <YYYY-MM-DD nightly>
+#
+# Empty by design today; the nightly mutmut workflow has not yet
+# stabilised a survivor baseline (see annuity_model/docs/CHANGELOG.md
+# "Wave 6.2"). When that baseline lands, file-by-file thresholds get
+# committed here in the same PR that promotes the gate to PR-level
+# enforcement.

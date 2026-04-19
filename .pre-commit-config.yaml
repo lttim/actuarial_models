@@ -73,7 +73,31 @@ repos:
     hooks:
       - id: mypy
         name: mypy (parity-critical core)
-        files: ^annuity_model/(pricing_projection|alm_excel_ladder|term_projection|rila_projection|excel_workbook_validator|product_registry)\.py$
+        # Match (1) the load-bearing flat modules and (2) every per-product
+        # subpackage shim under annuity_model/products/<name>/. The actual
+        # strict-mode rules live in annuity_model/pyproject.toml under the
+        # `[[tool.mypy.overrides]]` blocks (one for hand-curated core, one
+        # for the products.*.<submodule> glob). Adding a new product no
+        # longer requires editing this regex -- the products/*/*.py branch
+        # picks it up automatically. tests/test_mypy_strict_glob.py keeps
+        # the two halves in sync.
+        files: |
+          (?x)^annuity_model/(
+              (pricing_projection
+               |term_projection
+               |rila_projection
+               |alm_excel_ladder
+               |build_pricing_excel_workbook
+               |build_term_excel_workbook
+               |build_rila_excel_workbook
+               |excel_builder_helpers
+               |excel_workbook_validator
+               |product_registry
+               |product_excel
+               |liability_dispatch
+               |liability_layouts)\.py
+              |products/[^/]+/(engine|excel|schema|ui|__init__)\.py
+          )$
         args:
           - "--config-file=annuity_model/pyproject.toml"
         additional_dependencies:

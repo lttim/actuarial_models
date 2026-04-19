@@ -1,5 +1,5 @@
 {
-  "_comment": "Branch protection profile for `main`. Apply with: gh api -X PUT repos/:owner/:repo/branches/main/protection --input .github/branch-protection.json. See annuity_model/docs/CHANGELOG.md (Wave 7) for the rationale and the second-CODEOWNER upgrade path. Keep the contexts list in lockstep with the job names in .github/workflows/ -- if you rename a job here, rename it there in the same PR, otherwise PRs will hang forever waiting on a status that never reports.",
+  "_comment": "ACTIVE branch protection profile for `main`. Apply with: gh api -X PUT repos/:owner/:repo/branches/main/protection --input .github/branch-protection.json. required_pull_request_reviews is intentionally null because the repo currently has exactly one CODEOWNER and GitHub blocks self-approval -- requiring reviews would deadlock every PR. The drop-in replacement profile that flips reviews on (for the day a second CODEOWNER lands) is `.github/branch-protection.with-second-reviewer.json`; tests/test_branch_protection_drift.py asserts the two profiles stay byte-identical outside required_pull_request_reviews. See annuity_model/docs/CODEOWNERS_RATIONALE.md, section 'Second-CODEOWNER upgrade path', for the activation checklist. Keep the contexts list in lockstep with the job names in .github/workflows/ -- if you rename a job here, rename it there in the same PR, otherwise PRs will hang forever waiting on a status that never reports.",
   "required_status_checks": {
     "strict": true,
     "contexts": [
@@ -11,7 +11,8 @@
       "tests (windows-latest / py3.11)",
       "pre-commit (lint + format + mypy)",
       "docker build + deep_smoke in container",
-      "build-and-deploy"
+      "build-and-deploy",
+      "parity + validator (ubuntu / py3.12)"
     ]
   },
   "enforce_admins": false,
