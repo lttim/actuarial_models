@@ -259,7 +259,7 @@ def _price_rila(rate: float, age: int) -> object:
         horizon_age=min(age + 20, 120),
         spread=0.0,
         valuation_year=None,
-        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        expenses=None,
     )
 
 

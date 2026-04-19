@@ -11,6 +11,8 @@ from portfolio import PolicyInput, Portfolio, RunScenario
 from portfolio_runner import run_portfolio
 from product_registry import ProductType
 
+import rila_projection as rp
+
 
 def _scenario() -> RunScenario:
     yc = sp.YieldCurve.from_flat_rate(0.04)
@@ -48,6 +50,34 @@ def test_run_portfolio_parallel_matches_serial() -> None:
     assert float(a.liability_path_total.expected_total_cashflows.sum()) == pytest.approx(
         float(b.liability_path_total.expected_total_cashflows.sum())
     )
+
+
+def test_default_portfolio_scenario_rila_has_positive_outputs() -> None:
+    """Regression: zero-expense portfolio scenarios priced RILA at SP=0 (degenerate)."""
+    from portfolio_scenario import default_run_scenario
+
+    scen = default_run_scenario()
+    pol = Portfolio(
+        policies=(
+            PolicyInput(
+                ProductType.RILA,
+                rp.RILAContract(
+                    issue_age=55,
+                    sex="female",
+                    participation=0.8,
+                    cap=0.07,
+                    floor=0.0,
+                    rider_fee_annual=0.01,
+                ),
+            ),
+        )
+    )
+    res = run_portfolio(portfolio=pol, scenario=scen)
+    rila_pr = next(pr for pr in res.policy_results if pr.product_type == ProductType.RILA)
+    sp = float(getattr(rila_pr.pricing, "single_premium"))
+    assert sp > 0.0
+    cf_sum = float(np.sum(np.asarray(rila_pr.pricing.expected_total_cashflows, dtype=float)))
+    assert cf_sum > 0.0
 
 
 def test_run_portfolio_two_spias_mixed_types() -> None:

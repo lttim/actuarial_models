@@ -39,6 +39,19 @@ row must include a `product_type` cell matching `ProductType.value` and
 product-specific columns consistent with the underlying `*Contract` dataclass
 for that type.
 
+## Default economic package (`portfolio_scenario.default_run_scenario`)
+
+CLI and UI portfolio runs use this helper: flat Treasury-style curve, flat
+`synthetic` `q_x` mortality, and **placeholder US expenses** loaded from
+`pricing_projection.DEFAULT_EXPENSES_CSV` when the file is present.
+
+RILA’s single premium is implied from the **expense budget** (policy fee + PV
+of monthly expenses). An all-zero `ExpenseAssumptions` object collapses that
+premium—and therefore every scaled benefit flow—to **exactly zero**, which is
+mathematically self-consistent but not a useful portfolio row. The default
+scenario therefore mirrors typical Pricing Run expense loading rather than
+using literal zeros.
+
 ## Scalar rollups (`ProductTypeRollupScalars`)
 
 Per type, the runner records:

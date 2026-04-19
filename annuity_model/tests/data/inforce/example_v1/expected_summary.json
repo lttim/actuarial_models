@@ -4,20 +4,20 @@
     "myga": {
       "policy_count": 1,
       "sum_single_premium": 100000.0,
-      "sum_undiscounted_cashflows": 123392.00823348563,
-      "rollup_cf_sum": 123392.00823348563
+      "sum_undiscounted_cashflows": 124819.93720186477,
+      "rollup_cf_sum": 124819.93720186477
     },
     "rila": {
       "policy_count": 1,
-      "sum_single_premium": 0.0,
-      "sum_undiscounted_cashflows": 0.0,
-      "rollup_cf_sum": 0.0
+      "sum_single_premium": 6628.2500150276055,
+      "sum_undiscounted_cashflows": 11331.690550504805,
+      "rollup_cf_sum": 11331.690550504805
     },
     "spia": {
       "policy_count": 1,
-      "sum_single_premium": 1107735.8525849432,
-      "sum_undiscounted_cashflows": 1798306.2521913985,
-      "rollup_cf_sum": 1798306.2521913985
+      "sum_single_premium": 1123373.5980122592,
+      "sum_undiscounted_cashflows": 1805049.9006371165,
+      "rollup_cf_sum": 1805049.9006371165
     },
     "term_life": {
       "policy_count": 1,
@@ -28,9 +28,9 @@
     "universal_life": {
       "policy_count": 1,
       "sum_single_premium": 30000.0,
-      "sum_undiscounted_cashflows": 32406.119052828333,
-      "rollup_cf_sum": 32406.119052828333
+      "sum_undiscounted_cashflows": 45184.08889099562,
+      "rollup_cf_sum": 45184.08889099562
     }
   },
-  "total_cf_sum": 1997682.3080885655
+  "total_cf_sum": 2029963.5458913345
 }

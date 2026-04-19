@@ -14,12 +14,23 @@ def default_run_scenario(
     flat_rate: float = 0.04,
     qx_flat: float = 0.02,
 ) -> RunScenario:
-    """Flat yield, flat q_x mortality, zero expenses — matches many unit tests."""
+    """Flat yield, flat q_x mortality, placeholder US expenses (default CSV).
+
+    RILA (and other implicit-premium products) need a **positive expense budget**
+    in the numerator of the single-premium equation; an all-zero
+    :class:`~pricing_projection.ExpenseAssumptions` snapshot degenerates to
+    ``single_premium == 0`` and zero liability cashflows. Loading the same
+    placeholder expense table used elsewhere keeps portfolio runs aligned
+    with typical Pricing Run assumptions.
+    """
     yc = sp.YieldCurve.from_flat_rate(flat_rate)
     ages = np.arange(0, 121, dtype=int)
     qx = np.full_like(ages, qx_flat, dtype=float)
     mort = sp.MortalityTableQx(ages, qx)
-    ex = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    try:
+        ex = sp.ExpenseAssumptions.load_from_csv(sp.DEFAULT_EXPENSES_CSV)
+    except (FileNotFoundError, ValueError, KeyError):
+        ex = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
     return RunScenario(
         yield_curve=yc,
         mortality=mort,

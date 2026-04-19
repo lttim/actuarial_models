@@ -125,12 +125,9 @@ def _scenario_rila() -> dict[str, float]:
         participation=0.8, cap=0.07, floor=0.0, rider_fee_annual=0.0,
     )
     n_months = (70 - 60) * 12
-    # RILA's single_premium is computed implicitly from the expense PV
-    # (see rila_projection.price_rila_single_premium line ~292: the SP
-    # closes the equation `denom = 1 - rate - K`). Passing zero expenses
-    # produces a degenerate SP=0 / AV=0 / PV=0 snapshot that any engine
-    # change would still satisfy; the existing per-product RILA parity
-    # test uses the same flat-fee convention shown here.
+    # RILA single premium closes the implicit equation from scheduled expenses
+    # (see ``rila_projection.price_rila_single_premium``); use a positive
+    # monthly expense so the snapshot is economically meaningful.
     res = rila.price_rila_single_premium(
         contract=contract, yield_curve=_flat_yc(),
         mortality=_synthetic_mortality(),

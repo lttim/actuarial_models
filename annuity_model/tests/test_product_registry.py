@@ -276,7 +276,8 @@ def test_pricing_metrics_for_spia_product():
 
 
 def test_pricing_metrics_for_rila_product():
-    contract, yc, mort, ex = _setup_case()
+    contract, yc, mort, _ex = _setup_case()
+    ex_rila = sp.ExpenseAssumptions(0.0, 0.0, 25.0)
     rila_c = rp.RILAContract(
         issue_age=contract.issue_age,
         sex=contract.sex,
@@ -292,7 +293,7 @@ def test_pricing_metrics_for_rila_product():
         horizon_age=78,
         spread=0.0,
         valuation_year=None,
-        expenses=ex,
+        expenses=ex_rila,
         index_scenario_csv_path=None,
         expense_annual_inflation=0.0,
     )
@@ -347,7 +348,8 @@ def test_product_ui_config_export_filenames():
 
 
 def test_rila_adapter_price_matches_direct():
-    contract, yc, mort, ex = _setup_case()
+    contract, yc, mort, _ex = _setup_case()
+    ex_rila = sp.ExpenseAssumptions(0.0, 0.0, 25.0)
     rila_c = rp.RILAContract(
         issue_age=contract.issue_age,
         sex=contract.sex,
@@ -364,7 +366,7 @@ def test_rila_adapter_price_matches_direct():
         horizon_age=82,
         spread=0.0,
         valuation_year=None,
-        expenses=ex,
+        expenses=ex_rila,
         expenses_csv_path=sp.DEFAULT_EXPENSES_CSV,
         index_scenario_csv_path=None,
         expense_annual_inflation=0.0,
@@ -376,7 +378,7 @@ def test_rila_adapter_price_matches_direct():
         horizon_age=82,
         spread=0.0,
         valuation_year=None,
-        expenses=ex,
+        expenses=ex_rila,
         index_scenario_csv_path=None,
         expense_annual_inflation=0.0,
     )

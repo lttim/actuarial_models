@@ -8,6 +8,37 @@ import rila_projection as rp
 
 pytestmark = pytest.mark.product_rila
 
+# Non-zero monthly expense so implicit single-premium pricing is well-posed
+# (all-zero expenses degenerate to premium 0 and are rejected by the engine).
+_RILA_EX = sp.ExpenseAssumptions(0.0, 0.0, 25.0)
+
+
+def test_all_zero_expense_assumptions_rejected():
+    contract = rp.RILAContract(
+        issue_age=65,
+        sex="male",
+        participation=0.8,
+        cap=0.1,
+        floor=0.0,
+        rider_fee_annual=0.01,
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.full_like(ages, 0.02, dtype=float)
+    mort = sp.MortalityTableQx(ages, qx)
+    with pytest.raises(ValueError, match="non-positive"):
+        rp.price_rila_single_premium(
+            contract=contract,
+            yield_curve=yc,
+            mortality=mort,
+            horizon_age=80,
+            spread=0.0,
+            valuation_year=None,
+            expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+            index_scenario_csv_path=None,
+            expense_annual_inflation=0.0,
+        )
+
 
 def test_segment_credited_return_respects_cap_floor():
     assert rp.segment_credited_return(
@@ -21,7 +52,8 @@ def test_segment_credited_return_respects_cap_floor():
     ) == pytest.approx(0.04)
 
 
-def test_flat_index_zero_crediting_scales_premium():
+def test_flat_index_zero_crediting_and_positive_premium():
+    """Flat index + zero rider fee implies zero segment crediting; premium is expense-driven."""
     contract = rp.RILAContract(
         issue_age=65,
         sex="male",
@@ -34,7 +66,7 @@ def test_flat_index_zero_crediting_scales_premium():
     ages = np.arange(0, 121, dtype=int)
     qx = np.clip(0.01 + ages * 1e-5, 1e-6, 0.35)
     mort = sp.MortalityTableQx(ages, qx)
-    ex = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    ex = _RILA_EX
     res = rp.price_rila_single_premium(
         contract=contract,
         yield_curve=yc,
@@ -46,7 +78,7 @@ def test_flat_index_zero_crediting_scales_premium():
         index_scenario_csv_path=None,
         expense_annual_inflation=0.0,
     )
-    res2 = rp.price_rila_single_premium(
+    res_dup = rp.price_rila_single_premium(
         contract=contract,
         yield_curve=yc,
         mortality=mort,
@@ -54,11 +86,11 @@ def test_flat_index_zero_crediting_scales_premium():
         spread=0.0,
         valuation_year=None,
         expenses=ex,
-        index_s0=100.0,
-        index_levels_payment=np.full(int(res.months.shape[0]), 200.0, dtype=float),
+        index_scenario_csv_path=None,
         expense_annual_inflation=0.0,
     )
-    np.testing.assert_allclose(res.single_premium, res2.single_premium, rtol=0, atol=1e-6)
+    assert res.single_premium > 0.0
+    np.testing.assert_allclose(res.single_premium, res_dup.single_premium, rtol=0, atol=1e-6)
     assert np.allclose(res.segment_credited_rate, 0.0)
 
 
@@ -75,7 +107,7 @@ def test_liability_path_alm_runs():
     ages = np.arange(0, 121, dtype=int)
     qx = np.full_like(ages, 0.02, dtype=float)
     mort = sp.MortalityTableQx(ages, qx)
-    ex = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    ex = _RILA_EX
     res = rp.price_rila_single_premium(
         contract=contract,
         yield_curve=yc,
@@ -128,7 +160,7 @@ def test_monte_carlo_shape():
         horizon_age=85,
         spread=0.0,
         valuation_year=None,
-        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        expenses=_RILA_EX,
         n_sims=20,
         annual_drift=0.05,
         annual_vol=0.12,
@@ -197,7 +229,7 @@ def test_monte_carlo_skip_policy_records_infeasible_paths():
         horizon_age=110,
         spread=0.0,
         valuation_year=None,
-        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        expenses=_RILA_EX,
         n_sims=100,
         annual_drift=0.06,
         annual_vol=0.15,
@@ -236,7 +268,7 @@ def test_monte_carlo_raise_policy_preserves_legacy_behavior():
             horizon_age=110,
             spread=0.0,
             valuation_year=None,
-            expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+            expenses=_RILA_EX,
             n_sims=10,
             annual_drift=0.06,
             annual_vol=0.15,
@@ -267,7 +299,7 @@ def test_monte_carlo_benign_params_have_no_infeasible_paths():
         horizon_age=85,
         spread=0.0,
         valuation_year=None,
-        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        expenses=_RILA_EX,
         n_sims=40,
         annual_drift=0.04,
         annual_vol=0.12,
@@ -301,7 +333,7 @@ def test_monte_carlo_all_paths_infeasible_raises():
             horizon_age=110,
             spread=0.0,
             valuation_year=None,
-            expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+            expenses=_RILA_EX,
             n_sims=8,
             annual_drift=0.30,
             annual_vol=0.05,

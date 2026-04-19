@@ -221,7 +221,7 @@ def test_rila_long_horizon_workbook_passes_excel_formula_validation():
     ages = np.arange(0, 121, dtype=int)
     qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
     mort = sp.MortalityTableQx(ages, qx)
-    ex = sp.ExpenseAssumptions(0.0, 0.01, 0.0)
+    ex = sp.ExpenseAssumptions(0.0, 0.01, 25.0)
     n_months = int(round((110 - contract.issue_age) * 12))
     levels = np.full(n_months, 100.0, dtype=float)
     res = rp.price_rila_single_premium(

@@ -898,7 +898,7 @@ def test_run_alm_projection_from_pricing_result_dispatches_spia_and_term():
         horizon_age=70,
         spread=0.0,
         valuation_year=None,
-        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        expenses=None,
         index_scenario_csv_path=None,
         expense_annual_inflation=0.0,
     )

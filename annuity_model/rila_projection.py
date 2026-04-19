@@ -290,6 +290,16 @@ def price_rila_single_premium(
     if denom <= 1e-12:
         raise RILAPricingInfeasibleError(k_loading=float(K), premium_expense_rate=float(rate))
     single_premium = float((float(expenses.policy_expense_dollars) + pv_exp_sched) / denom)
+    if not np.isfinite(single_premium) or single_premium <= 0.0:
+        raise ValueError(
+            "RILA priced single premium is non-positive. With the current implicit premium "
+            "formula, the numerator is policy expenses plus the PV of scheduled monthly "
+            "expenses; if both are zero (and there is no premium expense loading that "
+            "forces a positive premium), the closed-form premium collapses to zero and "
+            "all scaled cashflows vanish. Load non-zero :class:`~pricing_projection.ExpenseAssumptions` "
+            "(for example via ``ExpenseAssumptions.load_from_csv(pricing_projection.DEFAULT_EXPENSES_CSV)``) "
+            "or pass explicit positive policy / monthly expense dollars."
+        )
 
     expected_benefit_cashflows = claims_rel * single_premium
     expected_claim_cashflows = np.asarray(expected_benefit_cashflows, dtype=float)
