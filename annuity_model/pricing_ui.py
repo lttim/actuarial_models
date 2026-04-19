@@ -73,6 +73,9 @@ from product_registry import (
     get_product_mortality_mode_options,
     get_product_ui_config,
     get_term_contract_ui_config,
+    parse_term_benefit_timing_label,
+    parse_term_length_label_to_years,
+    parse_term_premium_mode_label,
     product_label,
     product_options_for_ui,
 )
@@ -2568,14 +2571,23 @@ def _render_run_and_results() -> None:
             expense_annual_inflation = float(expense_inflation_pct) / 100.0
 
             if selected_product == ProductType.TERM_LIFE:
+                # Parse Term selectbox labels via the canonical maps in
+                # product_registry. Hard-coding term_years/premium_mode/
+                # benefit_timing here is a regression -- see
+                # tests/test_pricing_ui_term_config.py.
+                term_years_value = parse_term_length_label_to_years(str(term_choice))
+                premium_mode_value = parse_term_premium_mode_label(str(premium_mode_choice))
+                benefit_timing_value = parse_term_benefit_timing_label(
+                    str(benefit_timing_choice)
+                )
                 contract = tp.TermLifeContract(
                     issue_age=int(issue_age),
                     sex="male" if sex == "male" else "female",
                     death_benefit=float(benefit_annual),
                     monthly_premium=float(monthly_premium),
-                    term_years=20,
-                    premium_mode="level_monthly",
-                    benefit_timing="eoy_death",
+                    term_years=int(term_years_value),
+                    premium_mode=premium_mode_value,  # type: ignore[arg-type]
+                    benefit_timing=benefit_timing_value,  # type: ignore[arg-type]
                 )
             elif selected_product == ProductType.RILA:
                 contract = rp.RILAContract(
