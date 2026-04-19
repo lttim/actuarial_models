@@ -30,6 +30,8 @@ from __future__ import annotations
 
 from typing import Final
 
+from parity_constants import PORTFOLIO_ROLLUP_TOL
+
 # ---------------------------------------------------------------------------
 # MYGA: $100k SP, 4.5% rate, 5y guarantee, age 60.
 # ---------------------------------------------------------------------------
@@ -169,6 +171,25 @@ VUL_SENSITIVITY_EPS: Final[float] = 1.0
 """VUL sensitivity sign tolerance (USD)."""
 
 # ---------------------------------------------------------------------------
+# Portfolio (canonical 5-policy example inforce; undiscounted CF rollups).
+# ---------------------------------------------------------------------------
+
+PORTFOLIO_TOTAL_CF_SUM_LO: Final[float] = 1_800_000.0
+"""Lower band for sum of monthly expected liability cashflows (example inforce)."""
+
+PORTFOLIO_TOTAL_CF_SUM_HI: Final[float] = 2_200_000.0
+"""Upper band for sum of monthly expected liability cashflows (example inforce)."""
+
+PORTFOLIO_DURATION_GAP_LO: Final[float] = -50.0
+"""Wide lower band for portfolio ALM duration gap when ALM is wired (years)."""
+
+PORTFOLIO_DURATION_GAP_HI: Final[float] = 50.0
+"""Wide upper band for portfolio ALM duration gap when ALM is wired (years)."""
+
+PORTFOLIO_SUM_CONSISTENCY_TOL: Final[float] = PORTFOLIO_ROLLUP_TOL
+"""Elementwise tolerance: sum(by-type monthly CF) == portfolio total (see parity_constants)."""
+
+# ---------------------------------------------------------------------------
 # Public surface (every constant must appear in __all__ for the
 # render_actuarial_benchmarks.py reflection check).
 # ---------------------------------------------------------------------------
@@ -209,4 +230,10 @@ __all__ = [
     "VUL_BENCHMARK_AV_20Y_MC_HI",
     "VUL_BENCHMARK_AV_20Y_MC_LO",
     "VUL_SENSITIVITY_EPS",
+    # Portfolio
+    "PORTFOLIO_DURATION_GAP_HI",
+    "PORTFOLIO_DURATION_GAP_LO",
+    "PORTFOLIO_SUM_CONSISTENCY_TOL",
+    "PORTFOLIO_TOTAL_CF_SUM_HI",
+    "PORTFOLIO_TOTAL_CF_SUM_LO",
 ]

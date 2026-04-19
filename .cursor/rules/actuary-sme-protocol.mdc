@@ -1,0 +1,384 @@
+---
+description: Actuary SME review protocol -- !actuaryreview command + natural-language equivalents + autonomous fix-and-rereview loop
+alwaysApply: true
+---
+
+# Actuary SME Review Protocol (`!actuaryreview`)
+
+This is the always-on protocol for the **Actuary SME** review workflow.
+It defines:
+
+1. The explicit `!actuaryreview` command and its arguments.
+2. The natural-language phrases that trigger the same workflow.
+3. The auto-trigger conditions that fire the workflow without an
+   explicit invocation.
+4. The orchestration: evidence collection -> readonly subagent ->
+   verdict file -> autonomous fix-and-rereview loop with safeguards.
+5. The verdict storage convention.
+
+The skill that defines the SME persona, checklist, and verdict template
+is at `annuity_model/.cursor/skills/actuary-sme/SKILL.md`. The rule
+here defines the orchestration; the skill defines the judgment.
+
+---
+
+## 1. Triggers
+
+### 1.1 Explicit commands
+
+When the user types one of these as a message (or as the first token
+of a message), treat it as the command -- not natural language.
+
+| Command | Behavior |
+|---|---|
+| `!actuaryreview` | Incremental review: diff of current work-tree vs `HEAD`. Default scope. |
+| `!actuaryreview full` | Full project review across all 10 products + cross-product / documentation consistency. |
+| `!actuaryreview <product>` | Focused review of one product (`spia`, `term`, `rila`, `myga`, `fia`, `va`, `wl`, `ul`, `iul`, `vul`). |
+| `!actuaryreview portfolio` | Same as `!actuaryreview product:portfolio` -- multi-policy aggregation, inforce I/O, portfolio workbook. |
+| `!actuaryreview status` | List the most recent verdict files under `.cursor/actuary-reviews/` (newest first, ~10 entries). Do NOT run the loop. |
+
+### 1.2 Natural-language equivalents
+
+If a user message contains any of the following phrases (case
+insensitive, anywhere in the message), treat the message as
+semantically identical to `!actuaryreview` and follow the formal
+orchestration in §2. Do NOT improvise an in-line "let me just look at
+that for you" review -- the artifact (verdict file under
+`.cursor/actuary-reviews/`) is required in every case.
+
+- "actuary review"
+- "actuarial review"
+- "actuary SME review" / "actuarial SME review"
+- "have the actuary review"
+- "ask the actuary"
+- "review by the actuary"
+- "actuary, please review" / "Actuary SME, please review"
+- "do an actuary review" / "do actuary review"
+
+If the user's phrasing also includes a scope hint -- "do a full
+actuary review", "actuary review for FIA", etc. -- map it to the
+matching command argument:
+
+- "full" -> `!actuaryreview full`
+- product code or display name in the message -> `!actuaryreview <code>`
+  (use `portfolio` for the multi-policy runner / inforce / aggregation surface)
+- otherwise -> `!actuaryreview` (incremental)
+
+### 1.3 Auto-trigger (always-on)
+
+Before declaring any task done that included an **edit / write** (not
+a read-only inspection) to any file matching one of the following
+globs in the current session, the agent MUST self-fire `!actuaryreview`
+and surface the verdict before claiming task-complete.
+
+Auto-trigger globs:
+
+- `annuity_model/*_projection.py`
+- `annuity_model/build_*_excel_workbook.py`
+- `annuity_model/alm_excel_ladder.py`
+- `annuity_model/excel_builder_helpers.py`
+- `annuity_model/parity_constants.py`
+- `annuity_model/actuarial_benchmarks.py`
+- `annuity_model/account_value.py`
+- `annuity_model/crediting.py`
+- `annuity_model/lapse.py`
+- `annuity_model/mortality_2017_cso.py`
+- `annuity_model/data_registry.py`
+- `annuity_model/products/*/engine.py`
+- `annuity_model/products/*/excel.py`
+- `annuity_model/products/*/schema.py`
+- `annuity_model/liability_layouts.py`
+- `annuity_model/liability_dispatch.py`
+- `annuity_model/product_excel.py`
+- `annuity_model/product_registry.py`
+- `annuity_model/portfolio.py`
+- `annuity_model/portfolio_runner.py`
+- `annuity_model/liability_aggregation.py`
+- `annuity_model/build_portfolio_excel_workbook.py`
+- `annuity_model/inforce_io.py`
+- `annuity_model/inforce_parsers.py`
+- `annuity_model/products/*/inforce.py`
+
+Read-only inspection of these files does NOT auto-fire the trigger.
+The agent fires it only after at least one write to one of them.
+
+---
+
+## 2. Orchestration -- the autonomous fix-and-rereview loop
+
+When triggered (any of §1.1, §1.2, §1.3), execute the loop below.
+The loop **never asks the user a question**. It either completes the
+task on a clean verdict or stops with a printed escalation report.
+
+### 2.1 State
+
+```
+iteration_count       = 0
+prior_verdict_path    = null
+prior_findings        = []
+sme_subagent_id       = null               # set on iter 1; reused via Task resume
+scope                 = <from trigger>     # incremental | full | product:<name>
+MAX_ITERATIONS        = int(getenv("ACTUARY_REVIEW_MAX_ITER", "5"))
+SCOPE_ESCALATE_AT     = 3                  # auto-bump incremental -> full at iter 3
+```
+
+### 2.2 Loop body
+
+For each iteration:
+
+#### Step A: maybe escalate scope
+
+If `iteration_count + 1 == SCOPE_ESCALATE_AT` and `scope == "incremental"`:
+- Set `scope = "full"`.
+- Log "Scope auto-escalated to full at iteration <N>" to the user.
+
+#### Step B: increment
+
+`iteration_count += 1`.
+
+#### Step C: collect evidence
+
+Run the evidence script (must complete in <5s; reads cached test
+output, does not re-run pytest):
+
+```bash
+cd annuity_model && python scripts/run_actuary_review.py \
+    --scope <scope> \
+    --iteration <iteration_count> \
+    [--prior-verdict <prior_verdict_path>  # only when iteration > 1]
+```
+
+The script overwrites `.cursor/actuary-reviews/_evidence-current.md`.
+
+#### Step D: invoke (or resume) the SME subagent
+
+**Iteration 1 (cold start):**
+
+```python
+result = Task(
+    subagent_type="generalPurpose",
+    readonly=True,
+    description="Actuary SME review",
+    prompt=f"""
+You are the Actuary SME. Read the skill at
+annuity_model/.cursor/skills/actuary-sme/SKILL.md (it defines your
+persona, checklist, verdict criteria, and the YAML-frontmatter
+verdict template you MUST emit).
+
+Read the evidence pack at .cursor/actuary-reviews/_evidence-current.md.
+
+Scope: {scope}. Iteration 1 of at most {MAX_ITERATIONS}.
+
+Render your verdict per the SKILL.md template. Set the YAML
+frontmatter `subagent_id` field to your own agent id so the parent
+loop can resume you on the next iteration. Return ONLY the verdict
+markdown -- no preamble, no postamble.
+""",
+)
+sme_subagent_id = <agent id from result>
+verdict_markdown = <text returned by Task>
+```
+
+**Iteration 2+ (resume the same subagent):**
+
+```python
+result = Task(
+    description="Actuary SME re-review",
+    resume=sme_subagent_id,
+    prompt=f"""
+Iteration {iteration_count} of {MAX_ITERATIONS}. The parent agent
+applied your prior Required Actions (or attempted to). Re-read
+.cursor/actuary-reviews/_evidence-current.md for the new diff and
+cached test results.
+
+Verify each finding from your prior verdict using the YAML
+frontmatter `prior_findings_resolved[]` field. Keep finding ids
+stable across iterations -- a recurring id with `resolved: false`
+is the regression signal the loop watches for.
+
+Return ONLY the new verdict markdown.
+""",
+)
+verdict_markdown = <text returned by Task>
+```
+
+#### Step E: write the verdict
+
+```
+verdict_filename = f"iter-{iteration_count}-{utc_timestamp}-{slugified_scope}.md"
+verdict_path = f".cursor/actuary-reviews/{verdict_filename}"
+write verdict_markdown to verdict_path
+```
+
+UTC timestamp format: `YYYY-MM-DD-HHMMSS`. Slugified scope: replace
+`:` with `-` (so `product:myga` becomes `product-myga`).
+
+#### Step F: parse the YAML frontmatter
+
+```python
+import yaml
+text = read(verdict_path)
+# Extract content between leading --- and the next ---
+frontmatter_text = text.split("---")[1]
+parsed = yaml.safe_load(frontmatter_text)
+```
+
+The YAML schema is documented in
+`annuity_model/.cursor/skills/actuary-sme/SKILL.md` ("Verdict format"
+section).
+
+#### Step G: decide next step
+
+Apply the following checks **in order**. The first matching condition
+fires; do not fall through.
+
+**G.1 Termination -- clean APPROVE**
+
+```
+if parsed["verdict"] == "APPROVE" or
+   (parsed["verdict"] == "APPROVE-WITH-NOTES" and
+    not any(f["tag"] == "AGENT-FIXABLE" for f in parsed.get("findings", []))):
+
+    # Final safety: full preflight (gates 1-4) must pass before declaring done
+    run "just preflight"
+    if exit code == 0:
+        report a one-line summary to the user including:
+            - verdict
+            - scope
+            - iteration count
+            - link to the verdict file
+            - count of advisory notes (if APPROVE-WITH-NOTES)
+        exit loop
+        task may complete
+    else:
+        # Rare: gate 1 was green mid-loop but full preflight caught
+        # a regression. Treat as a new BLOCK and continue the loop.
+        prior_verdict_path = verdict_path
+        prior_findings = parsed.get("findings", [])
+        continue loop  # next iteration
+```
+
+**G.2 Escalation -- human judgment required on a blocking item**
+
+```
+if parsed["verdict"] == "BLOCK" and
+   any(f["tag"] == "NEEDS-HUMAN-JUDGMENT" for f in parsed.get("findings", [])):
+
+    print to user:
+        - "Actuary SME review halted: human judgment required."
+        - chain of all verdict file paths from this loop (iter-1, iter-2, ...)
+        - each NEEDS-HUMAN-JUDGMENT finding's summary
+    do NOT prompt the user with a question
+    exit loop
+    task does NOT complete
+```
+
+**G.3 Escalation -- regression detection**
+
+```
+if iteration_count > 1:
+    unresolved = [
+        f for f in parsed.get("prior_findings_resolved", [])
+        if not f.get("resolved", False)
+    ]
+    if unresolved:
+        print to user:
+            - "Actuary SME review halted: prior fix did not resolve finding(s)."
+            - chain of verdict file paths
+            - the unresolved finding ids and summaries
+        do NOT prompt
+        exit loop
+        task does NOT complete
+```
+
+**G.4 Escalation -- max iterations**
+
+```
+if iteration_count >= MAX_ITERATIONS:
+    print to user:
+        - f"Actuary SME review halted at MAX_ITERATIONS={MAX_ITERATIONS}."
+        - chain of verdict file paths
+        - one-line per-iteration summary (verdict + finding count)
+    do NOT prompt
+    exit loop
+    task does NOT complete
+```
+
+**G.5 Continue -- apply fixes and re-run**
+
+```
+# Apply only AGENT-FIXABLE findings; NEEDS-HUMAN-JUDGMENT findings on
+# an APPROVE-WITH-NOTES verdict are advisory and not auto-fixed here
+# (only G.2 escalates them, and only on BLOCK).
+for f in parsed.get("findings", []):
+    if f["tag"] == "AGENT-FIXABLE" and f.get("required_action"):
+        apply f["required_action"]   # parent agent has full write access
+
+# Mid-loop gate: only gate 1 (parity, ~10s). Full preflight runs once
+# at the end (in G.1). This dominates loop runtime.
+run "cd annuity_model && python -m pytest tests/parity -q"
+
+if gate 1 fails:
+    # The fix introduced a regular bug -- NOT an actuarial finding.
+    # Diagnose and fix it with normal debugging BEFORE the next SME
+    # re-review. Do not surface this to the SME; separation of
+    # concerns. Re-run gate 1 until green.
+    diagnose
+    fix
+    re-run "cd annuity_model && python -m pytest tests/parity -q" until exit 0
+
+prior_verdict_path = verdict_path
+prior_findings = parsed.get("findings", [])
+# next iteration begins
+```
+
+### 2.3 Loop budget reminder
+
+| Stage | Per-iter budget |
+|---|---|
+| Evidence script | <5s |
+| SME subagent (iter 1, cold start) | <60s |
+| SME subagent (iter 2+, resumed) | <30s |
+| Mid-loop gate 1 (parity) | <15s |
+| Final full preflight (G.1, once) | ~2 min |
+
+Worst case (5 iterations + final preflight): ~5.5 min.
+Average case (1-2 iterations): ~3 min.
+
+---
+
+## 3. Verdict storage
+
+| Path | Purpose |
+|---|---|
+| `.cursor/actuary-reviews/iter-<N>-<UTC>-<scope>.md` | Per-iteration verdict file. Versioned (audit trail of decisions). |
+| `.cursor/actuary-reviews/_evidence-current.md` | Transient evidence pack. Overwritten each iteration. |
+| `.cursor/actuary-reviews/README.md` | One-pager explaining the directory; tracked. |
+| `.cursor/actuary-reviews/.gitkeep` | Keeps the dir present in git; tracked. |
+
+Verdict files and the evidence pack are gitignored (personal session
+artifacts), the same convention as `.cursor/handoffs/`. The README and
+.gitkeep are tracked.
+
+---
+
+## 4. Operating rules
+
+- This protocol runs only when triggered (§1). Do NOT spontaneously
+  run an actuary review on every turn.
+- The SME subagent is `readonly=True`. The PARENT agent applies
+  fixes; the SME never edits.
+- Do NOT prompt the user for the next step at any point in the loop.
+  The loop is autonomous; escalations print a report, the user reads
+  it when they look.
+- Do NOT modify `tests/parity/golden/sme_baseline.json` from inside
+  the loop. That file refreshes only via `UPDATE_GOLDEN_SME=1` after
+  a deliberate methodology change reviewed by a human.
+- The skill at `annuity_model/.cursor/skills/actuary-sme/SKILL.md`
+  is the SME's playbook. Update it when the review checklist
+  changes; do not duplicate the playbook here.
+- If the agent is in a readonly mode and an `!actuaryreview` is
+  requested, explain that write access is needed for the loop's fix
+  step and ask the user to switch modes BEFORE entering the loop.
+  This is the one allowed user prompt -- it precedes the loop, it
+  is not inside it.

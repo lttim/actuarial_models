@@ -1,0 +1,60 @@
+name: portfolio-acceptance
+
+# Ring 7: runs on every PR to main (no path filter) so branch protection can
+# require this check without PRs hanging when the workflow is skipped.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: portfolio-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  portfolio-acceptance:
+    name: portfolio acceptance (ring 7)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: annuity_model
+    env:
+      ANNUITY_MODEL_PORTFOLIO_V1: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install deps
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.lock -r requirements-dev.txt
+      - name: "[ring7] Parity gate"
+        run: python -m pytest tests/parity -q
+      - name: "[ring7] Full test suite"
+        run: python -m pytest -q
+      - name: "[ring7] Deep smoke (includes portfolio)"
+        run: python scripts/deep_smoke.py
+      - name: "[ring7] Rendered tolerance + benchmark docs"
+        run: |
+          python scripts/render_parity_contract.py --check
+          python scripts/render_actuarial_benchmarks.py --check
+      - name: "[ring7] Portfolio parity folder"
+        run: python -m pytest tests/parity/portfolio -q
+      - name: "[ring7] Integration tests"
+        run: python -m pytest tests/integration -q
+      - name: "[ring7] CLI golden summary JSON"
+        run: |
+          rm -rf .smoke/portfolio_acceptance_ci
+          python -m cli portfolio-run \
+            --inforce tests/data/inforce/example_v1/inforce.csv \
+            --out .smoke/portfolio_acceptance_ci/
+          python -c "import json, pathlib; e=json.loads(pathlib.Path('tests/data/inforce/example_v1/expected_summary.json').read_text()); g=json.loads(pathlib.Path('.smoke/portfolio_acceptance_ci/portfolio_summary.json').read_text()); assert e==g"
+      - name: "[gate5] Actuary SME evidence pack (full scope)"
+        working-directory: ${{ github.workspace }}
+        run: python annuity_model/scripts/run_actuary_review.py --scope full --iteration 1

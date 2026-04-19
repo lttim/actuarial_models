@@ -56,7 +56,15 @@ from build_pricing_excel_workbook import (
     alm_excel_truncate_snapshot,
     mc_excel_snapshot_from_result,
 )
+from build_portfolio_excel_workbook import build_portfolio_workbook_bytes
+from inforce_io import load_policy_inputs_from_csv
+from portfolio import Portfolio
+from portfolio_config import portfolio_v1_enabled
+from portfolio_runner import run_portfolio
+from portfolio_scenario import default_run_scenario
+from portfolio_summary import portfolio_result_to_summary_dict
 from pricing_run_form_state import (
+    PORTFOLIO_KEY,
     PRICING_RUN_NUMBER_INPUT_KEYS,
     build_run_form_seed_defaults,
     ensure_session_choice,
@@ -661,6 +669,7 @@ _SSA_2015_PERIOD_QX_CSV = """age,male_qx,female_qx
 SECTION_LABELS: dict[str, str] = {
     "overview": "Overview",
     "run": "Pricing Run",
+    "portfolio": "Portfolio (multi-policy)",
     "alm": "ALM",
     "what_if": "What-if Analysis",
     "excel_replicator": "Excel Replicator",
@@ -4643,13 +4652,144 @@ def _render_alm_section() -> None:
             st.info(f"Key rate duration chart unavailable for current inputs: {ex!r}")
 
 
+def _sidebar_section_options() -> list[str]:
+    if portfolio_v1_enabled():
+        return [*SECTION_ORDER[:2], "portfolio", *SECTION_ORDER[2:]]
+    return list(SECTION_ORDER)
+
+
+def _render_portfolio_section() -> None:
+    """Multi-policy inforce CSV run (gated by ``ANNUITY_MODEL_PORTFOLIO_V1``)."""
+    st.subheader("Portfolio (multi-policy)")
+    st.caption(
+        "Load an inforce CSV (see ``tests/data/inforce/example_v1/inforce.csv`` for column layout). "
+        "Uses the same flat yield / mortality defaults as the portfolio CLI smoke test."
+    )
+    scratch_cols = [
+        "policy_id",
+        "product_type",
+        "issue_age",
+        "sex",
+        "benefit_annual",
+        "death_benefit",
+        "monthly_premium",
+        "term_years",
+        "participation",
+        "cap",
+        "floor",
+        "rider_fee_annual",
+        "single_premium",
+        "declared_rate_annual",
+        "guarantee_years",
+        "face_amount",
+    ]
+    st.markdown("##### Inline table (optional)")
+    st.caption("Add rows like the example CSV, then **Run from table**.")
+    scratch_key = "portfolio_scratch_df"
+    if scratch_key not in st.session_state:
+        st.session_state[scratch_key] = pd.DataFrame(columns=scratch_cols)
+    edited = st.data_editor(
+        st.session_state[scratch_key],
+        num_rows="dynamic",
+        key="portfolio_table_editor",
+        use_container_width=True,
+    )
+    st.session_state[scratch_key] = edited
+    if st.button("Run from table", type="secondary", key="portfolio_run_table_button"):
+        from inforce_io import load_policy_inputs_from_csv_from_dataframe
+
+        try:
+            df = edited.dropna(how="all")
+            if "product_type" not in df.columns or df.empty:
+                st.error("Add at least one row with a product_type.")
+            else:
+                pt = df["product_type"].astype(str).str.strip()
+                df = df.loc[pt != ""].loc[pt.str.lower() != "nan"]
+                if df.empty:
+                    st.error("Add at least one policy row with a product_type.")
+                else:
+                    policies = load_policy_inputs_from_csv_from_dataframe(df)
+                    scen = default_run_scenario()
+                    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
+                    st.session_state[PORTFOLIO_KEY.RESULT] = res
+                    st.session_state[PORTFOLIO_KEY.RUN_ID] = (
+                        int(st.session_state.get(PORTFOLIO_KEY.RUN_ID, 0)) + 1
+                    )
+                    st.session_state[PORTFOLIO_KEY.UPLOAD_NAME] = "scratch_table.csv"
+                    st.success("Portfolio pricing completed (from table).")
+        except Exception as exc:  # noqa: BLE001 -- surface parse/pricing errors to the user
+            st.error(f"{type(exc).__name__}: {exc}")
+
+    up = st.file_uploader("Inforce CSV", type=["csv"], key="portfolio_inforce_uploader")
+    if st.button("Run portfolio", type="primary", key="portfolio_run_button"):
+        if up is None:
+            st.error("Upload an inforce CSV first.")
+        else:
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tf:
+                tf.write(up.getvalue())
+                tmp = Path(tf.name)
+            try:
+                policies = load_policy_inputs_from_csv(tmp)
+                scen = default_run_scenario()
+                res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
+                st.session_state[PORTFOLIO_KEY.RESULT] = res
+                st.session_state[PORTFOLIO_KEY.RUN_ID] = (
+                    int(st.session_state.get(PORTFOLIO_KEY.RUN_ID, 0)) + 1
+                )
+                st.session_state[PORTFOLIO_KEY.UPLOAD_NAME] = getattr(up, "name", "inforce.csv")
+                st.success("Portfolio pricing completed.")
+            finally:
+                tmp.unlink(missing_ok=True)
+
+    res = st.session_state.get(PORTFOLIO_KEY.RESULT)
+    if res is not None:
+        summ = portfolio_result_to_summary_dict(res)
+        st.json(summ, expanded=False)
+        rows = []
+        for pt in sorted(res.rollups_by_product_type, key=lambda x: x.value):
+            scal = res.product_type_scalar_rollups[pt]
+            rows.append(
+                {
+                    "product_type": pt.value,
+                    "policy_count": scal.policy_count,
+                    "sum_single_premium": scal.sum_single_premium,
+                    "rollup_cf_sum": float(res.rollups_by_product_type[pt].expected_total_cashflows.sum()),
+                }
+            )
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        for pr in res.policy_results:
+            with st.expander(f"{pr.policy_id} — {pr.product_type.value}"):
+                pv = getattr(pr.pricing, "pv_benefit", None)
+                sp = getattr(pr.pricing, "single_premium", None)
+                st.write(
+                    {
+                        "pv_benefit": float(pv) if pv is not None else None,
+                        "single_premium": float(sp) if sp is not None else None,
+                    }
+                )
+        xlsx = build_portfolio_workbook_bytes(res)
+        st.download_button(
+            "Download portfolio workbook",
+            data=xlsx,
+            file_name="portfolio.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="portfolio_download_workbook",
+        )
+
+
 def main() -> None:
     st.set_page_config(page_title="Pricing Demo", layout="wide")
     with st.sidebar:
         st.title("Pricing Demo")
+        if portfolio_v1_enabled():
+            st.caption(
+                "Batch / multi-policy: set **Section** (below) to **Portfolio (multi-policy)**."
+            )
         page = st.radio(
             "Section",
-            options=SECTION_ORDER,
+            options=_sidebar_section_options(),
             format_func=lambda x: SECTION_LABELS[x],
         )
         st.divider()
@@ -4820,6 +4960,8 @@ def main() -> None:
         _render_overview()
     elif page == "run":
         _render_run_and_results()
+    elif page == "portfolio":
+        _render_portfolio_section()
     elif page == "alm":
         _render_alm_section()
     elif page == "what_if":

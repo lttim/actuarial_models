@@ -67,6 +67,13 @@ ci: lint test smoke docs-check
 # four exit 0. The PR template (.github/pull_request_template.md) lists the
 # same four gates as checkboxes; this recipe is the one-liner that ticks
 # them all in a single command.
+#
+# Note: gate 5 (Actuary SME review) is not invoked here -- it is a
+# recursive gate that runs an autonomous fix-and-rereview loop and is
+# triggered from the AI agent (via `!actuaryreview` or any
+# natural-language "actuary review" request) per
+# .cursor/rules/actuary-sme-protocol.mdc. Run it in your agent session
+# AFTER `just preflight` exits 0.
 preflight:
     @echo "[1/4] parity gate"
     @cd annuity_model && python -m pytest tests/parity -q
@@ -79,6 +86,46 @@ preflight:
     @cd annuity_model && python scripts/render_actuarial_benchmarks.py --check
     @echo ""
     @echo "READY TO COMMIT: all four canonical gates passed."
+    @echo "Reminder: trigger gate 5 from the AI agent -- '!actuaryreview'"
+    @echo "or a natural-language 'actuary review' request -- when the"
+    @echo "session edited any calculation / tolerance file."
+
+# Portfolio end-to-end acceptance (extends preflight; requires portfolio flag
+# for CLI / deep_smoke portfolio step). Add as a required status check when
+# branch protection is updated for this workflow.
+# Ring 7 acceptance (plan): preflight + portfolio parity + integration +
+# deep_smoke (with portfolio) + contract checks + CLI golden + Gate 5 evidence
+# (`actuary-review-full`) + reminder for manual Excel ModelCheck on portfolio.xlsx.
+portfolio-acceptance:
+    @just preflight
+    @echo "[ring7 2/8] pytest tests/parity/portfolio"
+    @cd annuity_model && ANNUITY_MODEL_PORTFOLIO_V1=1 python -m pytest tests/parity/portfolio -q
+    @echo "[ring7 3/8] pytest tests/integration"
+    @cd annuity_model && ANNUITY_MODEL_PORTFOLIO_V1=1 python -m pytest tests/integration -q
+    @echo "[ring7 4/8] deep_smoke (portfolio workbook when ANNUITY_MODEL_PORTFOLIO_V1=1)"
+    @cd annuity_model && ANNUITY_MODEL_PORTFOLIO_V1=1 python scripts/deep_smoke.py
+    @echo "[ring7 5/8] render_parity_contract --check"
+    @cd annuity_model && python scripts/render_parity_contract.py --check
+    @echo "[ring7 6/8] CLI portfolio-run vs golden portfolio_summary.json"
+    @cd annuity_model && rm -rf .smoke/portfolio_acceptance && ANNUITY_MODEL_PORTFOLIO_V1=1 python -m cli portfolio-run --inforce tests/data/inforce/example_v1/inforce.csv --out .smoke/portfolio_acceptance/
+    @cd annuity_model && python -c 'import json, pathlib; root = pathlib.Path("tests/data/inforce/example_v1/expected_summary.json"); got = pathlib.Path(".smoke/portfolio_acceptance/portfolio_summary.json"); assert json.loads(root.read_text()) == json.loads(got.read_text()), "portfolio_summary.json drift"'
+    @echo "[ring7 7/8] Gate 5 deterministic evidence (full scope)"
+    @just actuary-review-full
+    @echo "[ring7 8/8] Manual: open .smoke/portfolio_acceptance/portfolio.xlsx in Excel or LibreOffice and confirm ModelCheck is 0.00 after recalc (AGENTS.md)."
+    @echo "RING 7 + GATE 5 (deterministic): complete. Narrative SME verdict: see .cursor/actuary-reviews/iter-1-full-ring7-gate5.md"
+
+# Generate the Actuary SME evidence pack for an incremental review (the
+# deterministic half of gate 5). The narrative subagent half is invoked
+# from the AI agent via `!actuaryreview` per .cursor/rules/actuary-sme-protocol.mdc.
+actuary-review:
+    @cd annuity_model && python scripts/run_actuary_review.py \
+        --scope incremental --iteration 1
+
+# Same as `actuary-review` but full-project scope (used at end-of-phase
+# or when the change has cross-cutting impact).
+actuary-review-full:
+    @cd annuity_model && python scripts/run_actuary_review.py \
+        --scope full --iteration 1
 
 # Container build + smoke (requires Docker).
 docker-smoke:

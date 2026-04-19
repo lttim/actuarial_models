@@ -12,7 +12,8 @@
       "pre-commit (lint + format + mypy)",
       "docker build + deep_smoke in container",
       "build-and-deploy",
-      "parity + validator (ubuntu / py3.12)"
+      "parity + validator (ubuntu / py3.12)",
+      "portfolio acceptance (ring 7)"
     ]
   },
   "enforce_admins": false,

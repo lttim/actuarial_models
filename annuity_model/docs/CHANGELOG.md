@@ -594,17 +594,13 @@ End-to-end deliverables:
   `pricing_ui.py` would force a fragile import-time mock just to bump
   the gate.
 
-- **Wave 5 (FastAPI wrapper + batch CLI)** is deferred. The plan calls
-  for a thin REST + CLI surface around `PricingProjection.run` and
-  `build_product_workbook` with `httpx.TestClient` round-trip tests and
-  a click-based batch runner. Doing this safely needs the Wave 3.3
-  packaging foundation (so the FastAPI app can import
-  `annuity_model.product_excel.build_product_workbook` cleanly) and the
-  Wave 4 UI decomposition (so the FastAPI handlers and the Streamlit
-  pages share a single business-logic adapter rather than reaching
-  through the monolithic `pricing_ui` for what's effectively
-  presentation code). Once Waves 3.3 and 4 land, Wave 5 is
-  ~150-200 LOC of routing + 1 batch CLI script + ~10 round-trip tests.
+- **Wave 5 (FastAPI wrapper + batch CLI)** -- the original monolithic
+  Wave 5 item above is **superseded** by the portfolio program (2026-04):
+  `python -m cli portfolio-run` (gated by `ANNUITY_MODEL_PORTFOLIO_V1=1`)
+  plus `portfolio_summary.json` / `portfolio.xlsx` outputs and
+  integration tests. A thin FastAPI wrapper remains optional and can
+  reuse the same `run_portfolio` entry point when packaging (Wave 3.3)
+  lands.
 
 - **Wave 6.2 (final coverage ratchet to 75%)** is deferred behind Wave
   4 -- ratchets larger than ~5pp at a time tend to force test-shaped

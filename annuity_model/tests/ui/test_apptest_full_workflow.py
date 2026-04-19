@@ -109,8 +109,9 @@ REPO_ROOT = ROOT.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from build_portfolio_excel_workbook import build_portfolio_workbook_bytes  # noqa: E402
 from excel_workbook_validator import validate_workbook  # noqa: E402
-from pricing_run_form_state import RUN_KEY  # noqa: E402
+from pricing_run_form_state import PORTFOLIO_KEY, RUN_KEY  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Boot tests
@@ -455,3 +456,35 @@ def test_excel_download_workbook_passes_strict_validation(
         + "\n".join(f"  - {iss}" for iss in issues[:25])
         + ("" if len(issues) <= 25 else f"\n  ... {len(issues) - 25} more.")
     )
+
+
+@pytest.mark.ui
+def test_portfolio_section_upload_run_and_workbook(
+    streamlit_apptest_module,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Portfolio section: upload canonical inforce, run, workbook validates."""
+    monkeypatch.setenv("ANNUITY_MODEL_PORTFOLIO_V1", "1")
+    AppTest = streamlit_apptest_module
+    at = load_pricing_ui(AppTest)
+    _navigate_to_section(at, "portfolio")
+    assert_no_exceptions(at, context="render portfolio section")
+
+    csv_path = ROOT / "tests" / "data" / "inforce" / "example_v1" / "inforce.csv"
+    raw_csv = csv_path.read_bytes()
+    matched_fu = [fu for fu in at.file_uploader if fu.key == "portfolio_inforce_uploader"]
+    assert matched_fu, "portfolio file uploader missing"
+    matched_fu[0].upload("inforce.csv", raw_csv, mime_type="text/csv").run()
+
+    run_btn = [b for b in at.button if b.key == "portfolio_run_button"]
+    assert run_btn, "Run portfolio button missing"
+    run_btn[0].click().run()
+    assert_no_exceptions(at, context="portfolio pricing run")
+
+    pres = _session_get(at, PORTFOLIO_KEY.RESULT)
+    assert pres is not None, "portfolio_res not populated after Run portfolio"
+
+    xlsx = build_portfolio_workbook_bytes(pres)
+    wb = load_workbook(io.BytesIO(bytes(xlsx)), data_only=False)
+    issues = validate_workbook(wb, strict=True)
+    assert issues == [], f"portfolio workbook failed validation: {issues[:5]}"

@@ -87,6 +87,12 @@ _BAND_ROWS: tuple[tuple[str, str, str], ...] = (
     ("VUL E[AV(20y)] MC lower", "VUL_BENCHMARK_AV_20Y_MC_LO", "USD"),
     ("VUL E[AV(20y)] MC upper", "VUL_BENCHMARK_AV_20Y_MC_HI", "USD"),
     ("VUL sensitivity epsilon", "VUL_SENSITIVITY_EPS", "USD"),
+    # Portfolio
+    ("Portfolio total CF sum lower", "PORTFOLIO_TOTAL_CF_SUM_LO", "USD"),
+    ("Portfolio total CF sum upper", "PORTFOLIO_TOTAL_CF_SUM_HI", "USD"),
+    ("Portfolio duration gap lower", "PORTFOLIO_DURATION_GAP_LO", "Years"),
+    ("Portfolio duration gap upper", "PORTFOLIO_DURATION_GAP_HI", "Years"),
+    ("Portfolio rollup sum consistency tol", "PORTFOLIO_SUM_CONSISTENCY_TOL", "abs"),
 )
 
 

@@ -1,4 +1,6 @@
 .venv/
+# Local opt-out for portfolio UI in Streamlit (see run_pricing_ui.sh / .bat)
+.disable-portfolio-v1
 __pycache__/
 .pytest_cache/
 reports/

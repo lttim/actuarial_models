@@ -13,6 +13,7 @@ Output workbooks land in annuity_model/.smoke/out/ (gitignored).
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -409,24 +410,46 @@ def build_vul() -> Path:
     return out
 
 
+def build_portfolio() -> Path:
+    """Mixed-product portfolio workbook (canonical inforce CSV)."""
+    from build_portfolio_excel_workbook import build_portfolio_workbook_to_path
+    from inforce_io import load_policy_inputs_from_csv
+    from portfolio import Portfolio
+    from portfolio_runner import run_portfolio
+    from portfolio_scenario import default_run_scenario
+
+    csv_path = REPO_ROOT / "tests" / "data" / "inforce" / "example_v1" / "inforce.csv"
+    policies = load_policy_inputs_from_csv(csv_path)
+    res = run_portfolio(portfolio=Portfolio(policies=tuple(policies)), scenario=default_run_scenario())
+    out = OUT_DIR / "portfolio_smoke.xlsx"
+    build_portfolio_workbook_to_path(res, out)
+    return out
+
+
 def main() -> int:
     t0 = time.perf_counter()
     print(f"[smoke] writing workbooks to {OUT_DIR}")
     failures: list[str] = []
 
-    for name, builder in [
-        ("SPIA", lambda: build_spia()),
-        ("Term", lambda: build_term()),
+    builders: list[tuple[str, object]] = [
+        ("SPIA", build_spia),
+        ("Term", build_term),
         ("RILA (no ALM)", lambda: build_rila(with_alm=False, label="rila_no_alm")),
         ("RILA + ALM", lambda: build_rila(with_alm=True, label="rila_alm")),
-        ("MYGA", lambda: build_myga()),
-        ("FIA", lambda: build_fia()),
-        ("VA", lambda: build_va()),
-        ("WL", lambda: build_wl()),
-        ("UL", lambda: build_ul()),
-        ("IUL", lambda: build_iul()),
-        ("VUL", lambda: build_vul()),
-    ]:
+        ("MYGA", build_myga),
+        ("FIA", build_fia),
+        ("VA", build_va),
+        ("WL", build_wl),
+        ("UL", build_ul),
+        ("IUL", build_iul),
+        ("VUL", build_vul),
+    ]
+    if os.environ.get("ANNUITY_MODEL_PORTFOLIO_V1", "").strip() == "1":
+        builders.append(("Portfolio", build_portfolio))
+    else:
+        print("[smoke] skipping Portfolio (set ANNUITY_MODEL_PORTFOLIO_V1=1 to include)")
+
+    for name, builder in builders:
         try:
             t = time.perf_counter()
             path = builder()

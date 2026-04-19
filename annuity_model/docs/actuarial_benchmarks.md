@@ -68,6 +68,11 @@ But they are tight enough to catch the **"missed a factor of 12"** or
 | VUL E[AV(20y)] MC lower | `5,000` | USD | `actuarial_benchmarks.VUL_BENCHMARK_AV_20Y_MC_LO` |
 | VUL E[AV(20y)] MC upper | `2.5e+05` | USD | `actuarial_benchmarks.VUL_BENCHMARK_AV_20Y_MC_HI` |
 | VUL sensitivity epsilon | `1` | USD | `actuarial_benchmarks.VUL_SENSITIVITY_EPS` |
+| Portfolio total CF sum lower | `1.8e+06` | USD | `actuarial_benchmarks.PORTFOLIO_TOTAL_CF_SUM_LO` |
+| Portfolio total CF sum upper | `2.2e+06` | USD | `actuarial_benchmarks.PORTFOLIO_TOTAL_CF_SUM_HI` |
+| Portfolio duration gap lower | `-50` | Years | `actuarial_benchmarks.PORTFOLIO_DURATION_GAP_LO` |
+| Portfolio duration gap upper | `50` | Years | `actuarial_benchmarks.PORTFOLIO_DURATION_GAP_HI` |
+| Portfolio rollup sum consistency tol | `1e-09` | abs | `actuarial_benchmarks.PORTFOLIO_SUM_CONSISTENCY_TOL` |
 <!-- END GENERATED bands -->
 
 ---

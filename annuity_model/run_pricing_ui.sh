@@ -18,6 +18,18 @@ MIN_PYTHON_MINOR=11
 
 cd "$(dirname "$0")"
 
+# Multi-policy portfolio UI: ON by default for this local launcher only
+# (run_pricing_ui.*). Streamlit Cloud uses repo-root streamlit_app.py — set the
+# var in Cloud secrets if you want portfolio there. Opt out here:
+#   touch .disable-portfolio-v1
+# or run: ANNUITY_MODEL_PORTFOLIO_V1=0 bash run_pricing_ui.sh
+if [[ -f "./.disable-portfolio-v1" ]]; then
+    export ANNUITY_MODEL_PORTFOLIO_V1=0
+elif [[ -z "${ANNUITY_MODEL_PORTFOLIO_V1:-}" ]]; then
+    export ANNUITY_MODEL_PORTFOLIO_V1=1
+    echo "[run_pricing_ui] ANNUITY_MODEL_PORTFOLIO_V1=1 (local launcher default)" >&2
+fi
+
 SELF_CHECK=0
 if [[ "${1:-}" == "--self-check" ]]; then
     SELF_CHECK=1

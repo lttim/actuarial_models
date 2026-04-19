@@ -24,7 +24,7 @@ any calculation logic.
 > `CONTRIBUTING.md`) MUST link here instead of restating.
 
 ```bash
-# 1. Parity gate (blocks any merge on failure)
+# 1. Parity gate (blocks any merge on failure; includes the SME lite golden)
 python -m pytest tests/parity -q
 
 # 2. Full unit-test gate
@@ -38,6 +38,64 @@ python scripts/render_parity_contract.py --check
 ```
 
 All four must exit 0.
+
+### Ring 7 -- portfolio acceptance (optional superset)
+
+For changes touching **portfolio** aggregation, inforce I/O, portfolio Excel,
+or the portfolio CLI/UI (`ANNUITY_MODEL_PORTFOLIO_V1` surfaces), also run from
+the **repository root** (not only `annuity_model/`):
+
+```bash
+just portfolio-acceptance
+```
+
+That recipe runs the four gates above, then `tests/parity/portfolio`,
+`tests/integration`, portfolio-enabled `deep_smoke`, an explicit
+`render_parity_contract.py --check`, the CLI JSON golden, and **`just
+actuary-review-full`** (Gate 5 evidence, full scope). CI enforces the same
+bundle via the **portfolio acceptance (ring 7)** workflow when branch
+protection lists that required check. Details:
+[`docs/runbooks/portfolio_run.md`](docs/runbooks/portfolio_run.md).
+
+### Gate 5: Actuary SME review (recursive)
+
+After the four canonical gates exit 0, the **Actuary SME review** is a
+mandatory fifth gate when the session edited any file in the
+CALCULATION or TOLERANCE branches of
+[`docs/AI_AGENT_PREFLIGHT.md`](docs/AI_AGENT_PREFLIGHT.md). It is a
+**recursive** gate: rather than a single command, it runs an
+autonomous fix-and-rereview loop, defined in full at
+[`.cursor/rules/actuary-sme-protocol.mdc`](../.cursor/rules/actuary-sme-protocol.mdc).
+
+Trigger forms (all equivalent):
+
+- Explicit command: `!actuaryreview` (with optional `full`,
+  `<product>`, or `status` argument).
+- Natural language: any phrasing containing "actuary review", "have
+  the actuary review", "ask the actuary SME", "actuarial review
+  please", etc. The rule routes these through the same orchestration.
+- Auto-fired: the rule self-fires when the session edited files
+  matching the auto-trigger globs (engines, builders, parity
+  constants, actuarial benchmarks, product subpackages).
+
+Termination conditions:
+
+- **APPROVE** (or APPROVE-WITH-NOTES with no `[AGENT-FIXABLE]`
+  items): the loop exits cleanly and the task may complete.
+- **BLOCK** with `[AGENT-FIXABLE]` items: the parent agent applies
+  the fixes, re-runs gate 1 (parity), and re-invokes the SME --
+  iterating up to `MAX_ITERATIONS` (default 5).
+- **Escalation** (max iterations exceeded, the same finding recurs,
+  or any `[NEEDS-HUMAN-JUDGMENT]` finding inside a `BLOCK` verdict):
+  the loop stops, prints a chain of verdict files under
+  `.cursor/actuary-reviews/`, and the task does NOT claim complete.
+  The user is **not** prompted for a next step at any point.
+
+Verdict files are stored at
+`.cursor/actuary-reviews/iter-<N>-<UTC>-<scope>.md` (gitignored, like
+`.cursor/handoffs/`). The skill that defines the SME persona,
+checklist, and YAML-frontmatter verdict template is at
+[`.cursor/skills/actuary-sme/SKILL.md`](.cursor/skills/actuary-sme/SKILL.md).
 
 Two always-on gates inside gate (2) above are worth calling out explicitly
 because they catch the bug classes the parity engine cannot:
@@ -90,6 +148,12 @@ through `parity_constants.py` plus `model_change_log.md`.
 | `docs/rila_product_spec.md` | RILA v1 product definition |
 | `docs/rila_parity_contract.md` | RILA Python ↔ Excel parity addendum |
 | `tests/parity/test_rila_parity.py` | RILA parity tests |
+| `portfolio_runner.py` | Multi-policy pricing loop + optional process pool |
+| `liability_aggregation.py` | Union-grid `LiabilityPath` sums (total + by type) |
+| `build_portfolio_excel_workbook.py` | Portfolio rollup workbook + `ModelCheck` |
+| `inforce_io.py` / `inforce_parsers.py` | Inforce CSV / Excel → `PolicyInput` |
+| `docs/portfolio_runner_spec.md` | Portfolio v1 product / JSON / Excel spec |
+| `docs/portfolio_parity_contract.md` | Portfolio parity addendum |
 
 ## Critical rules
 

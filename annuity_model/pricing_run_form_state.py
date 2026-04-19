@@ -457,3 +457,11 @@ def build_run_form_seed_defaults(
         RUN_KEY.VUL_MONTHLY_EXPENSE: float(saved_inputs.get("vul_monthly_expense_charge", 7.50)),
     }
     return defaults
+
+
+class PORTFOLIO_KEY:
+    """Session-state keys for the Portfolio (multi-policy) section (not ``run_*``)."""
+
+    RESULT = "portfolio_res"
+    RUN_ID = "portfolio_run_id"
+    UPLOAD_NAME = "portfolio_upload_name"

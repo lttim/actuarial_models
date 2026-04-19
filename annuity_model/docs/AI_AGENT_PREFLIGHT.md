@@ -41,6 +41,7 @@ to bend.
 | ProductType registry & UI capability matrix | [`product_registry.py`](../product_registry.py) | Adapter Protocol + `validate_run_inputs(state)` hook. |
 | Per-product wires (engine/excel/ui/converter/formatter) | [`products/<name>/__init__.py`](../products/) | Use `@register_product`. `tests/test_products_registry.py` keeps this in sync with legacy registries. |
 | Streamlit run-form state keys | [`pricing_run_form_state.py`](../pricing_run_form_state.py) | Constants live here -- never hardcode `"run_*"` literals elsewhere. |
+| Multi-policy portfolio runner | [`portfolio_runner_spec.md`](portfolio_runner_spec.md) + [`portfolio_runner.py`](../portfolio_runner.py) | Gated UI/CLI via `ANNUITY_MODEL_PORTFOLIO_V1=1`; see also `docs/portfolio_parity_contract.md`. |
 | ALM dispatch (pricing-result -> liability-path) | [`liability_dispatch.py`](../liability_dispatch.py) | Plug-in registry; `register_liability_path_converter`. |
 | Workbook-builder dispatch | [`product_excel.py`](../product_excel.py) | Plug-in registry; `register_builder`. |
 | Static Excel-formula validator | [`excel_workbook_validator.py`](../excel_workbook_validator.py) | All builders MUST call `validate_workbook_or_raise(wb)` before `wb.save(...)`. |
@@ -78,6 +79,12 @@ START
 │
 ├── Is the task "add a new product"?
 │      → branch: NEW-PRODUCT
+│
+├── Does the change touch portfolio / inforce / multi-policy aggregation?
+│       (portfolio*.py, liability_aggregation.py, inforce_io.py,
+│        inforce_parsers.py, build_portfolio_excel_workbook.py,
+│        products/*/inforce.py)
+│      → branch: PORTFOLIO
 │
 ├── Does the change touch the Streamlit UI?
 │       (pricing_ui.py, streamlit_app.py, pricing_run_form_state.py,
@@ -117,7 +124,14 @@ This is the highest-risk change class in the repo.
 3. Re-render the parity contract: `python scripts/render_parity_contract.py`.
 4. Run **all four canonical gates** (§3). Then add a boundary regression
    test under `tests/parity/` capturing the exact scenario.
-5. Open the PR with the parity-contract diff in the description.
+5. **Trigger the Actuary SME review** (`!actuaryreview`, or any
+   natural-language "actuary review" request) and obtain a clean
+   APPROVE before declaring the task done. Tolerance changes are the
+   highest-risk class precisely because they can mask methodology
+   drift; the SME's autonomous fix-and-rereview loop catches that
+   class. See §3.5 for the loop's termination semantics.
+6. Open the PR with the parity-contract diff and the Actuary SME
+   verdict path in the description.
 
 Runbook: [`docs/runbooks/investigate_parity_break.md`](runbooks/investigate_parity_break.md).
 
@@ -136,6 +150,11 @@ This is what the parity gates exist for.
    If the validator fails, follow
    [`docs/runbooks/debug_validator_failure.md`](runbooks/debug_validator_failure.md).
 5. Add a `@pytest.mark.regression` test capturing the bug or new behavior.
+6. **Trigger the Actuary SME review** (`!actuaryreview`, or any
+   natural-language "actuary review" request). Calculation changes
+   are this branch's whole reason for existing; the SME catches the
+   "internally consistent but actuarially nonsense" class of bug that
+   parity tests by construction cannot. See §3.5.
 
 ### Branch: NEW-PRODUCT
 
@@ -160,6 +179,24 @@ keep failing with helpful messages until every wire is connected --
 treat that as your todo list.
 
 Then run the four canonical gates (§3).
+
+### Branch: PORTFOLIO
+
+Read [`docs/portfolio_runner_spec.md`](portfolio_runner_spec.md) and
+[`docs/portfolio_parity_contract.md`](portfolio_parity_contract.md).
+
+Required checks (in addition to the four canonical gates when portfolio code
+paths change):
+
+```bash
+cd annuity_model
+ANNUITY_MODEL_PORTFOLIO_V1=1 python -m pytest tests/parity/portfolio -q
+ANNUITY_MODEL_PORTFOLIO_V1=1 python -m pytest tests/integration/test_portfolio_cli.py -q
+```
+
+Actuary SME: `!actuaryreview portfolio` (or `product:portfolio`) after
+calculation-facing edits; use `just portfolio-acceptance` before merge when
+touching the end-to-end portfolio surface.
 
 ### Branch: UI
 
@@ -259,6 +296,57 @@ and verify the `ModelCheck` sheet shows 0.00 difference -- the parity
 tests load values from openpyxl and CANNOT see formula bugs that only
 surface on Excel recalc. Step-by-step recipe in
 [`docs/runbooks/regenerate_excel_cache.md`](runbooks/regenerate_excel_cache.md).
+
+---
+
+## 3.5. Gate 5: Actuary SME review (recursive)
+
+After the four canonical gates exit 0, the **Actuary SME** review is a
+mandatory fifth gate when the session edited any file in the
+CALCULATION or TOLERANCE branches. It is a recursive gate: rather than
+a single command, it runs an autonomous fix-and-rereview loop.
+
+Triggers (all equivalent):
+
+- Explicit command: `!actuaryreview` (with optional `full`,
+  `<product>`, or `status` argument).
+- Natural language: any phrasing containing "actuary review", "have
+  the actuary review", "ask the actuary SME", "actuarial review
+  please", etc.
+- Auto-fired by the always-on rule
+  [`.cursor/rules/actuary-sme-protocol.mdc`](../../.cursor/rules/actuary-sme-protocol.mdc)
+  when the session edited files matching the auto-trigger globs
+  (engines, builders, parity_constants, actuarial_benchmarks, product
+  subpackage engines, etc.).
+
+Loop semantics (the rule defines the full state machine; abridged here):
+
+1. The evidence script
+   ([`scripts/run_actuary_review.py`](../scripts/run_actuary_review.py))
+   collects diff + cached test results + benchmarks into
+   `.cursor/actuary-reviews/_evidence-current.md` (overwritten each
+   iteration; <5s; reads cached pytest output, does NOT re-run tests).
+2. A readonly subagent renders a verdict per
+   [`.cursor/skills/actuary-sme/SKILL.md`](../.cursor/skills/actuary-sme/SKILL.md).
+   The verdict is YAML frontmatter + markdown body, written to
+   `.cursor/actuary-reviews/iter-<N>-<UTC>-<scope>.md`. The subagent is
+   created on iter 1 and resumed (`Task(resume=...)`) on iter 2+ to
+   preserve context.
+3. **Clean APPROVE** (or APPROVE-WITH-NOTES with no `[AGENT-FIXABLE]`
+   items): full `just preflight` runs once as the final safety check;
+   on green the task may complete.
+4. **BLOCK** with `[AGENT-FIXABLE]` items: parent agent applies the
+   verbatim Required Actions, runs gate 1 only (parity, ~10s) for
+   fast feedback, and re-invokes the SME. Mid-loop full preflight is
+   intentionally skipped to keep loop runtime bounded.
+5. **Escalation** (any of: `iter >= MAX_ITERATIONS`, recurring
+   `[AGENT-FIXABLE]` finding marked unresolved, or any
+   `[NEEDS-HUMAN-JUDGMENT]` finding inside a `BLOCK`): loop stops,
+   prints the chain of verdict file paths, and the task does NOT
+   complete. The user is **not** prompted at any point in the loop.
+
+`MAX_ITERATIONS` defaults to 5; override with the
+`ACTUARY_REVIEW_MAX_ITER` environment variable.
 
 ---
 

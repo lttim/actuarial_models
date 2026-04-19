@@ -68,3 +68,9 @@ $RECYCLE.BIN/
 # The protocol rule and README are tracked; the generated handoffs are not.
 .cursor/handoffs/*.md
 !.cursor/handoffs/README.md
+
+# --- Actuary SME reviews (personal session artifacts) ---
+# The protocol rule and README are tracked; the generated verdicts and
+# transient evidence pack are not.
+.cursor/actuary-reviews/*.md
+!.cursor/actuary-reviews/README.md

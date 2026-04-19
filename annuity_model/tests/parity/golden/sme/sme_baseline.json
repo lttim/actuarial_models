@@ -1,0 +1,67 @@
+{
+  "fia": {
+    "account_value_end_month_last": 100000.0,
+    "pv_benefit": 67877.23747570823,
+    "single_premium": 100000.0
+  },
+  "iul": {
+    "account_value_end_month_last": 0.0,
+    "pv_benefit": 16132.205314610765,
+    "single_premium": 25000.0
+  },
+  "myga": {
+    "account_value_end_month_last": 124618.19376531313,
+    "pv_benefit": 99516.36444404567,
+    "single_premium": 100000.0
+  },
+  "rila": {
+    "account_value_end_month_last": 2518.2505351122118,
+    "pv_benefit": 114.19008550772557,
+    "single_premium": 2518.2505351122118
+  },
+  "spia": {
+    "expected_total_cashflows_first": 499.76397149255183,
+    "expected_total_cashflows_last": 445.57997356382083,
+    "pv_benefit": 78489.1796995844,
+    "single_premium": 78489.1796995844
+  },
+  "term": {
+    "expected_claim_cashflows_last": 1248.6437319880195,
+    "expected_premium_cashflows_last": 17.939368032415725,
+    "pv_benefit": 17530.999090057154,
+    "single_premium": 14381.902324765
+  },
+  "ul": {
+    "account_value_end_month_last": 0.0,
+    "pv_benefit": 21868.67285065942,
+    "single_premium": 25000.0
+  },
+  "va": {
+    "account_value_end_month_last": 75566.02107778072,
+    "pv_benefit": 37713.20536422386,
+    "single_premium": 100000.0
+  },
+  "vul": {
+    "account_value_end_month_last": 0.0,
+    "pv_benefit": 16132.205314610765,
+    "single_premium": 25000.0
+  },
+  "wl": {
+    "pv_benefit": 24410.65226127939,
+    "single_premium": 24410.65226127939
+  },
+  "portfolio": {
+    "n_policies": 5.0,
+    "total_cf_sum": 1997682.3080885655,
+    "rollup_cf_sum_myga": 123392.00823348563,
+    "policy_count_myga": 1.0,
+    "rollup_cf_sum_rila": 0.0,
+    "policy_count_rila": 1.0,
+    "rollup_cf_sum_spia": 1798306.2521913985,
+    "policy_count_spia": 1.0,
+    "rollup_cf_sum_term_life": 43577.92861085283,
+    "policy_count_term_life": 1.0,
+    "rollup_cf_sum_universal_life": 32406.119052828333,
+    "policy_count_universal_life": 1.0
+  }
+}

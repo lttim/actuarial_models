@@ -2,6 +2,13 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
+REM Multi-policy portfolio UI: default ON for this local launcher. Opt out: create .disable-portfolio-v1
+if exist ".disable-portfolio-v1" (
+    set "ANNUITY_MODEL_PORTFOLIO_V1=0"
+) else if not defined ANNUITY_MODEL_PORTFOLIO_V1 (
+    set "ANNUITY_MODEL_PORTFOLIO_V1=1"
+)
+
 REM Hardening rules (mirrored by tests/test_launcher_invariants.py):
 REM   1. PROJECT-VENV-FIRST: prefer .venv\Scripts\python.exe.
 REM   2. MIN-PYTHON: require Python >= 3.11 (kept in sync with pyproject.toml).

@@ -136,6 +136,31 @@ WL_PV_TOL: Final[float] = 1e-4
 UL_PV_TOL: Final[float] = 1e-4
 """UL PV tolerance (USD)."""
 
+# ---------------------------------------------------------------------------
+# Actuary SME lite golden gate (Section 13 framework + autonomous review).
+# These tolerances govern the small per-product top-line snapshot used by
+# the Actuary SME's lite regression test (`tests/parity/test_sme_lite_regression.py`)
+# and consumed by the SME subagent's evidence pack. They are intentionally
+# tight (deterministic) and modest (Monte Carlo) -- the SME's value-add
+# is judgment, not numerical precision; depth lives in the existing
+# per-product `test_<P>_actuarial.py` files.
+# ---------------------------------------------------------------------------
+
+SME_LITE_TOL: Final[float] = 1e-6
+"""Per-output tolerance (USD) for deterministic scenarios in the
+SME lite golden snapshot."""
+
+SME_LITE_MC_TOL: Final[float] = 1.0
+"""Per-output tolerance (USD) for Monte Carlo scenarios in the
+SME lite golden snapshot. Wider than ``SME_LITE_TOL`` because MC
+means carry stochastic noise that is engine-correct."""
+
+# Portfolio runner (multi-policy aggregation) --------------------------------
+
+PORTFOLIO_ROLLUP_TOL: Final[float] = 1e-9
+"""Elementwise tolerance when asserting sum(by-ProductType liability CF)
+equals total portfolio liability CF on the shared monthly grid."""
+
 __all__ = [
     "ANNUITY_ACCUM_MODELCHECK_TOL",
     "AV_TOL",
@@ -148,10 +173,13 @@ __all__ = [
     "LIFE_MODELCHECK_TOL",
     "MODELCHECK_TOL",
     "MYGA_PV_TOL",
+    "PORTFOLIO_ROLLUP_TOL",
     "REINVEST_GAP_EPS",
     "REINVEST_XSR_EPS",
     "RILA_AV_TOL",
     "RILA_PV_TOL",
+    "SME_LITE_MC_TOL",
+    "SME_LITE_TOL",
     "TERM_MODELCHECK_TOL",
     "TOL_DF",
     "TOL_DOLLAR",

@@ -1,0 +1,6 @@
+policy_id,product_type,issue_age,sex,benefit_annual,death_benefit,monthly_premium,term_years,participation,cap,floor,rider_fee_annual,single_premium,declared_rate_annual,guarantee_years,face_amount
+p1,spia,65,male,80000,,,,,,,,,,,
+p2,term_life,35,male,,250000,200,20,,,,,,,,
+p3,rila,55,female,,,,,0.8,0.07,0.0,0.01,,,,
+p4,myga,60,male,,,,,,,,,100000,0.045,5,
+p5,universal_life,45,male,,,,,,,,,30000,,,200000

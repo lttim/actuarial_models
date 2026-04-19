@@ -30,11 +30,24 @@ from excel_workbook_validator import (
     validate_workbook,
     validate_workbook_or_raise,
 )
+
+# Portfolio (multi-policy) --------------------------------------------------
+from liability_aggregation import (
+    aggregate_by_product_type,
+    aggregate_liability_paths,
+)
 from liability_layouts import (
     LIABILITY_LAYOUTS,
     LiabilityLayout,
     liability_layout_for,
 )
+from portfolio import (
+    PolicyInput,
+    Portfolio,
+    PortfolioResult,
+    RunScenario,
+)
+from portfolio_runner import run_portfolio
 
 # Engine surface -----------------------------------------------------------
 from pricing_projection import (
@@ -89,6 +102,13 @@ from term_projection import (
 )
 
 __all__ = [
+    "PolicyInput",
+    "Portfolio",
+    "PortfolioResult",
+    "RunScenario",
+    "aggregate_by_product_type",
+    "aggregate_liability_paths",
+    "run_portfolio",
     "ALMAllocationSpec",
     "ALMAssumptions",
     "ALMBucketSpec",
