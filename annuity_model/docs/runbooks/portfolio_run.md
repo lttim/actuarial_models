@@ -32,16 +32,19 @@ python -m cli portfolio-run --inforce …/inforce.csv --out …/ --workers 4
 
 The **Portfolio** UI is a **separate sidebar section**, not inside **Pricing Run**.
 In the left sidebar, find the **Section** radio, then choose **Portfolio
-(multi-policy)** — that page has the inforce CSV upload, scratch table, and
-**Run portfolio** button.
+(multi-policy)** — that page has the inforce CSV upload, manual policy builder,
+and **Run portfolio** button.
 
-**`run_pricing_ui.sh` / `run_pricing_ui.command` / `run_pricing_ui.bat`** now set
-**`ANNUITY_MODEL_PORTFOLIO_V1=1` by default** (local launcher only). To hide the
-portfolio section when using those launchers, create **`annuity_model/.disable-portfolio-v1`**
-(gitignored) or run with `ANNUITY_MODEL_PORTFOLIO_V1=0`.
+Enablement matches **`portfolio_config.portfolio_v1_enabled()`** (same rules as
+`run_pricing_ui.sh` / `run_pricing_ui.bat`): **on by default** when the env var is
+unset, unless **`annuity_model/.disable-portfolio-v1`** exists or
+`ANNUITY_MODEL_PORTFOLIO_V1` is set to a falsy value (`0`, `false`, …). That way
+`streamlit run pricing_ui.py` keeps the Portfolio section without copying shell
+exports. If the section is off, the sidebar expander explains why and offers a
+session-only checkbox to show it anyway.
 
-**Streamlit Cloud** (`streamlit_app.py` at repo root) does not set the variable;
-add `ANNUITY_MODEL_PORTFOLIO_V1=1` in app secrets if you want portfolio there.
+**Streamlit Cloud:** set `ANNUITY_MODEL_PORTFOLIO_V1=0` in secrets only if you
+must hide portfolio; otherwise the default-on behavior applies when unset.
 
 ## Debugging a parity break
 

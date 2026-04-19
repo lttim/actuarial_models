@@ -19,7 +19,9 @@ from portfolio_summary import portfolio_result_to_summary_dict
 def _cmd_portfolio_run(args: argparse.Namespace) -> int:
     if not portfolio_v1_enabled():
         print(
-            "portfolio-run is disabled: set ANNUITY_MODEL_PORTFOLIO_V1=1 to enable.",
+            "portfolio-run is disabled: remove annuity_model/.disable-portfolio-v1 if that "
+            "opt-out file exists, or set ANNUITY_MODEL_PORTFOLIO_V1 to 1/true; unsetting the "
+            "variable also enables portfolio locally (see portfolio_config.portfolio_v1_enabled).",
             file=sys.stderr,
         )
         return 2

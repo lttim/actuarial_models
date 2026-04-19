@@ -41,7 +41,7 @@ to bend.
 | ProductType registry & UI capability matrix | [`product_registry.py`](../product_registry.py) | Adapter Protocol + `validate_run_inputs(state)` hook. |
 | Per-product wires (engine/excel/ui/converter/formatter) | [`products/<name>/__init__.py`](../products/) | Use `@register_product`. `tests/test_products_registry.py` keeps this in sync with legacy registries. |
 | Streamlit run-form state keys | [`pricing_run_form_state.py`](../pricing_run_form_state.py) | Constants live here -- never hardcode `"run_*"` literals elsewhere. |
-| Multi-policy portfolio runner | [`portfolio_runner_spec.md`](portfolio_runner_spec.md) + [`portfolio_runner.py`](../portfolio_runner.py) | Gated UI/CLI via `ANNUITY_MODEL_PORTFOLIO_V1=1`; see also `docs/portfolio_parity_contract.md`. |
+| Multi-policy portfolio runner | [`portfolio_runner_spec.md`](portfolio_runner_spec.md) + [`portfolio_runner.py`](../portfolio_runner.py) | UI/CLI enablement: [`portfolio_config.py`](../portfolio_config.py) (`portfolio_v1_enabled`); see also `docs/portfolio_parity_contract.md`. |
 | ALM dispatch (pricing-result -> liability-path) | [`liability_dispatch.py`](../liability_dispatch.py) | Plug-in registry; `register_liability_path_converter`. |
 | Workbook-builder dispatch | [`product_excel.py`](../product_excel.py) | Plug-in registry; `register_builder`. |
 | Static Excel-formula validator | [`excel_workbook_validator.py`](../excel_workbook_validator.py) | All builders MUST call `validate_workbook_or_raise(wb)` before `wb.save(...)`. |

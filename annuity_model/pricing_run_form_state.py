@@ -32,6 +32,7 @@ from product_registry import (
     ProductType,
     get_product_default_mortality_mode,
     get_term_contract_ui_config,
+    parse_term_length_label_to_years,
 )
 
 class RUN_KEY:
@@ -459,9 +460,129 @@ def build_run_form_seed_defaults(
     return defaults
 
 
+# Columns for manual portfolio entry / assembled inforce DataFrame (CSV-shaped).
+PORTFOLIO_INFORCE_SCRATCH_COLUMNS: tuple[str, ...] = (
+    "policy_id",
+    "product_type",
+    "issue_age",
+    "sex",
+    "benefit_annual",
+    "death_benefit",
+    "monthly_premium",
+    "term_years",
+    "participation",
+    "cap",
+    "floor",
+    "rider_fee_annual",
+    "me_charge_annual",
+    "single_premium",
+    "declared_rate_annual",
+    "guarantee_years",
+    "face_amount",
+    "horizon_years",
+    "gmdb_basis",
+)
+
+
+def default_inforce_scratch_row(
+    product_type: ProductType,
+    *,
+    preserve: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Wide inforce-shaped row defaults aligned with :func:`build_run_form_seed_defaults`.
+
+    Maps ``RUN_KEY`` / Term UI config into CSV column names used by
+    :func:`inforce_parsers.contract_from_inforce_row`. Unused fields are ``None``
+    so they become NaN in a DataFrame (same as blank CSV cells).
+
+    *preserve* may include ``policy_id``, ``issue_age``, ``sex`` to keep across
+    product switches (Portfolio manual entry UX).
+    """
+    seeds = build_run_form_seed_defaults(
+        product_default=product_type.value,
+        saved_inputs={},
+        meta={},
+        default_product_type=product_type,
+    )
+    row: dict[str, Any] = {c: None for c in PORTFOLIO_INFORCE_SCRATCH_COLUMNS}
+    row["product_type"] = product_type.value
+    row["issue_age"] = int(seeds[RUN_KEY.ISSUE_AGE])
+    row["sex"] = str(seeds[RUN_KEY.SEX])
+    row["policy_id"] = ""
+
+    if product_type == ProductType.SPIA:
+        row["benefit_annual"] = float(seeds[RUN_KEY.SPIA_BENEFIT_ANNUAL])
+    elif product_type == ProductType.TERM_LIFE:
+        row["death_benefit"] = float(seeds[RUN_KEY.TERM_BENEFIT_ANNUAL])
+        row["monthly_premium"] = float(seeds[RUN_KEY.TERM_MONTHLY_PREMIUM])
+        row["term_years"] = int(
+            parse_term_length_label_to_years(str(seeds[RUN_KEY.TERM_LENGTH]))
+        )
+    elif product_type == ProductType.RILA:
+        row["participation"] = float(seeds[RUN_KEY.RILA_PARTICIPATION])
+        row["cap"] = float(seeds[RUN_KEY.RILA_CAP])
+        row["floor"] = float(seeds[RUN_KEY.RILA_FLOOR])
+        row["rider_fee_annual"] = float(seeds[RUN_KEY.RILA_RIDER_FEE])
+    elif product_type == ProductType.MYGA:
+        row["single_premium"] = float(seeds[RUN_KEY.MYGA_SINGLE_PREMIUM])
+        row["declared_rate_annual"] = float(seeds[RUN_KEY.MYGA_DECLARED_RATE])
+        row["guarantee_years"] = int(seeds[RUN_KEY.MYGA_GUARANTEE_YEARS])
+    elif product_type == ProductType.FIA:
+        row["single_premium"] = float(seeds[RUN_KEY.FIA_SINGLE_PREMIUM])
+        row["participation"] = float(seeds[RUN_KEY.FIA_PARTICIPATION])
+        row["cap"] = float(seeds[RUN_KEY.FIA_CAP])
+        row["floor"] = float(seeds[RUN_KEY.FIA_FLOOR])
+        row["rider_fee_annual"] = 0.0
+        row["horizon_years"] = int(seeds[RUN_KEY.FIA_HORIZON_YEARS])
+    elif product_type == ProductType.VARIABLE_ANNUITY:
+        row["single_premium"] = float(seeds[RUN_KEY.VA_SINGLE_PREMIUM])
+        row["me_charge_annual"] = float(seeds[RUN_KEY.VA_ME_CHARGE])
+        row["horizon_years"] = int(seeds[RUN_KEY.VA_HORIZON_YEARS])
+        row["gmdb_basis"] = "return_of_premium"
+    elif product_type == ProductType.WHOLE_LIFE:
+        row["face_amount"] = float(seeds[RUN_KEY.WL_FACE_AMOUNT])
+    elif product_type == ProductType.UNIVERSAL_LIFE:
+        row["face_amount"] = float(seeds[RUN_KEY.UL_FACE_AMOUNT])
+        row["single_premium"] = float(seeds[RUN_KEY.UL_SINGLE_PREMIUM])
+    elif product_type == ProductType.INDEXED_UL:
+        row["face_amount"] = float(seeds[RUN_KEY.IUL_FACE_AMOUNT])
+        row["single_premium"] = float(seeds[RUN_KEY.IUL_SINGLE_PREMIUM])
+        row["participation"] = float(seeds[RUN_KEY.IUL_PARTICIPATION])
+        row["cap"] = float(seeds[RUN_KEY.IUL_CAP])
+        row["floor"] = float(seeds[RUN_KEY.IUL_FLOOR])
+    elif product_type == ProductType.VARIABLE_UL:
+        row["face_amount"] = float(seeds[RUN_KEY.VUL_FACE_AMOUNT])
+        row["single_premium"] = float(seeds[RUN_KEY.VUL_SINGLE_PREMIUM])
+    else:
+        raise NotImplementedError(f"portfolio defaults not wired for {product_type!r}")
+
+    if preserve:
+        for k in ("policy_id", "issue_age", "sex"):
+            if k not in preserve:
+                continue
+            v = preserve[k]
+            if v is None or (isinstance(v, float) and str(v) == "nan"):
+                continue
+            if k == "issue_age":
+                try:
+                    row["issue_age"] = int(v)
+                except (TypeError, ValueError):
+                    pass
+            elif k == "sex":
+                s = str(v).strip().lower()
+                if s in ("male", "female"):
+                    row["sex"] = s
+            elif k == "policy_id":
+                row["policy_id"] = str(v).strip()
+    return row
+
+
 class PORTFOLIO_KEY:
     """Session-state keys for the Portfolio (multi-policy) section (not ``run_*``)."""
 
     RESULT = "portfolio_res"
     RUN_ID = "portfolio_run_id"
     UPLOAD_NAME = "portfolio_upload_name"
+    MANUAL_ROWS = "portfolio_manual_row_ids"
+    # Sidebar-only: show Portfolio section when ``portfolio_v1_enabled()`` is False.
+    UI_FORCE_SIDEBAR = "_pricing_ui_show_portfolio_sidebar"

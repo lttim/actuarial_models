@@ -12,14 +12,22 @@ Run **multiple policies** of **mixed `ProductType`** under one shared
 
 ## Feature flag
 
-- **`ANNUITY_MODEL_PORTFOLIO_V1=1`** enables the Streamlit **Portfolio** sidebar
-  section and the `python -m cli portfolio-run` subcommand. Core library functions
-  (`run_portfolio`, aggregation, workbook builder) are importable regardless.
-- **Local launchers** (`run_pricing_ui.sh`, `.command`, `.bat`) **default this to
-  `1`** so double-click runs show the Portfolio section. Opt out with an empty
-  **`annuity_model/.disable-portfolio-v1`** file or `ANNUITY_MODEL_PORTFOLIO_V1=0`.
-- **Streamlit Cloud** (`streamlit_app.py`) does not set the variable unless you
-  configure it in secrets.
+Enablement is centralized in **`portfolio_config.portfolio_v1_enabled()`** (same
+rules as `run_pricing_ui.sh` / `run_pricing_ui.bat`):
+
+- **`annuity_model/.disable-portfolio-v1`** (gitignored) → **off** (local opt-out).
+- Else **`ANNUITY_MODEL_PORTFOLIO_V1`** truthy (`1`, `true`, …) → **on**; falsy
+  (`0`, `false`, …) → **off**.
+- Else **unset / empty** → **on** by default so `streamlit run pricing_ui.py` still
+  shows the Portfolio sidebar without copying shell exports.
+
+The Streamlit sidebar also offers a **session-only** “show Portfolio in Section”
+checkbox when the flag is off (`PORTFOLIO_KEY.UI_FORCE_SIDEBAR` in
+`pricing_run_form_state.py`). Core library functions (`run_portfolio`, aggregation,
+workbook builder) remain importable regardless.
+
+**Streamlit Cloud:** set `ANNUITY_MODEL_PORTFOLIO_V1=0` in secrets only if you need
+to hide portfolio there; otherwise the default-on empty env keeps it visible.
 
 ## Inforce layout
 

@@ -21,6 +21,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from collections.abc import MutableMapping
 from pathlib import Path
 from typing import Any, Literal
@@ -59,14 +60,20 @@ from build_pricing_excel_workbook import (
 from build_portfolio_excel_workbook import build_portfolio_workbook_bytes
 from inforce_io import load_policy_inputs_from_csv
 from portfolio import Portfolio
-from portfolio_config import portfolio_v1_enabled
+from portfolio_config import (
+    portfolio_disabled_explanation_markdown,
+    portfolio_sidebar_visible,
+    portfolio_v1_enabled,
+)
 from portfolio_runner import run_portfolio
 from portfolio_scenario import default_run_scenario
 from portfolio_summary import portfolio_result_to_summary_dict
 from pricing_run_form_state import (
+    PORTFOLIO_INFORCE_SCRATCH_COLUMNS,
     PORTFOLIO_KEY,
     PRICING_RUN_NUMBER_INPUT_KEYS,
     build_run_form_seed_defaults,
+    default_inforce_scratch_row,
     ensure_session_choice,
     run_number_input,
 )
@@ -4653,70 +4660,372 @@ def _render_alm_section() -> None:
 
 
 def _sidebar_section_options() -> list[str]:
-    if portfolio_v1_enabled():
+    if portfolio_sidebar_visible(st.session_state):
         return [*SECTION_ORDER[:2], "portfolio", *SECTION_ORDER[2:]]
     return list(SECTION_ORDER)
 
 
+def _portfolio_row_prefix(row_id: str) -> str:
+    return f"portfolio_row_{row_id}_"
+
+
+def _next_portfolio_policy_id(used: list[str]) -> str:
+    nums: list[int] = []
+    for pid in used:
+        ps = str(pid).strip()
+        if len(ps) >= 2 and ps[0].upper() == "P" and ps[1:].isdigit():
+            nums.append(int(ps[1:]))
+    n = max(nums, default=0) + 1
+    return f"P{n:04d}"
+
+
+def _portfolio_collect_used_policy_ids(row_ids: list[str], *, skip_row_id: str | None = None) -> list[str]:
+    out: list[str] = []
+    for rid in row_ids:
+        if skip_row_id is not None and rid == skip_row_id:
+            continue
+        k = _portfolio_row_prefix(rid) + "policy_id"
+        if k in st.session_state:
+            s = str(st.session_state[k]).strip()
+            if s:
+                out.append(s)
+    return out
+
+
+def _portfolio_policy_id_options(row_ids: list[str], current_row_id: str) -> list[str]:
+    used = _portfolio_collect_used_policy_ids(row_ids, skip_row_id=current_row_id)
+    nxt = _next_portfolio_policy_id(used)
+    pool = ["P0001", "P0002", "P0003", "P0004", nxt]
+    ordered: list[str] = []
+    for p in pool:
+        if p not in ordered:
+            ordered.append(p)
+    return ordered
+
+
+def _portfolio_wipe_row_keys(row_id: str, *, except_keys: frozenset[str] | None = None) -> None:
+    pfx = _portfolio_row_prefix(row_id)
+    skip = except_keys or frozenset()
+    for k in list(st.session_state.keys()):
+        if isinstance(k, str) and k.startswith(pfx) and k not in skip:
+            del st.session_state[k]
+
+
+def _portfolio_push_defaults_to_session(row_id: str, d: dict[str, Any]) -> None:
+    """Write non-None defaults to session; None removes the key so widgets use fresh seeds."""
+    pfx = _portfolio_row_prefix(row_id)
+    for col in PORTFOLIO_INFORCE_SCRATCH_COLUMNS:
+        v = d.get(col)
+        key = pfx + col
+        if v is None:
+            st.session_state.pop(key, None)
+        else:
+            st.session_state[key] = v
+
+
+def _portfolio_add_manual_row() -> None:
+    rows: list[str] = list(st.session_state.setdefault(PORTFOLIO_KEY.MANUAL_ROWS, []))
+    rid = str(uuid.uuid4())
+    used = _portfolio_collect_used_policy_ids(rows)
+    pid = _next_portfolio_policy_id(used)
+    d = default_inforce_scratch_row(ProductType.SPIA)
+    d["policy_id"] = pid
+    rows.append(rid)
+    st.session_state[PORTFOLIO_KEY.MANUAL_ROWS] = rows
+    _portfolio_push_defaults_to_session(rid, d)
+
+
+def _portfolio_remove_last_manual_row() -> None:
+    rows: list[str] = list(st.session_state.get(PORTFOLIO_KEY.MANUAL_ROWS) or [])
+    if not rows:
+        return
+    rid = rows.pop()
+    _portfolio_wipe_row_keys(rid)
+    st.session_state.pop(f"portfolio_meta_{rid}_product_type_prev", None)
+    st.session_state[PORTFOLIO_KEY.MANUAL_ROWS] = rows
+
+
+def _portfolio_row_as_dict_for_dataframe(row_id: str) -> dict[str, Any]:
+    pfx = _portfolio_row_prefix(row_id)
+    raw_pt = st.session_state.get(pfx + "product_type")
+    if not raw_pt:
+        raw_pt = ProductType.SPIA.value
+    pt = ProductType(str(raw_pt).strip())
+    out: dict[str, Any] = dict(default_inforce_scratch_row(pt))
+    for col in PORTFOLIO_INFORCE_SCRATCH_COLUMNS:
+        key = pfx + col
+        if key not in st.session_state:
+            continue
+        v = st.session_state[key]
+        if col == "policy_id":
+            out[col] = str(v).strip() if v is not None else ""
+            continue
+        if col == "sex":
+            s = str(v).strip().lower() if v is not None else "male"
+            out[col] = s if s in ("male", "female") else "male"
+            continue
+        if col == "product_type":
+            out[col] = str(v).strip()
+            continue
+        if v is None or v == "":
+            out[col] = None
+            continue
+        if col in ("issue_age", "term_years", "guarantee_years", "horizon_years"):
+            try:
+                out[col] = int(float(v))
+            except (TypeError, ValueError):
+                out[col] = None
+            continue
+        if col == "gmdb_basis":
+            out[col] = str(v).strip()
+            continue
+        try:
+            out[col] = float(v)
+        except (TypeError, ValueError):
+            out[col] = None
+    return out
+
+
+def _portfolio_manual_rows_dataframe() -> pd.DataFrame:
+    row_ids: list[str] = list(st.session_state.get(PORTFOLIO_KEY.MANUAL_ROWS) or [])
+    recs = [_portfolio_row_as_dict_for_dataframe(rid) for rid in row_ids]
+    return pd.DataFrame.from_records(recs, columns=list(PORTFOLIO_INFORCE_SCRATCH_COLUMNS))
+
+
+def _render_portfolio_contract_fields(row_id: str, pt: ProductType) -> None:
+    pfx = _portfolio_row_prefix(row_id)
+    if pt == ProductType.SPIA:
+        st.number_input(
+            "Annual benefit ($)",
+            min_value=1.0,
+            step=1000.0,
+            key=pfx + "benefit_annual",
+        )
+    elif pt == ProductType.TERM_LIFE:
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.number_input(
+                "Death benefit ($)",
+                min_value=1.0,
+                step=10_000.0,
+                key=pfx + "death_benefit",
+            )
+        with c2:
+            st.number_input(
+                "Monthly premium ($)",
+                min_value=0.0,
+                step=10.0,
+                key=pfx + "monthly_premium",
+            )
+        with c3:
+            st.number_input("Term (years)", min_value=1, max_value=50, step=1, key=pfx + "term_years")
+    elif pt == ProductType.RILA:
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.number_input("Participation", min_value=0.0, max_value=5.0, format="%.4f", key=pfx + "participation")
+        with c2:
+            st.number_input("Cap (annual decimal)", min_value=-1.0, max_value=2.0, format="%.4f", key=pfx + "cap")
+        with c3:
+            st.number_input("Floor (annual decimal)", min_value=-1.0, max_value=1.0, format="%.4f", key=pfx + "floor")
+        with c4:
+            st.number_input(
+                "Rider fee (annual on AV)",
+                min_value=0.0,
+                max_value=1.0,
+                format="%.4f",
+                key=pfx + "rider_fee_annual",
+            )
+    elif pt == ProductType.MYGA:
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+        with c2:
+            st.number_input(
+                "Declared rate (annual decimal)",
+                min_value=-0.5,
+                max_value=1.0,
+                format="%.4f",
+                key=pfx + "declared_rate_annual",
+            )
+        with c3:
+            st.number_input("Guarantee years", min_value=1, max_value=30, step=1, key=pfx + "guarantee_years")
+    elif pt == ProductType.FIA:
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
+        with c1:
+            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+        with c2:
+            st.number_input("Participation", min_value=0.0, max_value=5.0, format="%.4f", key=pfx + "participation")
+        with c3:
+            st.number_input("Cap (annual decimal)", min_value=-1.0, max_value=2.0, format="%.4f", key=pfx + "cap")
+        with c4:
+            st.number_input("Floor (annual decimal)", min_value=-1.0, max_value=1.0, format="%.4f", key=pfx + "floor")
+        with c5:
+            st.number_input(
+                "Rider fee (annual on AV)",
+                min_value=0.0,
+                max_value=1.0,
+                format="%.4f",
+                key=pfx + "rider_fee_annual",
+            )
+        with c6:
+            st.number_input("Horizon (years)", min_value=1, max_value=80, step=1, key=pfx + "horizon_years")
+    elif pt == ProductType.VARIABLE_ANNUITY:
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+        with c2:
+            st.number_input(
+                "M&E charge (annual decimal)",
+                min_value=0.0,
+                max_value=1.0,
+                format="%.4f",
+                key=pfx + "me_charge_annual",
+            )
+        with c3:
+            st.number_input("Horizon (years)", min_value=1, max_value=80, step=1, key=pfx + "horizon_years")
+        st.selectbox(
+            "GMDB basis",
+            options=["return_of_premium", "max_anniversary"],
+            key=pfx + "gmdb_basis",
+            accept_new_options=True,
+        )
+    elif pt == ProductType.WHOLE_LIFE:
+        st.number_input("Face amount ($)", min_value=1.0, step=10_000.0, key=pfx + "face_amount")
+    elif pt == ProductType.UNIVERSAL_LIFE:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.number_input("Face amount ($)", min_value=1.0, step=10_000.0, key=pfx + "face_amount")
+        with c2:
+            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+    elif pt == ProductType.INDEXED_UL:
+        c1, c2, c3, c4, c5 = st.columns(5)
+        with c1:
+            st.number_input("Face amount ($)", min_value=1.0, step=10_000.0, key=pfx + "face_amount")
+        with c2:
+            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+        with c3:
+            st.number_input("Participation", min_value=0.0, max_value=5.0, format="%.4f", key=pfx + "participation")
+        with c4:
+            st.number_input("Cap (annual decimal)", min_value=-1.0, max_value=2.0, format="%.4f", key=pfx + "cap")
+        with c5:
+            st.number_input("Floor (annual decimal)", min_value=-1.0, max_value=1.0, format="%.4f", key=pfx + "floor")
+    elif pt == ProductType.VARIABLE_UL:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.number_input("Face amount ($)", min_value=1.0, step=10_000.0, key=pfx + "face_amount")
+        with c2:
+            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+    else:
+        st.warning(f"No manual fields wired for {pt.value}.")
+
+
 def _render_portfolio_section() -> None:
-    """Multi-policy inforce CSV run (gated by ``ANNUITY_MODEL_PORTFOLIO_V1``)."""
+    """Multi-policy inforce CSV run (see ``portfolio_config.portfolio_v1_enabled``)."""
     st.subheader("Portfolio (multi-policy)")
     st.caption(
         "Load an inforce CSV (see ``tests/data/inforce/example_v1/inforce.csv`` for column layout). "
         "Uses the same flat yield / mortality defaults as the portfolio CLI smoke test."
     )
-    scratch_cols = [
-        "policy_id",
-        "product_type",
-        "issue_age",
-        "sex",
-        "benefit_annual",
-        "death_benefit",
-        "monthly_premium",
-        "term_years",
-        "participation",
-        "cap",
-        "floor",
-        "rider_fee_annual",
-        "single_premium",
-        "declared_rate_annual",
-        "guarantee_years",
-        "face_amount",
-    ]
-    st.markdown("##### Inline table (optional)")
-    st.caption("Add rows like the example CSV, then **Run from table**.")
-    scratch_key = "portfolio_scratch_df"
-    if scratch_key not in st.session_state:
-        st.session_state[scratch_key] = pd.DataFrame(columns=scratch_cols)
-    edited = st.data_editor(
-        st.session_state[scratch_key],
-        num_rows="dynamic",
-        key="portfolio_table_editor",
-        use_container_width=True,
+    st.markdown("##### Manual policies (optional)")
+    st.caption(
+        "Defaults match the **Pricing Run** tab (from ``build_run_form_seed_defaults``). "
+        "Add policies, adjust fields, then **Run from table**."
     )
-    st.session_state[scratch_key] = edited
+    st.session_state.setdefault(PORTFOLIO_KEY.MANUAL_ROWS, [])
+    b1, b2 = st.columns(2)
+    with b1:
+        if st.button("Add policy", type="secondary", key="portfolio_manual_add_button"):
+            _portfolio_add_manual_row()
+    with b2:
+        if st.button("Remove last policy", type="secondary", key="portfolio_manual_remove_button"):
+            _portfolio_remove_last_manual_row()
+
+    product_options = list(product_options_for_ui())
+    product_values = [p.value for p in product_options]
+    row_ids = list(st.session_state.get(PORTFOLIO_KEY.MANUAL_ROWS) or [])
+
+    for idx, row_id in enumerate(row_ids):
+        pfx = _portfolio_row_prefix(row_id)
+        meta_pt_prev = f"portfolio_meta_{row_id}_product_type_prev"
+        title_pid = str(st.session_state.get(pfx + "policy_id", "")).strip() or "(new)"
+        with st.expander(f"Policy {idx + 1} — {title_pid}", expanded=True):
+            sel = st.selectbox(
+                "Product type",
+                options=product_values,
+                format_func=lambda v: product_label(ProductType(v)),
+                key=pfx + "product_type",
+            )
+            if meta_pt_prev in st.session_state and st.session_state[meta_pt_prev] != sel:
+                preserve = {
+                    "policy_id": str(st.session_state.get(pfx + "policy_id", "")).strip(),
+                    "issue_age": st.session_state.get(pfx + "issue_age"),
+                    "sex": st.session_state.get(pfx + "sex"),
+                }
+                newd = default_inforce_scratch_row(ProductType(sel), preserve=preserve)
+                _portfolio_wipe_row_keys(row_id, except_keys=frozenset({pfx + "product_type"}))
+                _portfolio_push_defaults_to_session(row_id, newd)
+            st.session_state[meta_pt_prev] = sel
+
+            opts_pid = _portfolio_policy_id_options(row_ids, row_id)
+            cur_pid = str(st.session_state.get(pfx + "policy_id", opts_pid[0] if opts_pid else "")).strip()
+            if cur_pid and cur_pid not in opts_pid:
+                opts_pid = [cur_pid, *opts_pid]
+            st.selectbox(
+                "Policy ID",
+                options=opts_pid if opts_pid else ["P0001"],
+                key=pfx + "policy_id",
+                accept_new_options=True,
+            )
+
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.number_input("Issue age", min_value=0, max_value=120, step=1, key=pfx + "issue_age")
+            with c2:
+                st.selectbox(
+                    "Sex",
+                    options=["male", "female"],
+                    key=pfx + "sex",
+                    accept_new_options=True,
+                )
+            with c3:
+                st.caption("Product-specific fields below.")
+            pt = ProductType(str(st.session_state.get(pfx + "product_type", sel)).strip())
+            _render_portfolio_contract_fields(row_id, pt)
+
+    if row_ids:
+        st.markdown("##### Assembled inforce preview")
+        st.dataframe(
+            _portfolio_manual_rows_dataframe(),
+            use_container_width=True,
+            hide_index=True,
+        )
+
     if st.button("Run from table", type="secondary", key="portfolio_run_table_button"):
         from inforce_io import load_policy_inputs_from_csv_from_dataframe
 
         try:
-            df = edited.dropna(how="all")
-            if "product_type" not in df.columns or df.empty:
-                st.error("Add at least one row with a product_type.")
+            row_ids_run = list(st.session_state.get(PORTFOLIO_KEY.MANUAL_ROWS) or [])
+            if not row_ids_run:
+                st.error("Add at least one policy (use **Add policy**), or upload a CSV.")
             else:
-                pt = df["product_type"].astype(str).str.strip()
-                df = df.loc[pt != ""].loc[pt.str.lower() != "nan"]
-                if df.empty:
-                    st.error("Add at least one policy row with a product_type.")
+                df = _portfolio_manual_rows_dataframe()
+                if df.empty or "product_type" not in df.columns:
+                    st.error("Add at least one row with a product_type.")
                 else:
-                    policies = load_policy_inputs_from_csv_from_dataframe(df)
-                    scen = default_run_scenario()
-                    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
-                    st.session_state[PORTFOLIO_KEY.RESULT] = res
-                    st.session_state[PORTFOLIO_KEY.RUN_ID] = (
-                        int(st.session_state.get(PORTFOLIO_KEY.RUN_ID, 0)) + 1
-                    )
-                    st.session_state[PORTFOLIO_KEY.UPLOAD_NAME] = "scratch_table.csv"
-                    st.success("Portfolio pricing completed (from table).")
+                    pt = df["product_type"].astype(str).str.strip()
+                    df = df.loc[pt != ""].loc[pt.str.lower() != "nan"]
+                    if df.empty:
+                        st.error("Add at least one policy row with a product_type.")
+                    else:
+                        policies = load_policy_inputs_from_csv_from_dataframe(df)
+                        scen = default_run_scenario()
+                        res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
+                        st.session_state[PORTFOLIO_KEY.RESULT] = res
+                        st.session_state[PORTFOLIO_KEY.RUN_ID] = (
+                            int(st.session_state.get(PORTFOLIO_KEY.RUN_ID, 0)) + 1
+                        )
+                        st.session_state[PORTFOLIO_KEY.UPLOAD_NAME] = "scratch_table.csv"
+                        st.success("Portfolio pricing completed (from table).")
         except Exception as exc:  # noqa: BLE001 -- surface parse/pricing errors to the user
             st.error(f"{type(exc).__name__}: {exc}")
 
@@ -4784,9 +5093,21 @@ def main() -> None:
     with st.sidebar:
         st.title("Pricing Demo")
         if portfolio_v1_enabled():
+            st.session_state.pop(PORTFOLIO_KEY.UI_FORCE_SIDEBAR, None)
             st.caption(
                 "Batch / multi-policy: set **Section** (below) to **Portfolio (multi-policy)**."
             )
+        else:
+            with st.expander("Portfolio section is off — why?", expanded=False):
+                st.markdown(portfolio_disabled_explanation_markdown())
+                st.caption(
+                    "Optional: show the Portfolio page in **Section** for this browser session "
+                    "only (Streamlit). CLI `portfolio-run` follows the same enablement rules."
+                )
+                st.checkbox(
+                    "Show Portfolio (multi-policy) in Section list",
+                    key=PORTFOLIO_KEY.UI_FORCE_SIDEBAR,
+                )
         page = st.radio(
             "Section",
             options=_sidebar_section_options(),

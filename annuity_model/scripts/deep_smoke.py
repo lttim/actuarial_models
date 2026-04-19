@@ -25,6 +25,8 @@ if str(REPO_ROOT) not in sys.path:
 import numpy as np
 from openpyxl import load_workbook
 
+from portfolio_config import portfolio_v1_enabled
+
 import fia_projection as fp
 import iul_projection as iul
 import myga_projection as my
@@ -444,10 +446,10 @@ def main() -> int:
         ("IUL", build_iul),
         ("VUL", build_vul),
     ]
-    if os.environ.get("ANNUITY_MODEL_PORTFOLIO_V1", "").strip() == "1":
+    if portfolio_v1_enabled():
         builders.append(("Portfolio", build_portfolio))
     else:
-        print("[smoke] skipping Portfolio (set ANNUITY_MODEL_PORTFOLIO_V1=1 to include)")
+        print("[smoke] skipping Portfolio (see portfolio_config.portfolio_v1_enabled)")
 
     for name, builder in builders:
         try:
