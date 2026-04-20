@@ -34,7 +34,7 @@ python -m pytest tests/parity -q
 # 2. Full unit-test gate
 python -m pytest -q
 
-# 3. End-to-end smoke (3 products + full Excel validator)
+# 3. End-to-end smoke (all implemented products + full Excel validator)
 python scripts/deep_smoke.py
 
 # 4. Tolerance contract is in sync with parity_constants.py

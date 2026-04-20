@@ -31,7 +31,8 @@ Use this checklist before every merge to main and every product release.
 ## After any change to epsilon / tolerance / ordering logic
 
 - [ ] Boundary test added: prove no double-trigger at the new threshold
-- [ ] `docs/model_parity_contract.md` epsilon table updated
+- [ ] `parity_constants.py` updated; parity contracts re-rendered via
+      `python scripts/render_parity_contract.py` (never edit generated tables by hand)
 - [ ] All golden scenarios re-run and results captured
 - [ ] Old failing test (if fixing a bug) preserved as a regression test with `@pytest.mark.regression`
 

@@ -37,8 +37,8 @@ This script will:
 - check for Python 3.11+ and recommend `brew install python@3.12` if missing,
 - create `annuity_model/.venv` (gitignored),
 - install `requirements.txt` into it,
-- run the full regression suite (`pytest tests/ tests/parity/`) and report the
-  count — must show **150 passed**,
+- run the full regression suite (`pytest tests/ tests/parity/`) — **must exit 0**
+  (summary line lists `passed` and any `skipped`; the pass count grows with the suite),
 - print the next-step commands.
 
 If you would rather do it by hand:
@@ -65,8 +65,8 @@ source .venv/bin/activate
 ./run_tests_report.sh                # writes reports/pytest_report.html and opens it
 ```
 
-If the Streamlit UI loads and the test report shows 150 green, you're at parity
-with the Windows machine.
+If the Streamlit UI loads and the HTML report shows the full suite green (no
+failures), you're aligned with CI expectations.
 
 ---
 
@@ -81,8 +81,10 @@ checked-in files — you do **not** need to copy anything from `~/.cursor/`:
 | `annuity_model/AGENTS.md` | Product | Parity gates, key files, **mandatory `excel_workbook_validator.validate_workbook_or_raise(wb)`** before every `wb.save(...)`, cross-sheet column rules, `liability_total_col` guidance. |
 | `annuity_model/.cursor/rules/actuarial-parity.mdc` | Always-on | Tie-break / epsilon / step-level parity invariants. |
 | `annuity_model/.cursor/rules/excel-formula-safety.mdc` | Globbed to builders | Off-by-one parens, missing `IF` false branch, trailing empty args, wrong `Liabilities!` column letter. |
-| `annuity_model/.cursorrules` | Workspace | `!handoff` custom command — overwrite `state.md` with current state on demand. |
-| `annuity_model/state.md` | Session handoff | Where the last session stopped; read this before starting work. |
+| `.cursor/rules/handoff-recall.mdc` (repo root) | Workspace | Canonical `!handoff` / `!recall` — writes **gitignored** files under `.cursor/handoffs/`. |
+| `annuity_model/.cursorrules` | Product | Legacy `!handoff` hook — overwrites `annuity_model/state.md` when used; prefer root handoff protocol when both exist. |
+| `annuity_model/state.md` | Session snapshot | Short human handoff; optional if you use `.cursor/handoffs/`. |
+| `PROJECT_DEVELOPMENT_GUIDE.md` | Workspace | Governance map for humans and non-Cursor agents. |
 | `annuity_model/docs/model_parity_contract.md` | Reference | SPIA/ALM parity tolerances, tie-break, epsilon policy. |
 | `annuity_model/docs/rila_parity_contract.md` | Reference | RILA Python ↔ Excel parity addendum. |
 | `annuity_model/docs/rila_product_spec.md` | Reference | RILA v1 product definition. |
@@ -100,7 +102,8 @@ Open the chat in `Code_Sandbox/` and paste:
 > Read `MACOS_HANDOFF.md`, `annuity_model/AGENTS.md`,
 > `annuity_model/state.md`, and the two rule files under
 > `annuity_model/.cursor/rules/`. Then run
-> `cd annuity_model && ./bootstrap_macos.sh` and report the test count.
+> `cd annuity_model && ./bootstrap_macos.sh` and report the pytest summary
+> line (`passed` / `skipped`, exit code).
 
 That gives the agent the full picture: invariants, current state, and a
 verified-green baseline to start from.
@@ -132,14 +135,10 @@ live in the files referenced in §4.
 
 ## 7. Where the most recent work stopped
 
-See `annuity_model/state.md` for the live handoff. Latest commits at the time
-of this hand-off:
-
-- `16f7a04` — cross-platform Git hygiene + macOS launchers (this commit set).
-- `5bb89a5` — RILA + Excel formula validator + ALM export column fix; the
-  validator was also optimized to run in <1 s on a full RILA + ALM workbook
-  via per-formula strip cache + template dedup.
-- `ae6f545` — earlier handoff snapshot.
+- **`git log -1 --oneline`** at the repo root shows the current tip of `main`.
+- **`annuity_model/state.md`** is a short optional snapshot (may lag `main`).
+- **`.cursor/handoffs/*.md`** holds structured cross-chat handoffs from `!handoff`
+  (gitignored; not in the clone unless you create them locally).
 
 ## 8. Common gotchas on first macOS run
 
@@ -155,6 +154,9 @@ of this hand-off:
   This is rare; arm64 wheels exist for everything in `requirements.txt`.
 - **Cursor doesn't see the rules** — make sure you opened `Code_Sandbox/` as
   the workspace root, not `annuity_model/` or the parent of `Code_Sandbox/`.
+- **Wrong Python for tooling** — run gates with `annuity_model/.venv/bin/python3`
+  after bootstrap; bare macOS `python3` may be 3.9 and lack modern typing
+  features the repo requires.
 
 ## 9. Pushing back to GitHub
 

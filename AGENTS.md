@@ -12,7 +12,7 @@ cross-platform AI agents (Cursor, Claude Code, Codex, etc.), read
 
 | Directory | Product |
 |-----------|---------|
-| `annuity_model/` | SPIA (Single Premium Immediate Annuity) |
+| `annuity_model/` | Multi-product pricing + ALM (SPIA, Term, RILA, MYGA, FIA, VA, WL, UL, IUL, VUL); see `annuity_model/README.md` |
 | `actuarial_parity_kit/` | Reusable governance template for new products |
 
 ## Universal rules for all actuarial products in this workspace

@@ -74,6 +74,9 @@ annuity_model/
 
 ## Architecture (after Phase 2 hardening)
 
+The diagram shows the original SPIA / Term / RILA spine; the live
+`ProductRegistry` dispatches **10** products (see module map above).
+
 ```mermaid
 flowchart TD
     subgraph engines [Engines]
@@ -163,8 +166,8 @@ flowchart TD
 ## Daily commands
 
 ```bash
-# Activate venv (per repo root)
-source ../.venv/bin/activate
+# Activate venv (created under annuity_model/ by bootstrap)
+source .venv/bin/activate
 
 # Run the parity-critical subset (blocks any merge on failure)
 python -m pytest tests/parity -q
@@ -176,7 +179,7 @@ python -m pytest -q
 python -c "from excel_workbook_validator import validate_workbook_or_raise; \
            import openpyxl; validate_workbook_or_raise(openpyxl.load_workbook('SPIA.xlsx'))"
 
-# End-to-end smoke (all three products + full validator)
+# End-to-end smoke (every product in deep_smoke + full validator)
 python scripts/deep_smoke.py
 
 # Regenerate parity-contract tolerance tables from parity_constants
@@ -203,4 +206,4 @@ python scripts/parity_trace.py --steps 60 --output traces/spia.csv
 * Debugging a parity break? `docs/runbooks/investigate_parity_break.md`.
 * Validator failed? `docs/runbooks/debug_validator_failure.md`.
 * Cutting a release? `docs/runbooks/release.md`.
-* Adding a product? The 2-file walkthrough above.
+* Adding a product? The five-step walkthrough above.

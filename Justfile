@@ -26,7 +26,7 @@ parity:
 test *args="":
     cd annuity_model && python -m pytest -q "$@"
 
-# End-to-end smoke (3 products + full Excel validator).
+# End-to-end smoke (all products in deep_smoke + full Excel validator).
 smoke:
     cd annuity_model && python scripts/deep_smoke.py
 

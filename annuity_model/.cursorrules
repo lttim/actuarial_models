@@ -3,5 +3,7 @@ Whenever the user types exactly !handoff as a prompt, you must immediately execu
 1. Analyze the current chat history and identify the most recent working state of the codebase.
 2. Summarize the key logic we just implemented, specifically noting any Python architectural decisions, data structures (like pandas DataFrames), or actuarial modeling assumptions we finalized.
 3. Outline the immediate next steps, unresolved bugs, or pending calculations.
-4. Write this summary into a file named state.md in the root directory, completely overwriting its previous contents. Format it cleanly with markdown headers.
-5. Reply to the user with only this message: "State file updated in state.md. You are safe to start a new chat. Don't forget to @state.md in the new window."
+4. Write this summary into `annuity_model/state.md` in this repository (overwrite that file). Format it cleanly with markdown headers. Do not write to the repo root — only `annuity_model/state.md`.
+5. Reply to the user with only this message: "State file updated in annuity_model/state.md. You are safe to start a new chat. For cross-session handoffs that follow the workspace protocol, use !handoff per .cursor/rules/handoff-recall.mdc (writes .cursor/handoffs/)."
+
+Note: The workspace root also defines `!handoff` / `!recall` in `.cursor/rules/handoff-recall.mdc`, which writes timestamped files under `.cursor/handoffs/`. Prefer that flow when you need a durable, sortable handoff artifact; use this rule when you want a single short snapshot in `annuity_model/state.md`.

@@ -46,7 +46,7 @@ After bootstrap, the venv is at `annuity_model/.venv/`.
 
 ```bash
 cd annuity_model
-pytest tests/ tests/parity/ -q          # full suite (~3 s on M-series)
+pytest tests/ tests/parity/ -q          # full suite (order ~1 min locally; CI varies)
 pytest tests/parity/ -v                 # parity gates only
 python scripts/deep_smoke.py            # build + validate real .xlsx for every product
 ./run_pricing_ui.sh                     # launch Streamlit UI on :8501

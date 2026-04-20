@@ -57,10 +57,10 @@ All five must exit 0. CI will rerun them on every push to your PR.
 
 ## Useful runbooks
 
-* Validator failed: [`docs/runbooks/debug_validator_failure.md`](annuity_model/docs/runbooks/debug_validator_failure.md)
-* Parity failed: [`docs/runbooks/investigate_parity_break.md`](annuity_model/docs/runbooks/investigate_parity_break.md)
-* Excel cache problem: [`docs/runbooks/regenerate_excel_cache.md`](annuity_model/docs/runbooks/regenerate_excel_cache.md)
-* Cutting a release: [`docs/runbooks/release.md`](annuity_model/docs/runbooks/release.md)
+* Validator failed: [`annuity_model/docs/runbooks/debug_validator_failure.md`](annuity_model/docs/runbooks/debug_validator_failure.md)
+* Parity failed: [`annuity_model/docs/runbooks/investigate_parity_break.md`](annuity_model/docs/runbooks/investigate_parity_break.md)
+* Excel cache problem: [`annuity_model/docs/runbooks/regenerate_excel_cache.md`](annuity_model/docs/runbooks/regenerate_excel_cache.md)
+* Cutting a release: [`annuity_model/docs/runbooks/release.md`](annuity_model/docs/runbooks/release.md)
 
 ## CODEOWNERS
 
@@ -75,7 +75,7 @@ requirement and don't try to route around it.
 
 The full bootstrap procedures live in:
 * macOS / Apple Silicon: `annuity_model/bootstrap_macos.sh`
-* Windows / PowerShell: `MACOS_HANDOFF.md` (Windows section at the bottom)
+* Windows / PowerShell: `annuity_model/bootstrap.bat`, or the clone + venv steps in root [`AGENTS.md`](AGENTS.md) (Windows section)
 
 Both install the pinned runtime + dev requirements; nothing else is needed.
 

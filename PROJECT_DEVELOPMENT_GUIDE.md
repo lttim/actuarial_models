@@ -141,9 +141,9 @@ Continuity quality requirement is platform-independent even when command syntax 
 - **Calculation logic change** -> `AI_AGENT_PREFLIGHT.md` CALCULATION branch + parity/investigation runbooks.
 - **Tolerance update** -> `AI_AGENT_PREFLIGHT.md` TOLERANCE branch + `model_change_log.md`.
 - **Excel builder change** -> `excel-formula-safety.mdc` + validator runbook + parity gates.
-- **Portfolio surface change** -> `docs/portfolio_runner_spec.md` + `docs/runbooks/portfolio_run.md`.
-- **Docs-only change** -> docs checks and template-parity checks when `AGENTS.md` changes.
-- **Release preparation** -> `docs/runbooks/release.md`.
+- **Portfolio surface change** -> `annuity_model/docs/portfolio_runner_spec.md` + `annuity_model/docs/runbooks/portfolio_run.md`.
+- **Docs-only change** -> `just docs-check` from repo root; if root or kit `AGENTS.md` text changes, also run `annuity_model/tests/test_kit_template_parity.py`.
+- **Release preparation** -> `annuity_model/docs/runbooks/release.md`.
 
 ## 9) Definition of done for maintainable development
 

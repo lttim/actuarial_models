@@ -1,10 +1,11 @@
 # AI Agent Pre-flight
 
 **Audience:** *AI coding agents* (Cursor, Claude Code, Codex, etc.) operating
-on this repository. Human contributors should use
-[`AGENTS.md`](../AGENTS.md), the four-gate
-[`Justfile`](../Justfile) recipes, and the per-task runbooks under
-[`docs/runbooks/`](runbooks/).
+on this repository. Human contributors should start with root
+[`AGENTS.md`](../../AGENTS.md) and [`CONTRIBUTING.md`](../../CONTRIBUTING.md),
+then [`AGENTS.md`](../AGENTS.md) for the canonical four-gate commands,
+[`Justfile`](../../Justfile) recipes (`just preflight`, `just docs-check`),
+and the per-task runbooks under [`docs/runbooks/`](runbooks/).
 
 This file is the **single entry point** an autonomous agent should read
 *before* proposing any code change. It does three things, in order:
@@ -279,7 +280,7 @@ python -m pytest tests/parity -q
 # 2. Full unit-test gate
 python -m pytest -q
 
-# 3. End-to-end smoke (3 products + full Excel validator)
+# 3. End-to-end smoke (all implemented products + full Excel validator)
 python scripts/deep_smoke.py
 
 # 4. Tolerance contract is in sync with parity_constants.py
