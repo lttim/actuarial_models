@@ -120,7 +120,7 @@ because they catch the bug classes the parity engine cannot:
   the LibreOffice layer (skipped without `soffice` on PATH; runs in
   CI parity-gate) actually recalculates the workbook through the
   reference spreadsheet engine. The pre-existing
-  `tests/parity/test_runtime_excel_recalc.py` is the SPIA-only
+  `tests/parity/test_runtime_excel_recalc.py` was the SPIA-only
   ancestor — the per-product file supersedes it.
 
 If a task changes Excel-generating code, ALSO open the regenerated workbook

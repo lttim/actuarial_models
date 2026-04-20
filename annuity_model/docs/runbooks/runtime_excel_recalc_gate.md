@@ -5,9 +5,9 @@
 **Active** since 2026-04-18 (P0 hardening, this PR).
 
 The gate is implemented as
-[`tests/parity/test_runtime_excel_recalc.py`](../../tests/parity/test_runtime_excel_recalc.py)
+[`tests/parity/test_excel_recalc_per_product.py`](../../tests/parity/test_excel_recalc_per_product.py)
 plus the helper [`excel_runtime_recalc.py`](../../excel_runtime_recalc.py).
-It builds a small SPIA workbook and recalculates it via
+It builds per-product workbooks and recalculates them via
 **LibreOffice headless** (`soffice --headless --calc --convert-to xlsx`),
 then asserts the cached `ModelCheck` cells match the Python pricing result
 within `parity_constants.MODELCHECK_TOL`.
@@ -19,7 +19,7 @@ Pure-Python alternatives all have caveats:
 * `xlcalculator==0.5.0` transitively pins `yearfrac<2`, incompatible with
   the project's `numpy==2.4.4` lock. Parked since 2026-04 (history below).
 * `formulas==1.3.4` installs cleanly but takes >3 minutes to load and
-  recalculate the SPIA workbook because it builds the full dependency
+  recalculate generated workbooks because it builds the full dependency
   graph for thousands of cells. Unusable in CI on every PR.
 * `pycel` has narrower function coverage and a similar perf profile.
 
@@ -90,7 +90,7 @@ ones.
 
 * [`excel_runtime_recalc.py`](../../excel_runtime_recalc.py) -- LibreOffice
   helper module.
-* [`tests/parity/test_runtime_excel_recalc.py`](../../tests/parity/test_runtime_excel_recalc.py)
+* [`tests/parity/test_excel_recalc_per_product.py`](../../tests/parity/test_excel_recalc_per_product.py)
   -- the gate.
 * [`scripts/parity_trace.py`](../../scripts/parity_trace.py) -- uses the
   same helper to populate the Excel side of the diff trace when soffice

@@ -18,11 +18,18 @@ that exercises all four locally.
 - [ ] SPIA
 - [ ] Term Life
 - [ ] RILA
+- [ ] MYGA
+- [ ] FIA
+- [ ] VA
+- [ ] WL
+- [ ] UL
+- [ ] IUL
+- [ ] VUL
 - [ ] None (docs / tooling / CI only)
 
 ## Surface affected
 
-- [ ] Engine math (`pricing_projection.py`, `term_projection.py`, `rila_projection.py`)
+- [ ] Engine math (`*_projection.py`, product engine modules, actuarial core math)
 - [ ] Excel builder (`build_*_excel_workbook.py`, `alm_excel_ladder.py`, `excel_workbook_validator.py`)
 - [ ] Streamlit UI (`pricing_ui.py`, `streamlit_app.py`, `pricing_run_form_state.py`)
 - [ ] Parity / test infrastructure
@@ -42,7 +49,7 @@ that exercises all four locally.
 ## Excel safety (only if Excel-generating code changed)
 
 - [ ] Regenerated workbook opened in Excel/LibreOffice and `ModelCheck` shows 0.00 difference
-  (or the `tests/parity/test_runtime_excel_recalc.py` LibreOffice gate passes locally)
+  (or the `tests/parity/test_excel_recalc_per_product.py` LibreOffice layer passes locally)
 - [ ] No new Excel function used without registering its arity in
   [`excel_workbook_validator.FUNCTION_ARITIES`](annuity_model/excel_workbook_validator.py)
 - [ ] No SPIA-style `Liabilities!S` reference emitted from a non-SPIA builder

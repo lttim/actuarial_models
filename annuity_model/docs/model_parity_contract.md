@@ -21,7 +21,7 @@ every tracked state variable.
 
 The table below is generated from `annuity_model/parity_constants.py` by
 `scripts/render_parity_contract.py`. Edit the constants module, then run
-`python -m annuity_model.scripts.render_parity_contract` to refresh; CI verifies
+`python scripts/render_parity_contract.py` to refresh; CI verifies
 the docs are in sync via `--check`.
 
 <!-- BEGIN GENERATED tolerances -->

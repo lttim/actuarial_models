@@ -24,7 +24,7 @@ maintainers don't accidentally weaken a load-bearing gate.
 | `build_term_excel_workbook.py`                | Same.                                                                     |
 | `build_rila_excel_workbook.py`                | Same; plus RILA must use column M, not S.                                 |
 | `recalc_excel_shared.py`                      | Recalc helper used by parity tests; bug here masks formula errors.        |
-| `product_excel.py`                            | Dispatcher across the three builders.                                     |
+| `product_excel.py`                            | Dispatcher across per-product builders (all implemented products).                                     |
 
 ## Load-bearing internals (added P0 hardening 2026-04)
 
