@@ -87,7 +87,7 @@ Every shell launcher must have a Windows twin and vice-versa. Current pairs:
 | Purpose             | Windows                  | macOS / Linux            |
 |---------------------|--------------------------|--------------------------|
 | Pricing Streamlit   | `run_pricing_ui.bat`     | `run_pricing_ui.sh`      |
-| Test dashboard      | `run_test_dashboard.bat` | `run_test_dashboard.sh`  |
+| Test dashboard      | `run_test_dashboard.bat` | `run_test_dashboard.sh` (same venv + min-Python guards as pricing) |
 | pytest HTML report  | `run_tests_report.bat`   | `run_tests_report.sh`    |
 
 When adding a new launcher, ship both files in the same commit and keep them in

@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import ast
 import subprocess
-import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
+
+from pytest_python import select_pytest_interpreter
 
 ROOT = Path(__file__).resolve().parent
 TEST_FILE = ROOT / "tests" / "test_pricing_projection.py"
@@ -65,8 +66,12 @@ def discover_tests_metadata() -> list[dict[str, Any]]:
 def run_pytest_junit() -> tuple[int, str]:
     """Run pytest; write JUnit XML. Returns (exit_code, stderr+stdout snippet)."""
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    py, py_err = select_pytest_interpreter(ROOT)
+    if py is None:
+        msg = py_err or "No Python interpreter available for pytest."
+        return 2, msg
     cmd = [
-        sys.executable,
+        py,
         "-m",
         "pytest",
         str(ROOT / "tests"),
@@ -182,6 +187,10 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
             f"Could not find tests at `{TEST_FILE}`. Open the `annuity_model` folder as project root."
         )
         return
+
+    _py_ok, py_setup_err = select_pytest_interpreter(ROOT)
+    if py_setup_err:
+        st.error(py_setup_err)
 
     notify = st.session_state.get("last_notify")
     if notify == "pass":

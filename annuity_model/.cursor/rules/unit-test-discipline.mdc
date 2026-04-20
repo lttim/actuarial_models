@@ -1,0 +1,25 @@
+---
+description: Keep pytest coverage aligned with new behaviour in annuity_model.
+globs:
+  - "**/*.py"
+---
+
+# Unit test discipline (`annuity_model`)
+
+When you add or change **behaviour** (pricing engines, validators, portfolio logic,
+Streamlit wiring, Excel builders, or CLI entry points):
+
+1. **Add or extend pytest** in `annuity_model/tests/` (or `tests/parity/` when the
+   change touches Python↔Excel parity). Prefer focused tests over huge integration
+   blobs unless the behaviour is inherently cross-module.
+2. **Run the canonical gates** from `annuity_model/AGENTS.md` before claiming the task
+   is done (`pytest tests/parity`, full `pytest`, `deep_smoke.py`,
+   `render_parity_contract.py --check`).
+3. **Embedded unit-test page** (`test_dashboard.render_unit_tests_page` inside
+   `pricing_ui.py`) runs subprocess pytest using `pytest_python.select_pytest_interpreter`:
+   always use `./run_pricing_ui.sh` / `./run_test_dashboard.sh` or an activated
+   `./.venv` with Python >= the version in `pyproject.toml` so the subprocess matches
+   the project interpreter.
+
+Do not merge calculation changes that only update docstrings or comments without a
+regression or parity test that would have failed on the bug.

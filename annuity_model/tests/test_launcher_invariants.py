@@ -36,6 +36,8 @@ PYPROJECT = PACKAGE_ROOT / "pyproject.toml"
 SH = PACKAGE_ROOT / "run_pricing_ui.sh"
 CMD = PACKAGE_ROOT / "run_pricing_ui.command"
 BAT = PACKAGE_ROOT / "run_pricing_ui.bat"
+TEST_DASH_SH = PACKAGE_ROOT / "run_test_dashboard.sh"
+TEST_DASH_BAT = PACKAGE_ROOT / "run_test_dashboard.bat"
 
 pytestmark = pytest.mark.invariant
 
@@ -94,6 +96,48 @@ def test_batch_launcher_min_python_matches_pyproject() -> None:
     assert f"MIN_PY_MINOR={minor}" in text, (
         "run_pricing_ui.bat must declare MIN_PY_MINOR matching pyproject."
     )
+
+
+def test_test_dashboard_shell_min_python_matches_pyproject() -> None:
+    major, minor = _requires_python_from_pyproject()
+    text = TEST_DASH_SH.read_text(encoding="utf-8")
+    assert f"MIN_PYTHON_MAJOR={major}" in text
+    assert f"MIN_PYTHON_MINOR={minor}" in text
+
+
+def test_test_dashboard_batch_min_python_matches_pyproject() -> None:
+    major, minor = _requires_python_from_pyproject()
+    text = TEST_DASH_BAT.read_text(encoding="utf-8")
+    assert f"MIN_PY_MAJOR={major}" in text
+    assert f"MIN_PY_MINOR={minor}" in text
+
+
+TEST_DASH_SHELL_REQUIRED_CLAUSES = {
+    "prefers project venv": r'\./\.venv/bin/python',
+    "version guard": r"sys\.version_info\[:2\]\s*>=\s*required",
+    "imports test_dashboard": r"import test_dashboard",
+    "self-check mode": r"--self-check",
+}
+
+
+@pytest.mark.parametrize("label,pattern", list(TEST_DASH_SHELL_REQUIRED_CLAUSES.items()))
+def test_test_dashboard_shell_has_required_clause(label: str, pattern: str) -> None:
+    text = TEST_DASH_SH.read_text(encoding="utf-8")
+    assert re.search(pattern, text), f"run_test_dashboard.sh missing '{label}' (/{pattern}/)"
+
+
+TEST_DASH_BATCH_REQUIRED_CLAUSES = {
+    "prefers project venv": r"\.venv\\Scripts\\python\.exe",
+    "version guard": r"sys\.version_info\[:2\]\s*>=\s*\(%MIN_PY_MAJOR%,\s*%MIN_PY_MINOR%\)",
+    "imports test_dashboard": r"import test_dashboard",
+    "self-check mode": r"--self-check",
+}
+
+
+@pytest.mark.parametrize("label,pattern", list(TEST_DASH_BATCH_REQUIRED_CLAUSES.items()))
+def test_test_dashboard_batch_has_required_clause(label: str, pattern: str) -> None:
+    text = TEST_DASH_BAT.read_text(encoding="utf-8")
+    assert re.search(pattern, text), f"run_test_dashboard.bat missing '{label}' (/{pattern}/)"
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +199,7 @@ def test_command_launcher_holds_terminal_on_error() -> None:
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX exec bits not meaningful on Windows")
 def test_posix_launchers_are_executable() -> None:
-    for path in (SH, CMD):
+    for path in (SH, CMD, TEST_DASH_SH):
         assert os.access(path, os.X_OK), (
             f"{path.name} must be executable (chmod +x). Finder refuses to "
             "double-click a non-executable .command file."
@@ -196,6 +240,30 @@ def test_shell_launcher_self_check_with_clean_path() -> None:
         "Launcher must select the project .venv when one exists. "
         "Selecting any other interpreter is what caused the original incident."
     )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="bash launcher is POSIX-only")
+def test_test_dashboard_shell_self_check_with_clean_path() -> None:
+    if not (PACKAGE_ROOT / ".venv" / "bin" / "python").exists():
+        pytest.skip("project .venv not built; create it via `python3.12 -m venv .venv`")
+    env = {
+        "HOME": os.environ.get("HOME", "/tmp"),
+        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+        "SHELL": "/bin/bash",
+    }
+    result = subprocess.run(
+        ["bash", str(TEST_DASH_SH), "--self-check"],
+        cwd=str(PACKAGE_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, (
+        "run_test_dashboard.sh --self-check failed under a clean PATH.\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "[OK] test_dashboard launcher self-check passed" in result.stdout
 
 
 # ---------------------------------------------------------------------------
