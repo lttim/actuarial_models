@@ -2,6 +2,7 @@
 description: Keep pytest coverage aligned with new behaviour in annuity_model.
 globs:
   - "**/*.py"
+alwaysApply: true
 ---
 
 # Unit test discipline (`annuity_model`)
@@ -23,3 +24,8 @@ Streamlit wiring, Excel builders, or CLI entry points):
 
 Do not merge calculation changes that only update docstrings or comments without a
 regression or parity test that would have failed on the bug.
+
+This policy is also machine-enforced:
+- pre-commit hook `unit-test-discipline-guard`
+- CI PR gate `Enforce behavior-change test discipline`
+via `annuity_model/scripts/check_test_update_required.py`.

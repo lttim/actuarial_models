@@ -46,6 +46,12 @@ jobs:
           python annuity_model/scripts/check_parity_constants_changelog.py \
             "${{ github.event.pull_request.base.sha }}" \
             "${{ github.event.pull_request.head.sha }}"
+      - name: Enforce behavior-change test discipline
+        if: github.event_name == 'pull_request'
+        run: |
+          python annuity_model/scripts/check_test_update_required.py \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}"
 
   test:
     name: tests (${{ matrix.os }} / py${{ matrix.python-version }})

@@ -55,6 +55,9 @@ All checks must exit 0. CI will rerun them on every push to your PR.
    `tests/parity/` with a clear `# Regression: YYYY-MM-DD` comment.
 6. **Cross-platform launchers are added in pairs.** Every new `*.sh` ships
    alongside its `*.bat` twin in the same commit.
+7. **Behavior changes must include tests in the same change.** This is
+   enforced by `annuity_model/scripts/check_test_update_required.py` through
+   pre-commit (`unit-test-discipline-guard`) and the CI pre-commit job.
 
 ## Useful runbooks
 

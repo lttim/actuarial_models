@@ -157,3 +157,10 @@ repos:
         language: system
         pass_filenames: false
         files: ^(DOCUMENTATION_MAP\.md|.*\.md|annuity_model/scripts/check_documentation_map\.py|annuity_model/tests/test_documentation_map\.py)$
+
+      - id: unit-test-discipline-guard
+        name: behavior changes require test updates
+        entry: bash -c 'PY="./annuity_model/.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" annuity_model/scripts/check_test_update_required.py'
+        language: system
+        pass_filenames: false
+        files: ^annuity_model/.*\.py$
