@@ -13,6 +13,7 @@ from portfolio_runner import run_portfolio
 from pricing_run_form_state import default_inforce_scratch_row
 from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
 from pricing_ui import (
+    _build_portfolio_profit_decomposition_rows_for_policy_results,
     _build_portfolio_profit_decomposition_rows,
     _build_profit_decomposition_rows,
     _merge_profit_waterfall_row_sets,
@@ -67,3 +68,26 @@ def test_mixed_book_generic_bridge_matches_scalar_sums() -> None:
     assert rows[2] == ("Issue expense (portfolio sum)", issue, False)
     assert rows[3][0] == "Modeled net premium / value (portfolio sum)" and rows[3][2] is True
     assert rows[3][1] == pytest.approx(sum_sp, rel=0, abs=1e-6)
+
+
+def test_single_type_selection_from_mixed_book_matches_type_subset() -> None:
+    root = Path(__file__).resolve().parents[2]
+    policies = load_policy_inputs_from_csv(root / "tests/data/inforce/example_v1/inforce.csv")
+    sex_raw = str(getattr(policies[0].contract, "sex", "male")).strip().lower()
+    sex = "female" if sex_raw == "female" else "male"
+    scen = run_scenario_for_portfolio_policies({}, policies, sex=sex, repo_root=ANN_MODEL_ROOT)
+    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
+    spia_only = tuple(pr for pr in res.policy_results if pr.product_type == ProductType.SPIA)
+    rows_subset, _ = _build_portfolio_profit_decomposition_rows_for_policy_results(
+        spia_only, scen.expenses
+    )
+    rows_expected, _ = _build_profit_decomposition_rows(
+        res=spia_only[0].pricing,  # type: ignore[arg-type]
+        contract=spia_only[0].contract,
+        expenses=scen.expenses,
+        product_type=ProductType.SPIA,
+    )
+    assert len(rows_subset) == len(rows_expected)
+    for a, b in zip(rows_subset, rows_expected, strict=True):
+        assert a[0] == b[0] and a[2] == b[2]
+        assert a[1] == pytest.approx(b[1], rel=0, abs=1e-6)

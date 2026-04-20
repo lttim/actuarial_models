@@ -1057,14 +1057,14 @@ def _merge_profit_waterfall_row_sets(
 
 
 def _build_portfolio_generic_pv_bridge_rows(
-    res: PortfolioResult,
+    policy_results: tuple[Any, ...] | list[Any],
     expenses: sp.ExpenseAssumptions | None,
 ) -> tuple[list[tuple[str, float, bool]], str]:
     sum_pv_b = 0.0
     sum_pv_m = 0.0
     sum_sp = 0.0
     n_pol = 0
-    for pr in res.policy_results:
+    for pr in policy_results:
         p = pr.pricing
         if hasattr(p, "pv_benefit"):
             sum_pv_b += float(getattr(p, "pv_benefit"))
@@ -1095,7 +1095,18 @@ def _build_portfolio_profit_decomposition_rows(
     res: PortfolioResult,
     expenses: sp.ExpenseAssumptions | None,
 ) -> tuple[list[tuple[str, float, bool]], str]:
-    prs = list(res.policy_results)
+    return _build_portfolio_profit_decomposition_rows_for_policy_results(
+        tuple(res.policy_results), expenses
+    )
+
+
+def _build_portfolio_profit_decomposition_rows_for_policy_results(
+    policy_results: tuple[Any, ...] | list[Any],
+    expenses: sp.ExpenseAssumptions | None,
+) -> tuple[list[tuple[str, float, bool]], str]:
+    prs = list(policy_results)
+    if not prs:
+        raise ValueError("portfolio waterfall requires at least one policy result")
     types = {pr.product_type for pr in prs}
     if len(types) == 1:
         pt = next(iter(types))
@@ -1121,35 +1132,56 @@ def _build_portfolio_profit_decomposition_rows(
             return merged, cap
         except (ValueError, TypeError, AttributeError):
             pass
-    return _build_portfolio_generic_pv_bridge_rows(res, expenses)
+    return _build_portfolio_generic_pv_bridge_rows(tuple(prs), expenses)
 
 
 def _render_portfolio_profit_waterfall(
     res: PortfolioResult, expenses: sp.ExpenseAssumptions | None
 ) -> None:
-    rows, caption = _build_portfolio_profit_decomposition_rows(res, expenses)
-    wf_df = _build_profit_waterfall_chart_df(rows)
     st.subheader("Portfolio profit decomposition")
-    net_prem = sum(
-        float(getattr(pr.pricing, "single_premium", 0.0) or 0.0) for pr in res.policy_results
+    types_sorted = sorted({pr.product_type for pr in res.policy_results}, key=lambda x: x.value)
+    options = ["Aggregate"] + [pt.value for pt in types_sorted]
+    run_tag = int(st.session_state.get(PORTFOLIO_KEY.RUN_ID, 0))
+    selected = st.multiselect(
+        "Waterfall series (aggregate plus product types)",
+        options=options,
+        default=options,
+        key=f"portfolio_wf_series_{run_tag}",
     )
-    if net_prem < 0:
+    if not selected:
+        st.info("Select at least one waterfall series.")
+        return
+    for series in selected:
+        if series == "Aggregate":
+            prs = tuple(res.policy_results)
+            title = "Aggregate"
+        else:
+            pt = ProductType(series)
+            prs = tuple(pr for pr in res.policy_results if pr.product_type == pt)
+            title = f"Product type: {series}"
+            if not prs:
+                continue
+        rows, caption = _build_portfolio_profit_decomposition_rows_for_policy_results(prs, expenses)
+        wf_df = _build_profit_waterfall_chart_df(rows)
+        st.markdown(f"**{title}**")
+        net_prem = sum(float(getattr(pr.pricing, "single_premium", 0.0) or 0.0) for pr in prs)
+        if net_prem < 0:
+            st.caption(
+                "Note: modeled premium / value is negative (e.g. net premium outflow to policyholders)."
+            )
+        st.altair_chart(_altair_profit_waterfall_chart(wf_df), use_container_width=True)
         st.caption(
-            "Note: aggregate modeled premium / value is negative (e.g. net premium outflow to policyholders)."
+            "Blue = subtotal / reconciliation pillars from zero; green = upward step; red = downward step (table amount)."
         )
-    st.altair_chart(_altair_profit_waterfall_chart(wf_df), use_container_width=True)
-    st.caption(
-        "Blue = subtotal / reconciliation pillars from zero; green = upward step; red = downward step (table amount)."
-    )
-    table = pd.DataFrame([{"Component": label, "Amount ($)": val} for label, val, _ in rows])
-    table_display = _round_for_visuals(table)
-    st.dataframe(
-        table_display,
-        use_container_width=True,
-        hide_index=True,
-        column_config=_number_cols_no_decimals(table_display),
-    )
-    st.caption(caption)
+        table = pd.DataFrame([{"Component": label, "Amount ($)": val} for label, val, _ in rows])
+        table_display = _round_for_visuals(table)
+        st.dataframe(
+            table_display,
+            use_container_width=True,
+            hide_index=True,
+            column_config=_number_cols_no_decimals(table_display),
+        )
+        st.caption(caption)
 
 
 def _render_portfolio_liability_projection_chart(res: PortfolioResult) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 
+import numpy as np
 import pricing_projection as sp
 from _observability import traced
 from liability_aggregation import (
@@ -47,8 +48,22 @@ def _worker_pack(args: tuple[int, PolicyInput, RunScenario]) -> tuple[PolicyResu
     """Picklable worker for :class:`ProcessPoolExecutor` (one policy)."""
     i, pol, scenario = args
     adapter = get_product_adapter(pol.product_type)
-    pricing = _adapter_price(adapter, pol, scenario)
     pid = pol.policy_id if pol.policy_id is not None else default_policy_id(i)
+    try:
+        pricing = _adapter_price(adapter, pol, scenario)
+    except Exception as exc:
+        raise ValueError(
+            f"Portfolio pricing failed for policy_id={pid!r}, product_type={pol.product_type.value!r}: {exc}"
+        ) from exc
+    if pol.product_type == ProductType.RILA and hasattr(pricing, "expected_total_cashflows"):
+        cf = np.asarray(getattr(pricing, "expected_total_cashflows"), dtype=float)
+        cf_sum = float(np.sum(cf))
+        if not np.isfinite(cf_sum) or cf_sum <= 0.0:
+            raise ValueError(
+                "RILA portfolio pricing produced non-positive expected total cashflows "
+                f"for policy_id={pid!r}. Ensure expense inputs are loaded (csv/manual) "
+                "and non-degenerate for baseline pricing."
+            )
     pr = PolicyResult(
         policy_id=pid,
         product_type=pol.product_type,

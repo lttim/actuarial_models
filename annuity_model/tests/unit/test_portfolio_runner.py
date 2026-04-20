@@ -84,6 +84,28 @@ def test_default_portfolio_scenario_rila_has_positive_outputs() -> None:
     assert cf_sum > 0.0
 
 
+def test_run_portfolio_rila_degenerate_expense_context_error() -> None:
+    scen = _scenario()
+    pol = Portfolio(
+        policies=(
+            PolicyInput(
+                ProductType.RILA,
+                rp.RILAContract(
+                    issue_age=55,
+                    sex="female",
+                    participation=0.8,
+                    cap=0.07,
+                    floor=0.0,
+                    rider_fee_annual=0.01,
+                ),
+                policy_id="rila-bad",
+            ),
+        )
+    )
+    with pytest.raises(ValueError, match="policy_id='rila-bad'.*product_type='rila'"):
+        run_portfolio(portfolio=pol, scenario=scen)
+
+
 def test_run_portfolio_baseline_alm_matches_direct_liability_path() -> None:
     root = Path(__file__).resolve().parents[2]
     policies = load_policy_inputs_from_csv(root / "tests/data/inforce/example_v1/inforce.csv")

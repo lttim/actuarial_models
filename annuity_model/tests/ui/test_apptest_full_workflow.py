@@ -534,6 +534,8 @@ def test_portfolio_section_upload_run_and_workbook(
     )
     proj_ms = [w for w in at.multiselect if str(w.key).startswith("portfolio_proj_series_")]
     assert proj_ms, "portfolio liability projection multiselect missing"
+    wf_ms = [w for w in at.multiselect if str(w.key).startswith("portfolio_wf_series_")]
+    assert wf_ms, "portfolio waterfall multiselect missing"
 
     xlsx = build_portfolio_workbook_bytes(pres)
     wb = load_workbook(io.BytesIO(bytes(xlsx)), data_only=False)
