@@ -11,6 +11,8 @@ source of truth; Excel is the auditor. Rollout narrative:
   [SPIA / ALM parity contract](model_parity_contract.md).
 * **Need the development governance map (humans + AI platforms)?** Read
   [Project development guide](../../PROJECT_DEVELOPMENT_GUIDE.md).
+* **Need the full file inventory for all docs in the repo?** Read
+  [Documentation map](../../DOCUMENTATION_MAP.md).
 * **AI agent starting cold?** Read [AI_AGENT_PREFLIGHT](AI_AGENT_PREFLIGHT.md)
   before editing code.
 * **Adding a product?** The walkthrough lives in

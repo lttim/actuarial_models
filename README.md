@@ -17,6 +17,8 @@ static Excel formula validator that gates every workbook before it is written.
 - [requirements.txt](requirements.txt) — runtime deps mirrored to
   [annuity_model/requirements.txt](annuity_model/requirements.txt). Test/dev
   tools live in [annuity_model/requirements-dev.txt](annuity_model/requirements-dev.txt).
+- [DOCUMENTATION_MAP.md](DOCUMENTATION_MAP.md) — complete inventory of tracked
+  docs with one-line purpose per file.
 
 ## Where to start
 

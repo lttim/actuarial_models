@@ -24,6 +24,8 @@ Main active surfaces:
 
 ## 2) Documentation map (read in this order)
 
+For a complete file-by-file doc inventory, see `DOCUMENTATION_MAP.md`.
+
 ### Human onboarding
 
 1. `README.md` (workspace overview and bootstrap)
