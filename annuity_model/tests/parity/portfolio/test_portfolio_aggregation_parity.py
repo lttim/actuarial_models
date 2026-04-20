@@ -14,7 +14,7 @@ from inforce_io import load_policy_inputs_from_csv
 from openpyxl import load_workbook
 from portfolio import Portfolio
 from portfolio_runner import run_portfolio
-from portfolio_scenario import default_run_scenario
+from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
 
 pytestmark = pytest.mark.parity
 
@@ -23,7 +23,9 @@ def test_inforce_csv_portfolio_rollups_sum_to_total() -> None:
     root = Path(__file__).resolve().parents[3]
     csv_path = root / "tests/data/inforce/example_v1/inforce.csv"
     policies = load_policy_inputs_from_csv(csv_path)
-    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=default_run_scenario())
+    sex = "female" if str(policies[0].contract.sex).lower() == "female" else "male"
+    scen = run_scenario_for_portfolio_policies({}, policies, sex=sex, repo_root=ANN_MODEL_ROOT)
+    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
     n = len(res.liability_path_total.expected_total_cashflows)
     summed = np.zeros(n)
     for _pt, path in sorted(res.rollups_by_product_type.items(), key=lambda x: x[0].value):
@@ -39,12 +41,20 @@ def test_inforce_csv_portfolio_rollups_sum_to_total() -> None:
 def test_portfolio_workbook_passes_validator_and_modelcheck_formula_shape() -> None:
     root = Path(__file__).resolve().parents[3]
     policies = load_policy_inputs_from_csv(root / "tests/data/inforce/example_v1/inforce.csv")
-    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=default_run_scenario())
+    sex = "female" if str(policies[0].contract.sex).lower() == "female" else "male"
+    scen = run_scenario_for_portfolio_policies({}, policies, sex=sex, repo_root=ANN_MODEL_ROOT)
+    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
     raw = build_portfolio_workbook_bytes(res)
     wb = load_workbook(io.BytesIO(raw), data_only=False)
     validate_workbook_or_raise(wb)
     ws = wb["ModelCheck"]
     n = len(res.liability_path_total.expected_total_cashflows)
     for r in range(2, 2 + n):
-        cell = ws.cell(row=r, column=2)
-        assert isinstance(cell.value, str) and cell.value.startswith("=SUM(")
+        b = ws.cell(row=r, column=2).value
+        assert isinstance(b, str) and b.startswith("=SUM(")
+        c = ws.cell(row=r, column=3).value
+        assert isinstance(c, (int, float))
+        d = ws.cell(row=r, column=4).value
+        assert isinstance(d, str) and d.startswith("=LiabilityAggregate!")
+        e = ws.cell(row=r, column=5).value
+        assert isinstance(e, str) and e.startswith("=D")

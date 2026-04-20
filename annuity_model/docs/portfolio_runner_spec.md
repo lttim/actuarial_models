@@ -39,18 +39,23 @@ row must include a `product_type` cell matching `ProductType.value` and
 product-specific columns consistent with the underlying `*Contract` dataclass
 for that type.
 
-## Default economic package (`portfolio_scenario.default_run_scenario`)
+## Default economic package (Pricing Run parity)
 
-CLI and UI portfolio runs use this helper: flat Treasury-style curve, flat
-`synthetic` `q_x` mortality, and **placeholder US expenses** loaded from
-`pricing_projection.DEFAULT_EXPENSES_CSV` when the file is present.
+Shared economics are materialized from the same ``run_*`` seed keys as the
+**Pricing Run** tab via ``pricing_scenario_materialize``:
 
-RILA’s single premium is implied from the **expense budget** (policy fee + PV
-of monthly expenses). An all-zero `ExpenseAssumptions` object collapses that
-premium—and therefore every scaled benefit flow—to **exactly zero**, which is
-mathematically self-consistent but not a useful portfolio row. The default
-scenario therefore mirrors typical Pricing Run expense loading rather than
-using literal zeros.
+- **CLI** — ``run_scenario_for_portfolio_policies`` with an empty session dict
+  applies ``build_run_form_seed_defaults`` (first-paint defaults) plus
+  mortality keys pinned by ``reference_product_type_for_portfolio_scenario`` so
+  young issue ages (e.g. Term at 35) stay inside the shared table when mixed
+  with annuitant-style products.
+- **Streamlit** — the Portfolio section seeds from the same session keys as
+  Pricing Run, renders the shared yield / mortality / expense / horizon /
+  spread / index controls (Monte Carlo omitted), and calls the same materializer
+  at run time.
+
+``portfolio_scenario.default_run_scenario()`` remains a thin wrapper around
+``cli_default_run_scenario`` for tests and backward-compatible imports.
 
 ## Scalar rollups (`ProductTypeRollupScalars`)
 
@@ -74,9 +79,13 @@ Produced by `portfolio_result_to_summary_dict`:
 
 ## Excel workbook (`build_portfolio_excel_workbook.py`)
 
-Sheets: `Inputs`, `PolicyRegister`, `ProductTypeRollups`, `LiabilityAggregate`,
-`ModelCheck`, `README`. Cashflows are **Python literals**; `ModelCheck` column B
-is `=SUM(by-type cols) - total` per month. v1 does **not** embed the full SPIA
+Sheets: `Inputs`, `PolicyRegister`, `PolicyCashflows`, `ProductTypeRollups`,
+`LiabilityAggregate`, `ModelCheck`, `README`. Per-policy monthly liability CF
+are Python literals on **PolicyCashflows**; **LiabilityAggregate** column
+``total_cf`` is a row-wise ``SUM`` over those policy columns. **ModelCheck**
+includes the rollup identity ``SUM(by-type cols) - total_cf`` plus a second
+reconciliation: Python snapshot of ``total_cf`` vs ``=LiabilityAggregate!C…``
+and ``diff_excel_minus_python``. v1 does **not** embed the full SPIA
 `Liabilities` + ALM ladder; portfolio ALM is run in Python when requested, not
 re-derived in Excel.
 

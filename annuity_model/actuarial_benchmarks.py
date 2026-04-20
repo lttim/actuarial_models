@@ -174,10 +174,10 @@ VUL_SENSITIVITY_EPS: Final[float] = 1.0
 # Portfolio (canonical 5-policy example inforce; undiscounted CF rollups).
 # ---------------------------------------------------------------------------
 
-PORTFOLIO_TOTAL_CF_SUM_LO: Final[float] = 1_800_000.0
+PORTFOLIO_TOTAL_CF_SUM_LO: Final[float] = 2_500_000.0
 """Lower band for sum of monthly expected liability cashflows (example inforce)."""
 
-PORTFOLIO_TOTAL_CF_SUM_HI: Final[float] = 2_200_000.0
+PORTFOLIO_TOTAL_CF_SUM_HI: Final[float] = 3_200_000.0
 """Upper band for sum of monthly expected liability cashflows (example inforce)."""
 
 PORTFOLIO_DURATION_GAP_LO: Final[float] = -50.0

@@ -17,9 +17,13 @@ for the **portfolio** surface.
 
 - **Static validation** -- `validate_workbook_or_raise` before save (same rule
   as per-product builders).
-- **ModelCheck** -- Excel formula `SUM(LiabilityAggregate!type_cols) -
-  LiabilityAggregate!total_cf` must evaluate to zero after recalc for every
-  month row. The parity tests assert formula wiring and Python-side equality;
+- **PolicyCashflows** -- one column per policy (monthly liability CF literals).
+- **LiabilityAggregate.total_cf** -- Excel ``SUM`` over the policy columns on
+  ``PolicyCashflows`` for that row (formula-linked rollup).
+- **ModelCheck** -- (1) ``SUM(LiabilityAggregate!type_cols) -
+  LiabilityAggregate!total_cf`` must be zero after recalc; (2) per-month
+  ``excel_total_cf - python_total_cf`` (columns D/E) must be zero after recalc
+  when the workbook is consistent. Parity tests assert formula wiring;
   LibreOffice/Excel manual spot-check remains the final eyeball gate per
   `AGENTS.md`.
 

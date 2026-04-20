@@ -59,19 +59,24 @@ from build_pricing_excel_workbook import (
 )
 from build_portfolio_excel_workbook import build_portfolio_workbook_bytes
 from inforce_io import load_policy_inputs_from_csv
-from portfolio import Portfolio
+from portfolio import PolicyInput, Portfolio, RunScenario
 from portfolio_config import (
     portfolio_disabled_explanation_markdown,
     portfolio_sidebar_visible,
     portfolio_v1_enabled,
 )
 from portfolio_runner import run_portfolio
-from portfolio_scenario import default_run_scenario
 from portfolio_summary import portfolio_result_to_summary_dict
+from pricing_scenario_materialize import (
+    build_mortality_from_seeds,
+    build_yield_curve_from_seeds,
+    run_scenario_for_portfolio_policies,
+)
 from pricing_run_form_state import (
     PORTFOLIO_INFORCE_SCRATCH_COLUMNS,
     PORTFOLIO_KEY,
     PRICING_RUN_NUMBER_INPUT_KEYS,
+    RUN_KEY,
     build_run_form_seed_defaults,
     default_inforce_scratch_row,
     ensure_session_choice,
@@ -208,12 +213,6 @@ def _resolve_path(p: str) -> Path:
     if path.is_absolute():
         return path
     return (ROOT / path).resolve()
-
-
-def _minimal_mortality() -> sp.MortalityTableQx:
-    ages = np.arange(0, 121, dtype=int)
-    qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
-    return sp.MortalityTableQx(ages, qx)
 
 
 def _round_for_visuals(df: pd.DataFrame) -> pd.DataFrame:
@@ -546,132 +545,15 @@ def _whatif_result_to_dict(
     return out
 
 
-MortalityMode = Literal["synthetic", "qx_csv", "rp2014_mp2016", "us_ssa_2015_period"]
+MortalityMode = Literal[
+    "synthetic",
+    "qx_csv",
+    "rp2014_mp2016",
+    "us_ssa_2015_period",
+    "cso_2017_ult",
+]
 YieldMode = Literal["flat", "zero_csv", "par_bootstrap"]
 ExpenseMode = Literal["csv", "manual"]
-
-_SSA_2015_PERIOD_QX_CSV = """age,male_qx,female_qx
-0,0.006383,0.005374
-1,0.000453,0.000353
-2,0.000282,0.000231
-3,0.000230,0.000165
-4,0.000169,0.000129
-5,0.000155,0.000116
-6,0.000145,0.000107
-7,0.000135,0.000101
-8,0.000120,0.000096
-9,0.000105,0.000092
-10,0.000094,0.000091
-11,0.000099,0.000096
-12,0.000134,0.000111
-13,0.000207,0.000138
-14,0.000309,0.000174
-15,0.000419,0.000214
-16,0.000530,0.000254
-17,0.000655,0.000294
-18,0.000791,0.000330
-19,0.000934,0.000364
-20,0.001085,0.000399
-21,0.001228,0.000436
-22,0.001339,0.000469
-23,0.001403,0.000497
-24,0.001433,0.000522
-25,0.001451,0.000546
-26,0.001475,0.000572
-27,0.001502,0.000604
-28,0.001538,0.000644
-29,0.001581,0.000690
-30,0.001626,0.000740
-31,0.001669,0.000792
-32,0.001712,0.000841
-33,0.001755,0.000886
-34,0.001800,0.000929
-35,0.001855,0.000977
-36,0.001920,0.001034
-37,0.001988,0.001098
-38,0.002060,0.001171
-39,0.002141,0.001253
-40,0.002240,0.001347
-41,0.002362,0.001452
-42,0.002509,0.001571
-43,0.002684,0.001706
-44,0.002890,0.001857
-45,0.003121,0.002022
-46,0.003386,0.002204
-47,0.003707,0.002411
-48,0.004091,0.002648
-49,0.004531,0.002910
-50,0.005013,0.003193
-51,0.005524,0.003491
-52,0.006059,0.003801
-53,0.006611,0.004119
-54,0.007187,0.004449
-55,0.007800,0.004813
-56,0.008456,0.005201
-57,0.009144,0.005583
-58,0.009865,0.005952
-59,0.010622,0.006325
-60,0.011458,0.006749
-61,0.012350,0.007238
-62,0.013235,0.007776
-63,0.014097,0.008368
-64,0.014979,0.009032
-65,0.015967,0.009794
-66,0.017109,0.010673
-67,0.018392,0.011676
-68,0.019836,0.012815
-69,0.021465,0.014105
-70,0.023351,0.015616
-71,0.025482,0.017318
-72,0.027794,0.019118
-73,0.030282,0.020996
-74,0.033022,0.023033
-75,0.036201,0.025413
-76,0.039858,0.028197
-77,0.043891,0.031313
-78,0.048311,0.034782
-79,0.053228,0.038689
-80,0.058897,0.043258
-81,0.065365,0.048490
-82,0.072491,0.054223
-83,0.080288,0.060446
-84,0.088916,0.067338
-85,0.098576,0.075133
-86,0.109438,0.084033
-87,0.121619,0.094177
-88,0.135176,0.105633
-89,0.150109,0.118407
-90,0.166397,0.132476
-91,0.183997,0.147801
-92,0.202855,0.164331
-93,0.222911,0.182012
-94,0.244094,0.200783
-95,0.265091,0.219758
-96,0.285508,0.238630
-97,0.304926,0.257065
-98,0.322919,0.274706
-99,0.339065,0.291189
-100,0.356018,0.308660
-101,0.373819,0.327180
-102,0.392510,0.346810
-103,0.412135,0.367619
-104,0.432742,0.389676
-105,0.454379,0.413057
-106,0.477098,0.437840
-107,0.500953,0.464111
-108,0.526000,0.491957
-109,0.552300,0.521475
-110,0.579915,0.552763
-111,0.608911,0.585929
-112,0.639357,0.621085
-113,0.671325,0.658350
-114,0.704891,0.697851
-115,0.740135,0.739722
-116,0.777142,0.777142
-117,0.815999,0.815999
-118,0.856799,0.856799
-119,0.899639,0.899639
-"""
 
 SECTION_LABELS: dict[str, str] = {
     "overview": "Overview",
@@ -835,14 +717,14 @@ def _build_yield_curve(
     par_csv: str,
     coupon_freq: int,
 ) -> sp.YieldCurve:
-    if mode == "flat":
-        return sp.YieldCurve.from_flat_rate(float(flat_rate))
-    if mode == "zero_csv":
-        return sp.YieldCurve.load_zero_curve_csv(str(_resolve_path(zero_csv)))
-    return sp.YieldCurve.load_par_yield_csv_and_bootstrap(
-        str(_resolve_path(par_csv)),
-        coupon_freq=int(coupon_freq),
-    )
+    seeds = {
+        RUN_KEY.Y_MODE: mode,
+        RUN_KEY.FLAT_RATE: flat_rate,
+        RUN_KEY.ZERO_CSV: zero_csv,
+        RUN_KEY.PAR_CSV: par_csv,
+        RUN_KEY.COUPON_FREQ: int(coupon_freq),
+    }
+    return build_yield_curve_from_seeds(seeds, repo_root=ROOT)
 
 
 def _build_mortality(
@@ -856,50 +738,16 @@ def _build_mortality(
     mp_xlsx: str,
     mp_out_csv: str,
 ) -> tuple[sp.MortalityTableQx | sp.MortalityTableRP2014MP2016, bool]:
-    """
-    Returns (mortality, needs_valuation_year).
-    """
-    if mode == "us_ssa_2015_period":
-        if product_type != ProductType.TERM_LIFE:
-            raise ValueError("US SSA 2015 period mortality is currently scoped to Term Life.")
-        raw = pd.read_csv(io.StringIO(_SSA_2015_PERIOD_QX_CSV))
-        qx_col = "male_qx" if sex == "male" else "female_qx"
-        return (
-            sp.MortalityTableQx(raw["age"].to_numpy(dtype=int), raw[qx_col].to_numpy(dtype=float)),
-            False,
-        )
-    if mode == "synthetic":
-        return _minimal_mortality(), False
-    if mode == "qx_csv":
-        return sp.MortalityTableQx.load_qx_csv(str(_resolve_path(qx_csv))), False
-    if mode == "cso_2017_ult":
-        # Default to nonsmoker; per-product UI selects smoker_class on the
-        # contract dataclass. Smoker class drives the choice of CSV file
-        # via the loader, but here we don't have access to the contract
-        # yet (mortality is built before contract construction); we
-        # fall back to nonsmoker as the safer default. Production users
-        # can override by switching the mortality mode to ``qx_csv`` and
-        # pointing to a specific cohort file.
-        from mortality_2017_cso import MortalityTable2017CSO
-
-        cso = MortalityTable2017CSO.load(sex=sex, smoker_class="nonsmoker")
-        return cso.table, False
-    base_qx = sp.ensure_rp2014_male_healthy_annuitant_qx_csv(
-        rp2014_xlsx_path=str(_resolve_path(rp_xlsx)),
-        out_csv_path=str(_resolve_path(rp_out_csv)),
-    )
-    mp_ages, mp_years, mp_i = sp.ensure_mp2016_male_improvement_csv(
-        mp2016_xlsx_path=str(_resolve_path(mp_xlsx)),
-        out_csv_path=str(_resolve_path(mp_out_csv)),
-    )
-    mortality = sp.MortalityTableRP2014MP2016(
-        base_qx_2014=base_qx,
-        mp2016_ages=mp_ages,
-        mp2016_years=mp_years,
-        mp2016_i_matrix=mp_i,
-        base_year=2014,
-    )
-    return mortality, True
+    """Returns (mortality, needs_valuation_year). Delegates to :mod:`pricing_scenario_materialize`."""
+    seeds = {
+        RUN_KEY.M_MODE: mode,
+        RUN_KEY.QX_CSV: qx_csv,
+        RUN_KEY.RP_XLSX: rp_xlsx,
+        RUN_KEY.RP_OUT: rp_out_csv,
+        RUN_KEY.MP_XLSX: mp_xlsx,
+        RUN_KEY.MP_OUT: mp_out_csv,
+    }
+    return build_mortality_from_seeds(seeds, product_type=product_type, sex=sex, repo_root=ROOT)
 
 
 def _render_overview() -> None:
@@ -2213,6 +2061,273 @@ def _render_what_if_studio() -> None:
     )
 
 
+def _render_shared_pricing_economics_controls(
+    economics_product: ProductType, *, include_monte_carlo: bool
+) -> None:
+    """Yield / mortality / expenses / horizon / spread / economic scenario; same ``run_*`` keys as Pricing Run."""
+    with st.expander("Yield curve", expanded=True):
+        _y_opts = ("flat", "zero_csv", "par_bootstrap")
+        ensure_session_choice(st.session_state, "run_y_mode", _y_opts, "par_bootstrap")
+        st.radio(
+            "Source",
+            options=list(_y_opts),
+            format_func=lambda x: {
+                "flat": "Flat zero rate",
+                "zero_csv": "Zero curve CSV",
+                "par_bootstrap": "Par yields CSV → bootstrap zeros",
+            }[x],
+            horizontal=True,
+            key="run_y_mode",
+        )
+        y_mode = str(st.session_state.get("run_y_mode", "par_bootstrap"))
+        flat_rate = float(st.session_state.get("run_flat_rate", 0.04))
+        zero_csv = str(st.session_state.get("run_zero_csv", sp.DEFAULT_ZERO_CURVE_CSV))
+        par_csv = str(st.session_state.get("run_par_csv", sp.DEFAULT_PAR_CURVE_CSV))
+        coupon_freq = int(st.session_state.get("run_coupon_freq", 2))
+        if y_mode == "flat":
+            run_number_input(
+                "Flat continuously compounded zero rate",
+                "run_flat_rate",
+                default=0.04,
+                format="%.4f",
+            )
+        elif y_mode == "zero_csv":
+            st.text_input("Zero curve CSV path", key="run_zero_csv")
+        else:
+            st.text_input("Par yield CSV path", key="run_par_csv")
+            run_number_input(
+                "Coupon payments per year", "run_coupon_freq", default=2, min_value=1, step=1
+            )
+
+    with st.expander("Mortality", expanded=True):
+        mortality_options = list(get_product_mortality_mode_options(economics_product))
+        ensure_session_choice(
+            st.session_state,
+            "run_m_mode",
+            mortality_options,
+            get_product_default_mortality_mode(economics_product),
+        )
+        st.radio(
+            "Table",
+            options=mortality_options,
+            format_func=lambda x: get_mortality_mode_label(str(x)),
+            horizontal=True,
+            key="run_m_mode",
+        )
+        m_mode = str(st.session_state.get("run_m_mode", ""))
+        if m_mode == "qx_csv":
+            st.text_input("q_x CSV (columns age, qx)", key="run_qx_csv")
+        elif m_mode == "rp2014_mp2016":
+            st.caption(
+                "SOA workbooks are optional if matching CSV extracts already exist beside the xlsx paths."
+            )
+            if not str(st.session_state.get("run_rp_xlsx", "")).strip():
+                st.session_state["run_rp_xlsx"] = sp.DEFAULT_RP2014_XLSX
+            if not str(st.session_state.get("run_rp_out", "")).strip():
+                st.session_state["run_rp_out"] = sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV
+            if not str(st.session_state.get("run_mp_xlsx", "")).strip():
+                st.session_state["run_mp_xlsx"] = sp.DEFAULT_MP2016_XLSX
+            if not str(st.session_state.get("run_mp_out", "")).strip():
+                st.session_state["run_mp_out"] = sp.DEFAULT_MP2016_MALE_IMPROVEMENT_CSV
+            st.text_input("RP-2014 xlsx", key="run_rp_xlsx")
+            st.text_input("RP-2014 healthy male qx cache CSV", key="run_rp_out")
+            st.text_input("MP-2016 xlsx", key="run_mp_xlsx")
+            st.text_input("MP-2016 improvement cache CSV", key="run_mp_out")
+        elif m_mode == "us_ssa_2015_period":
+            st.caption(
+                "Source: SSA actuarial life table (US Social Security area population), period year 2015."
+            )
+
+    with st.expander("Expenses & valuation", expanded=True):
+        _exp_opts = ("csv", "manual")
+        ensure_session_choice(st.session_state, "run_expense_mode", _exp_opts, "csv")
+        st.radio(
+            "Expenses",
+            options=list(_exp_opts),
+            format_func=lambda x: "Load from CSV" if x == "csv" else "Enter manually",
+            horizontal=True,
+            key="run_expense_mode",
+        )
+        expense_mode = str(st.session_state.get("run_expense_mode", "csv"))
+        if expense_mode == "csv":
+            st.text_input("Expenses CSV path", key="run_expenses_csv")
+        else:
+            run_number_input("Policy expense at issue ($)", "run_policy_expense", default=0.0)
+            run_number_input(
+                "Premium expense (% of single premium)",
+                "run_premium_expense_pct",
+                default=0.0,
+                min_value=0.0,
+                max_value=99.99,
+                help="Enter 2 for 2%. Must stay below 100%.",
+            )
+            run_number_input(
+                "Monthly expense while alive ($)", "run_monthly_expense", default=0.0
+            )
+        run_number_input(
+            "Valuation year (calendar)",
+            "run_valuation_year",
+            default=2025,
+            min_value=1950,
+            max_value=2100,
+            help="Used for RP+MP calendar-year mortality; ignored for static/synthetic q_x.",
+        )
+        run_number_input(
+            "Horizon age (stop monthly grid)",
+            "run_horizon_age",
+            default=110,
+            min_value=1,
+            max_value=130,
+        )
+        run_number_input(
+            "Credit spread added to zero rate", "run_spread", default=0.0, format="%.4f"
+        )
+
+    product_caps = get_product_capabilities(economics_product)
+    can_use_economic_scenario = bool(product_caps.supports_economic_scenario)
+    can_use_monte_carlo = bool(product_caps.supports_monte_carlo)
+    if can_use_economic_scenario:
+        _econ_title = (
+            "Economic scenario (RILA segment crediting & SPIA benefit indexation)"
+            if economics_product == ProductType.RILA
+            else "Economic scenario (benefit indexation & expense inflation)"
+        )
+        with st.expander(_econ_title, expanded=True):
+            st.checkbox(
+                "Use S&P 500 proxy CSV for index levels (month, sp500_level)",
+                help="If off, index is flat (zero equity returns). Required for meaningful RILA crediting.",
+                key="run_use_index",
+            )
+            st.text_input(
+                "Index scenario CSV (columns: month, sp500_level for months 0..N)",
+                key="run_index_csv",
+            )
+            run_number_input(
+                "Expense annual inflation (%, not tied to S&P)",
+                "run_expense_inflation_pct",
+                default=2.5,
+                min_value=0.0,
+                max_value=25.0,
+                help="Applied monthly as (1 + annual)^(1/12) to maintenance expenses only.",
+            )
+
+    if include_monte_carlo and can_use_monte_carlo:
+        with st.expander("Monte Carlo (stochastic index assumption)", expanded=True):
+            st.checkbox(
+                "Enable Monte Carlo on index returns",
+                help="Simulates index paths and reprices for each path. Mortality, curve, and expense inflation remain deterministic.",
+                key="run_mc_enable",
+            )
+            run_number_input(
+                "Number of simulations",
+                "run_mc_n_sims",
+                default=100,
+                min_value=100,
+                max_value=20000,
+                step=100,
+            )
+            run_number_input(
+                "Random seed",
+                "run_mc_seed",
+                default=42,
+                min_value=0,
+                max_value=2_147_483_647,
+                step=1,
+            )
+            run_number_input(
+                "Annual drift (%)",
+                "run_mc_drift_pct",
+                default=6.0,
+                min_value=-50.0,
+                max_value=50.0,
+                step=0.1,
+                help=(
+                    "Real-world equity drift used for index simulation. For RILA pricing, "
+                    "drift well above the risk-free rate combined with a high cap/participation can "
+                    "push some paths into infeasibility (PV death benefits per $1 premium ≥ 1). "
+                    "Reduce drift, cap, or participation if too many paths are skipped."
+                ),
+            )
+            run_number_input(
+                "Annual volatility (%)",
+                "run_mc_vol_pct",
+                default=15.0,
+                min_value=0.0,
+                max_value=200.0,
+                step=0.1,
+            )
+            run_number_input(
+                "Initial index level (S0)", "run_mc_s0", default=100.0, min_value=0.01, step=1.0
+            )
+
+
+def _snapshot_pricing_economics_from_session(
+    selected_product: ProductType,
+) -> tuple[Any, ...]:
+    """Read economics widgets from session after expanders ran (Pricing Run ``if run`` path)."""
+    y_mode = str(st.session_state.get("run_y_mode", "par_bootstrap"))
+    flat_rate = float(st.session_state.get("run_flat_rate", 0.04))
+    zero_csv = str(st.session_state.get("run_zero_csv", sp.DEFAULT_ZERO_CURVE_CSV))
+    par_csv = str(st.session_state.get("run_par_csv", sp.DEFAULT_PAR_CURVE_CSV))
+    coupon_freq = int(st.session_state.get("run_coupon_freq", 2))
+    m_mode = str(st.session_state.get("run_m_mode", "rp2014_mp2016"))
+    qx_csv = str(st.session_state.get("run_qx_csv", sp.DEFAULT_MORTALITY_QX_CSV))
+    rp_xlsx = str(st.session_state.get("run_rp_xlsx", sp.DEFAULT_RP2014_XLSX))
+    rp_out = str(st.session_state.get("run_rp_out", sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV))
+    mp_xlsx = str(st.session_state.get("run_mp_xlsx", sp.DEFAULT_MP2016_XLSX))
+    mp_out = str(st.session_state.get("run_mp_out", sp.DEFAULT_MP2016_MALE_IMPROVEMENT_CSV))
+    expense_mode = str(st.session_state.get("run_expense_mode", "csv"))
+    pol = float(st.session_state.get("run_policy_expense", 0.0))
+    prem_pct = float(st.session_state.get("run_premium_expense_pct", 0.0))
+    monthly_ex = float(st.session_state.get("run_monthly_expense", 0.0))
+    valuation_year = int(st.session_state.get("run_valuation_year", 2025))
+    horizon_age = int(st.session_state.get("run_horizon_age", 110))
+    spread = float(st.session_state.get("run_spread", 0.0))
+    product_caps = get_product_capabilities(selected_product)
+    can_use_economic_scenario = bool(product_caps.supports_economic_scenario)
+    use_index = bool(st.session_state.get("run_use_index", True)) if can_use_economic_scenario else False
+    index_csv = str(st.session_state.get("run_index_csv", sp.DEFAULT_SP500_SCENARIO_CSV))
+    expense_inflation_pct = float(st.session_state.get("run_expense_inflation_pct", 2.5))
+    can_use_monte_carlo = bool(product_caps.supports_monte_carlo)
+    mc_enable = bool(st.session_state.get("run_mc_enable", False)) if can_use_monte_carlo else False
+    mc_n_sims = int(st.session_state.get("run_mc_n_sims", 100))
+    mc_seed = int(st.session_state.get("run_mc_seed", 42))
+    mc_drift_pct = float(st.session_state.get("run_mc_drift_pct", 6.0))
+    mc_vol_pct = float(st.session_state.get("run_mc_vol_pct", 15.0))
+    mc_s0 = float(st.session_state.get("run_mc_s0", 100.0))
+    expenses_csv = str(st.session_state.get("run_expenses_csv", sp.DEFAULT_EXPENSES_CSV))
+    return (
+        y_mode,  # type: ignore[return-value]
+        flat_rate,
+        zero_csv,
+        par_csv,
+        coupon_freq,
+        m_mode,  # type: ignore[return-value]
+        qx_csv,
+        rp_xlsx,
+        rp_out,
+        mp_xlsx,
+        mp_out,
+        expense_mode,
+        pol,
+        prem_pct,
+        monthly_ex,
+        valuation_year,
+        horizon_age,
+        spread,
+        use_index,
+        index_csv,
+        expense_inflation_pct,
+        mc_enable,
+        mc_n_sims,
+        mc_seed,
+        mc_drift_pct,
+        mc_vol_pct,
+        mc_s0,
+        expenses_csv,
+    )
+
+
 def _render_run_and_results() -> None:
     st.header("Pricing Run")
     _seed_run_form_state_from_last_inputs()
@@ -2563,226 +2678,10 @@ def _render_run_and_results() -> None:
             benefit_timing_choice = "n/a"
             monthly_premium = 0.0
 
-    with st.expander("Yield curve", expanded=True):
-        _y_opts = ("flat", "zero_csv", "par_bootstrap")
-        ensure_session_choice(st.session_state, "run_y_mode", _y_opts, "par_bootstrap")
-        y_mode = st.radio(
-            "Source",
-            options=list(_y_opts),
-            format_func=lambda x: {
-                "flat": "Flat zero rate",
-                "zero_csv": "Zero curve CSV",
-                "par_bootstrap": "Par yields CSV → bootstrap zeros",
-            }[x],
-            horizontal=True,
-            key="run_y_mode",
-        )
-        flat_rate = float(st.session_state.get("run_flat_rate", 0.04))
-        zero_csv = str(st.session_state.get("run_zero_csv", sp.DEFAULT_ZERO_CURVE_CSV))
-        par_csv = str(st.session_state.get("run_par_csv", sp.DEFAULT_PAR_CURVE_CSV))
-        coupon_freq = int(st.session_state.get("run_coupon_freq", 2))
-        if y_mode == "flat":
-            flat_rate = float(
-                run_number_input(
-                    "Flat continuously compounded zero rate",
-                    "run_flat_rate",
-                    default=0.04,
-                    format="%.4f",
-                )
-            )
-        elif y_mode == "zero_csv":
-            zero_csv = st.text_input("Zero curve CSV path", key="run_zero_csv")
-        else:
-            par_csv = st.text_input("Par yield CSV path", key="run_par_csv")
-            coupon_freq = int(
-                run_number_input(
-                    "Coupon payments per year", "run_coupon_freq", default=2, min_value=1, step=1
-                )
-            )
-
-    with st.expander("Mortality", expanded=True):
-        mortality_options = list(get_product_mortality_mode_options(selected_product))
-        ensure_session_choice(
-            st.session_state,
-            "run_m_mode",
-            mortality_options,
-            get_product_default_mortality_mode(selected_product),
-        )
-        m_mode = st.radio(
-            "Table",
-            options=mortality_options,
-            format_func=lambda x: get_mortality_mode_label(str(x)),
-            horizontal=True,
-            key="run_m_mode",
-        )
-        qx_csv = str(st.session_state.get("run_qx_csv", sp.DEFAULT_MORTALITY_QX_CSV))
-        rp_xlsx = str(st.session_state.get("run_rp_xlsx", sp.DEFAULT_RP2014_XLSX))
-        rp_out = str(st.session_state.get("run_rp_out", sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV))
-        mp_xlsx = str(st.session_state.get("run_mp_xlsx", sp.DEFAULT_MP2016_XLSX))
-        mp_out = str(st.session_state.get("run_mp_out", sp.DEFAULT_MP2016_MALE_IMPROVEMENT_CSV))
-        if m_mode == "qx_csv":
-            qx_csv = st.text_input("q_x CSV (columns age, qx)", key="run_qx_csv")
-        elif m_mode == "rp2014_mp2016":
-            st.caption(
-                "SOA workbooks are optional if matching CSV extracts already exist beside the xlsx paths."
-            )
-            if not str(st.session_state.get("run_rp_xlsx", "")).strip():
-                st.session_state["run_rp_xlsx"] = sp.DEFAULT_RP2014_XLSX
-            if not str(st.session_state.get("run_rp_out", "")).strip():
-                st.session_state["run_rp_out"] = sp.DEFAULT_RP2014_MALE_HEALTHY_QX_CSV
-            if not str(st.session_state.get("run_mp_xlsx", "")).strip():
-                st.session_state["run_mp_xlsx"] = sp.DEFAULT_MP2016_XLSX
-            if not str(st.session_state.get("run_mp_out", "")).strip():
-                st.session_state["run_mp_out"] = sp.DEFAULT_MP2016_MALE_IMPROVEMENT_CSV
-            rp_xlsx = st.text_input("RP-2014 xlsx", key="run_rp_xlsx")
-            rp_out = st.text_input("RP-2014 healthy male qx cache CSV", key="run_rp_out")
-            mp_xlsx = st.text_input("MP-2016 xlsx", key="run_mp_xlsx")
-            mp_out = st.text_input("MP-2016 improvement cache CSV", key="run_mp_out")
-        elif m_mode == "us_ssa_2015_period":
-            st.caption(
-                "Source: SSA actuarial life table (US Social Security area population), period year 2015."
-            )
-
-    with st.expander("Expenses & valuation", expanded=True):
-        _exp_opts = ("csv", "manual")
-        ensure_session_choice(st.session_state, "run_expense_mode", _exp_opts, "csv")
-        expense_mode = st.radio(
-            "Expenses",
-            options=list(_exp_opts),
-            format_func=lambda x: "Load from CSV" if x == "csv" else "Enter manually",
-            horizontal=True,
-            key="run_expense_mode",
-        )
-        expenses_csv = str(st.session_state.get("run_expenses_csv", sp.DEFAULT_EXPENSES_CSV))
-        pol = float(st.session_state.get("run_policy_expense", 0.0))
-        prem_pct = float(st.session_state.get("run_premium_expense_pct", 0.0))
-        monthly_ex = float(st.session_state.get("run_monthly_expense", 0.0))
-        if expense_mode == "csv":
-            expenses_csv = st.text_input("Expenses CSV path", key="run_expenses_csv")
-        else:
-            pol = float(
-                run_number_input("Policy expense at issue ($)", "run_policy_expense", default=0.0)
-            )
-            prem_pct = float(
-                run_number_input(
-                    "Premium expense (% of single premium)",
-                    "run_premium_expense_pct",
-                    default=0.0,
-                    min_value=0.0,
-                    max_value=99.99,
-                    help="Enter 2 for 2%. Must stay below 100%.",
-                )
-            )
-            monthly_ex = float(
-                run_number_input(
-                    "Monthly expense while alive ($)", "run_monthly_expense", default=0.0
-                )
-            )
-        valuation_year = run_number_input(
-            "Valuation year (calendar)",
-            "run_valuation_year",
-            default=2025,
-            min_value=1950,
-            max_value=2100,
-            help="Used for RP+MP calendar-year mortality; ignored for static/synthetic q_x.",
-        )
-        horizon_age = run_number_input(
-            "Horizon age (stop monthly grid)",
-            "run_horizon_age",
-            default=110,
-            min_value=1,
-            max_value=130,
-        )
-        spread = run_number_input(
-            "Credit spread added to zero rate", "run_spread", default=0.0, format="%.4f"
-        )
+    _render_shared_pricing_economics_controls(selected_product, include_monte_carlo=True)
 
     product_caps = get_product_capabilities(selected_product)
-    can_use_economic_scenario = bool(product_caps.supports_economic_scenario)
     can_use_monte_carlo = bool(product_caps.supports_monte_carlo)
-
-    use_index = False
-    index_csv = sp.DEFAULT_SP500_SCENARIO_CSV
-    expense_inflation_pct = 0.0
-    if can_use_economic_scenario:
-        _econ_title = (
-            "Economic scenario (RILA segment crediting & SPIA benefit indexation)"
-            if selected_product == ProductType.RILA
-            else "Economic scenario (benefit indexation & expense inflation)"
-        )
-        with st.expander(_econ_title, expanded=True):
-            use_index = st.checkbox(
-                "Use S&P 500 proxy CSV for index levels (month, sp500_level)",
-                help="If off, index is flat (zero equity returns). Required for meaningful RILA crediting.",
-                key="run_use_index",
-            )
-            index_csv = st.text_input(
-                "Index scenario CSV (columns: month, sp500_level for months 0..N)",
-                key="run_index_csv",
-            )
-            expense_inflation_pct = run_number_input(
-                "Expense annual inflation (%, not tied to S&P)",
-                "run_expense_inflation_pct",
-                default=2.5,
-                min_value=0.0,
-                max_value=25.0,
-                help="Applied monthly as (1 + annual)^(1/12) to maintenance expenses only.",
-            )
-
-    mc_enable = False
-    mc_n_sims = 100
-    mc_seed = 42
-    mc_drift_pct = 6.0
-    mc_vol_pct = 15.0
-    mc_s0 = 100.0
-    if can_use_monte_carlo:
-        with st.expander("Monte Carlo (stochastic index assumption)", expanded=True):
-            mc_enable = st.checkbox(
-                "Enable Monte Carlo on index returns",
-                help="Simulates index paths and reprices for each path. Mortality, curve, and expense inflation remain deterministic.",
-                key="run_mc_enable",
-            )
-            mc_n_sims = run_number_input(
-                "Number of simulations",
-                "run_mc_n_sims",
-                default=100,
-                min_value=100,
-                max_value=20000,
-                step=100,
-            )
-            mc_seed = run_number_input(
-                "Random seed",
-                "run_mc_seed",
-                default=42,
-                min_value=0,
-                max_value=2_147_483_647,
-                step=1,
-            )
-            mc_drift_pct = run_number_input(
-                "Annual drift (%)",
-                "run_mc_drift_pct",
-                default=6.0,
-                min_value=-50.0,
-                max_value=50.0,
-                step=0.1,
-                help=(
-                    "Real-world equity drift used for index simulation. For RILA pricing, "
-                    "drift well above the risk-free rate combined with a high cap/participation can "
-                    "push some paths into infeasibility (PV death benefits per $1 premium ≥ 1). "
-                    "Reduce drift, cap, or participation if too many paths are skipped."
-                ),
-            )
-            mc_vol_pct = run_number_input(
-                "Annual volatility (%)",
-                "run_mc_vol_pct",
-                default=15.0,
-                min_value=0.0,
-                max_value=200.0,
-                step=0.1,
-            )
-            mc_s0 = run_number_input(
-                "Initial index level (S0)", "run_mc_s0", default=100.0, min_value=0.01, step=1.0
-            )
 
     _is_implemented_product = selected_product in (
         ProductType.SPIA,
@@ -2809,6 +2708,37 @@ def _render_run_and_results() -> None:
 
     if run:
         try:
+            snap = _snapshot_pricing_economics_from_session(selected_product)
+            (
+                y_mode,
+                flat_rate,
+                zero_csv,
+                par_csv,
+                coupon_freq,
+                m_mode,
+                qx_csv,
+                rp_xlsx,
+                rp_out,
+                mp_xlsx,
+                mp_out,
+                expense_mode,
+                pol,
+                prem_pct,
+                monthly_ex,
+                valuation_year,
+                horizon_age,
+                spread,
+                use_index,
+                index_csv,
+                expense_inflation_pct,
+                mc_enable,
+                mc_n_sims,
+                mc_seed,
+                mc_drift_pct,
+                mc_vol_pct,
+                mc_s0,
+                expenses_csv,
+            ) = snap
             adapter = get_product_adapter(selected_product)
             yc = _build_yield_curve(
                 y_mode,  # type: ignore[arg-type]
@@ -4669,6 +4599,27 @@ def _portfolio_row_prefix(row_id: str) -> str:
     return f"portfolio_row_{row_id}_"
 
 
+def _portfolio_reference_product_for_economics(row_ids: list[str]) -> ProductType:
+    if row_ids:
+        rid = row_ids[0]
+        pfx = _portfolio_row_prefix(rid)
+        raw = st.session_state.get(pfx + "product_type", ProductType.SPIA.value)
+        try:
+            return ProductType(str(raw).strip())
+        except ValueError:
+            return ProductType.SPIA
+    try:
+        return ProductType(str(st.session_state.get("run_product_type", ProductType.SPIA.value)))
+    except ValueError:
+        return ProductType.SPIA
+
+
+def _portfolio_run_scenario_for_policies(policies: tuple[PolicyInput, ...]) -> RunScenario:
+    sex_raw = str(getattr(policies[0].contract, "sex", "male")).strip().lower()
+    sex: Literal["male", "female"] = "female" if sex_raw == "female" else "male"
+    return run_scenario_for_portfolio_policies(dict(st.session_state), policies, sex=sex, repo_root=ROOT)
+
+
 def _next_portfolio_policy_id(used: list[str]) -> str:
     nums: list[int] = []
     for pid in used:
@@ -4937,7 +4888,7 @@ def _render_portfolio_section() -> None:
     st.subheader("Portfolio (multi-policy)")
     st.caption(
         "Load an inforce CSV (see ``tests/data/inforce/example_v1/inforce.csv`` for column layout). "
-        "Uses the same flat yield / mortality defaults as the portfolio CLI smoke test."
+        "Shared economics below use the same ``run_*`` keys as **Pricing Run** (deterministic pricing only)."
     )
     st.markdown("##### Manual policies (optional)")
     st.caption(
@@ -4956,6 +4907,20 @@ def _render_portfolio_section() -> None:
     product_options = list(product_options_for_ui())
     product_values = [p.value for p in product_options]
     row_ids = list(st.session_state.get(PORTFOLIO_KEY.MANUAL_ROWS) or [])
+
+    _seed_run_form_state_from_last_inputs()
+    ref_pt = _portfolio_reference_product_for_economics(row_ids)
+    _normalize_run_state_for_selected_product(
+        st.session_state,
+        selected_product=ref_pt,
+        switched_product=False,
+    )
+    st.markdown("##### Shared economics (Pricing Run defaults)")
+    st.caption(
+        "Yield curve, mortality, expenses, horizon, spread, and index scenario match the **Pricing Run** tab; "
+        "Monte Carlo is omitted for portfolio batch pricing."
+    )
+    _render_shared_pricing_economics_controls(ref_pt, include_monte_carlo=False)
 
     for idx, row_id in enumerate(row_ids):
         pfx = _portfolio_row_prefix(row_id)
@@ -5035,7 +5000,7 @@ def _render_portfolio_section() -> None:
                         st.error("Add at least one policy row with a product_type.")
                     else:
                         policies = load_policy_inputs_from_csv_from_dataframe(df)
-                        scen = default_run_scenario()
+                        scen = _portfolio_run_scenario_for_policies(tuple(policies))
                         res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
                         st.session_state[PORTFOLIO_KEY.RESULT] = res
                         st.session_state[PORTFOLIO_KEY.RUN_ID] = (
@@ -5058,7 +5023,7 @@ def _render_portfolio_section() -> None:
                 tmp = Path(tf.name)
             try:
                 policies = load_policy_inputs_from_csv(tmp)
-                scen = default_run_scenario()
+                scen = _portfolio_run_scenario_for_policies(tuple(policies))
                 res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
                 st.session_state[PORTFOLIO_KEY.RESULT] = res
                 st.session_state[PORTFOLIO_KEY.RUN_ID] = (

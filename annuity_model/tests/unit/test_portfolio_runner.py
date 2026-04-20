@@ -56,7 +56,7 @@ def test_default_portfolio_scenario_rila_has_positive_outputs() -> None:
     """Regression: zero-expense portfolio scenarios priced RILA at SP=0 (degenerate)."""
     from portfolio_scenario import default_run_scenario
 
-    scen = default_run_scenario()
+    scen = default_run_scenario(default_product_type=ProductType.RILA)
     pol = Portfolio(
         policies=(
             PolicyInput(

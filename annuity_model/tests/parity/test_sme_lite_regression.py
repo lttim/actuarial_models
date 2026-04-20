@@ -289,12 +289,14 @@ def _scenario_portfolio() -> dict[str, float]:
     from inforce_io import load_policy_inputs_from_csv
     from portfolio import Portfolio
     from portfolio_runner import run_portfolio
-    from portfolio_scenario import default_run_scenario
     from portfolio_summary import portfolio_result_to_summary_dict
+    from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
 
     root = Path(__file__).resolve().parents[2]
     policies = load_policy_inputs_from_csv(root / "tests/data/inforce/example_v1/inforce.csv")
-    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=default_run_scenario())
+    sex = "female" if str(policies[0].contract.sex).lower() == "female" else "male"
+    scen = run_scenario_for_portfolio_policies({}, policies, sex=sex, repo_root=ANN_MODEL_ROOT)
+    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
     s = portfolio_result_to_summary_dict(res)
     flat: dict[str, float] = {
         "n_policies": float(s["n_policies"]),

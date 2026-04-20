@@ -418,11 +418,15 @@ def build_portfolio() -> Path:
     from inforce_io import load_policy_inputs_from_csv
     from portfolio import Portfolio
     from portfolio_runner import run_portfolio
-    from portfolio_scenario import default_run_scenario
+    from pricing_scenario_materialize import run_scenario_for_portfolio_policies
 
     csv_path = REPO_ROOT / "tests" / "data" / "inforce" / "example_v1" / "inforce.csv"
     policies = load_policy_inputs_from_csv(csv_path)
-    res = run_portfolio(portfolio=Portfolio(policies=tuple(policies)), scenario=default_run_scenario())
+    pol_t = tuple(policies)
+    sex_raw = str(getattr(pol_t[0].contract, "sex", "male")).strip().lower()
+    sex = "female" if sex_raw == "female" else "male"
+    scen = run_scenario_for_portfolio_policies({}, pol_t, sex=sex)  # type: ignore[arg-type]
+    res = run_portfolio(portfolio=Portfolio(policies=pol_t), scenario=scen)
     out = OUT_DIR / "portfolio_smoke.xlsx"
     build_portfolio_workbook_to_path(res, out)
     return out

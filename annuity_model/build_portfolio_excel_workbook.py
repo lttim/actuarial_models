@@ -1,15 +1,17 @@
-"""Build a portfolio workbook (per-policy + by-type + total liability rollups + ModelCheck)."""
+"""Build a portfolio workbook (per-policy CF grid + liability rollups + ModelCheck)."""
 
 from __future__ import annotations
 
 import io
 from pathlib import Path
 
+import numpy as np
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
 from excel_workbook_validator import validate_workbook_or_raise
+from liability_dispatch import liability_path_for
 from portfolio import PortfolioResult, ProductTypeRollupScalars
 from product_registry import ProductType
 
@@ -18,15 +20,25 @@ def _sorted_product_types(rollups: dict[ProductType, object]) -> tuple[ProductTy
     return tuple(sorted(rollups, key=lambda p: p.value))
 
 
+def _policy_cf_row(pricing: object, n_months: int) -> list[float]:
+    lp = liability_path_for(pricing)
+    cf = np.asarray(lp.expected_total_cashflows, dtype=float).ravel()
+    out = [float(cf[i]) if i < cf.size else 0.0 for i in range(n_months)]
+    return out
+
+
 def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
-    """Create an .xlsx with liability rollups; ``ModelCheck`` asserts sum(types)==total per month."""
+    """Create an .xlsx with ``PolicyCashflows`` grid, formula-linked ``LiabilityAggregate`` total, and ``ModelCheck``."""
     wb = Workbook()
     # --- Inputs ---
     ws_in = wb.active
     ws_in.title = "Inputs"
     ws_in["A1"] = "Portfolio workbook (v1)"
     ws_in["A1"].font = Font(bold=True, size=12)
-    ws_in["A2"] = "Liability cashflows are Python literals; ModelCheck uses Excel formulas."
+    ws_in["A2"] = (
+        "Per-policy liability CF are Python literals on PolicyCashflows; "
+        "LiabilityAggregate total_cf sums those columns; ModelCheck reconciles Excel to Python."
+    )
 
     # --- PolicyRegister ---
     ws_pr = wb.create_sheet("PolicyRegister")
@@ -38,6 +50,31 @@ def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
         ws_pr.cell(row=r, column=2, value=pr.product_type.value)
         prem = getattr(pr.pricing, "single_premium", None)
         ws_pr.cell(row=r, column=3, value=float(prem) if prem is not None else None)
+
+    total = res.liability_path_total
+    n = len(total.expected_total_cashflows)
+    n_pol = len(res.policy_results)
+    first_pc = 3
+    last_pc = 2 + max(1, n_pol)
+    first_letter = get_column_letter(first_pc)
+    last_letter = get_column_letter(last_pc)
+
+    # --- PolicyCashflows (month, t_years, one column per policy) ---
+    ws_pc = wb.create_sheet("PolicyCashflows")
+    ws_pc["A1"] = "month"
+    ws_pc["B1"] = "t_years"
+    ws_pc["A1"].font = Font(bold=True)
+    ws_pc["B1"].font = Font(bold=True)
+    for j, pr in enumerate(res.policy_results, start=first_pc):
+        hdr = str(pr.policy_id).replace("[", "").replace("]", "").replace("*", "").replace("?", "")[:200]
+        ws_pc.cell(row=1, column=j, value=hdr or f"policy_{j}").font = Font(bold=True)
+    for i in range(n):
+        rr = 2 + i
+        ws_pc.cell(row=rr, column=1, value=i + 1)
+        ws_pc.cell(row=rr, column=2, value=float(total.times_years[i]))
+        for j, pr in enumerate(res.policy_results, start=first_pc):
+            series = _policy_cf_row(pr.pricing, n)
+            ws_pc.cell(row=rr, column=j, value=float(series[i]))
 
     # --- ProductTypeRollups ---
     ws_rt = wb.create_sheet("ProductTypeRollups")
@@ -68,8 +105,6 @@ def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
 
     # --- LiabilityAggregate ---
     ws_la = wb.create_sheet("LiabilityAggregate")
-    total = res.liability_path_total
-    n = len(total.expected_total_cashflows)
     types = _sorted_product_types(dict(res.rollups_by_product_type))
     ws_la["A1"] = "month"
     ws_la["B1"] = "t_years"
@@ -80,13 +115,20 @@ def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
         ws_la.cell(row=1, column=c).font = Font(bold=True)
 
     last_type_col = 3 + len(types)
-    last_letter = get_column_letter(last_type_col)
+    last_type_letter = get_column_letter(last_type_col)
 
     for i in range(n):
         rr = 2 + i
         ws_la.cell(row=rr, column=1, value=i + 1)
         ws_la.cell(row=rr, column=2, value=float(total.times_years[i]))
-        ws_la.cell(row=rr, column=3, value=float(total.expected_total_cashflows[i]))
+        if n_pol >= 1:
+            ws_la.cell(
+                row=rr,
+                column=3,
+                value=f"=SUM(PolicyCashflows!{first_letter}{rr}:{last_letter}{rr})",
+            )
+        else:
+            ws_la.cell(row=rr, column=3, value=0.0)
         for j, pt in enumerate(types, start=4):
             cf_j = res.rollups_by_product_type[pt].expected_total_cashflows
             v = float(cf_j[i]) if i < len(cf_j) else 0.0
@@ -96,8 +138,11 @@ def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
     ws_mc = wb.create_sheet("ModelCheck")
     ws_mc["A1"] = "month"
     ws_mc["B1"] = "rollup_minus_total"
-    ws_mc["A1"].font = Font(bold=True)
-    ws_mc["B1"].font = Font(bold=True)
+    ws_mc["C1"] = "python_total_cf"
+    ws_mc["D1"] = "excel_total_cf"
+    ws_mc["E1"] = "diff_excel_minus_python"
+    for c in range(1, 6):
+        ws_mc.cell(row=1, column=c).font = Font(bold=True)
     for i in range(n):
         rr = 2 + i
         ws_mc.cell(row=rr, column=1, value=i + 1)
@@ -105,13 +150,17 @@ def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
         ws_mc.cell(
             row=rr,
             column=2,
-            value=f"=SUM(LiabilityAggregate!{first_t}{rr}:{last_letter}{rr})-LiabilityAggregate!C{rr}",
+            value=f"=SUM(LiabilityAggregate!{first_t}{rr}:{last_type_letter}{rr})-LiabilityAggregate!C{rr}",
         )
+        py_tot = float(total.expected_total_cashflows[i])
+        ws_mc.cell(row=rr, column=3, value=py_tot)
+        ws_mc.cell(row=rr, column=4, value=f"=LiabilityAggregate!C{rr}")
+        ws_mc.cell(row=rr, column=5, value=f"=D{rr}-C{rr}")
 
     # --- README ---
     ws_rm = wb.create_sheet("README")
     ws_rm["A1"] = "Portfolio v1 workbook"
-    ws_rm["A2"] = "Per-policy pricing is seriatim in Python; this file rolls up liability CF only."
+    ws_rm["A2"] = "Per-policy pricing is seriatim in Python; total_cf on LiabilityAggregate sums PolicyCashflows."
     ws_rm["A3"] = "ALM is not embedded here (v1); run ALM from the app or CLI on the aggregate path."
 
     validate_workbook_or_raise(wb)

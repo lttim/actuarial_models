@@ -2,9 +2,9 @@
 
 ## When to use
 
-You need **one scenario** (flat curve, mortality table, horizon, expenses)
-applied to **many policies** and a **single aggregated liability path** plus
-optional ALM on that path.
+You need **one shared economic scenario** (Pricing Run–equivalent yield, mortality,
+horizon, expenses, index path) applied to **many policies** and a **single
+aggregated liability path** plus optional ALM on that path.
 
 ## CLI
 

@@ -52,16 +52,16 @@
   },
   "portfolio": {
     "n_policies": 5.0,
-    "total_cf_sum": 2029963.5458913345,
-    "rollup_cf_sum_myga": 124819.93720186477,
+    "total_cf_sum": 2914639.9480819716,
+    "rollup_cf_sum_myga": 125388.88797683323,
     "policy_count_myga": 1.0,
-    "rollup_cf_sum_rila": 11331.690550504805,
+    "rollup_cf_sum_rila": 35256.315226609164,
     "policy_count_rila": 1.0,
-    "rollup_cf_sum_spia": 1805049.9006371165,
+    "rollup_cf_sum_spia": 2695755.793629329,
     "policy_count_spia": 1.0,
-    "rollup_cf_sum_term_life": 43577.92861085283,
+    "rollup_cf_sum_term_life": -29362.57068194345,
     "policy_count_term_life": 1.0,
-    "rollup_cf_sum_universal_life": 45184.08889099562,
+    "rollup_cf_sum_universal_life": 87601.5219311432,
     "policy_count_universal_life": 1.0
   }
 }

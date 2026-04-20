@@ -581,10 +581,13 @@ def test_portfolio_workbook_passes_strict_validation() -> None:
     from inforce_io import load_policy_inputs_from_csv
     from portfolio import Portfolio
     from portfolio_runner import run_portfolio
-    from portfolio_scenario import default_run_scenario
 
     csv_path = Path(__file__).resolve().parent / "data" / "inforce" / "example_v1" / "inforce.csv"
     policies = load_policy_inputs_from_csv(csv_path)
-    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=default_run_scenario())
+    from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
+
+    sex = "female" if str(policies[0].contract.sex).lower() == "female" else "male"
+    scen = run_scenario_for_portfolio_policies({}, policies, sex=sex, repo_root=ANN_MODEL_ROOT)
+    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
     raw = build_portfolio_workbook_bytes(res)
     _validate_xlsx_bytes(raw)

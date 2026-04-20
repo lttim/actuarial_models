@@ -10,14 +10,15 @@ import pytest
 from inforce_io import load_policy_inputs_from_csv
 from portfolio import Portfolio
 from portfolio_runner import run_portfolio
-from portfolio_scenario import default_run_scenario
+from pricing_scenario_materialize import run_scenario_for_portfolio_policies
 
 
 @pytest.mark.slow
 def test_portfolio_five_policy_wall_clock() -> None:
     root = Path(__file__).resolve().parents[2]
     policies = load_policy_inputs_from_csv(root / "tests/data/inforce/example_v1/inforce.csv")
-    scen = default_run_scenario()
+    sex = "female" if str(policies[0].contract.sex).lower() == "female" else "male"
+    scen = run_scenario_for_portfolio_policies({}, policies, sex=sex)
     t0 = time.perf_counter()
     run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
     elapsed = time.perf_counter() - t0
