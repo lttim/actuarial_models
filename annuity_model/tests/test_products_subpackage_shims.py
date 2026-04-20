@@ -16,9 +16,22 @@ When the implementation eventually moves into the subpackages, this test
 gets inverted: the legacy module becomes the shim and re-exports from
 ``products.<name>``. The shape of the assertions stays the same; only
 the direction changes.
+
+Import-surface guard (2026-04): several products register
+:class:`~products.ProductDefinition` from ``products/<name>/__init__.py``
+using **direct** imports from legacy flat modules (``fia_projection``,
+etc.) and never reference ``products.<name>.engine`` at package import
+time. A syntax error or ``IndentationError`` in ``engine.py`` would then
+pass the full pytest suite until something explicitly imported that
+shim. :func:`test_every_product_package_canonical_shims_import` closes
+that hole by forcing ``importlib.import_module`` on all four canonical
+files for every on-disk product subpackage.
 """
 
 from __future__ import annotations
+
+import importlib
+from pathlib import Path
 
 import pytest
 
@@ -47,6 +60,25 @@ import products.term.ui as term_ui
 from product_registry import ProductType, get_product_adapter
 
 pytestmark = [pytest.mark.invariant]
+
+PRODUCTS_ROOT = Path(__file__).resolve().parent.parent / "products"
+_CANONICAL_SUBMODULES = ("schema", "engine", "excel", "ui")
+
+
+def _discover_on_disk_product_packages() -> list[str]:
+    """Return ``products/<name>/`` directory names that are real packages."""
+    if not PRODUCTS_ROOT.is_dir():
+        return []
+    names: list[str] = []
+    for child in sorted(PRODUCTS_ROOT.iterdir()):
+        if not child.is_dir():
+            continue
+        if child.name.startswith(("_", ".")):
+            continue
+        if not (child / "__init__.py").is_file():
+            continue
+        names.append(child.name)
+    return names
 
 
 # ---------------------------------------------------------------------------
@@ -198,15 +230,31 @@ def test_every_product_subpackage_exposes_canonical_layout(package) -> None:
     """schema/engine/excel/ui submodules MUST be importable for every
     implemented product. Scaffolding scripts (P1.5) rely on this layout
     when generating a new product."""
-    import importlib
-
-    for submodule in ("schema", "engine", "excel", "ui"):
+    for submodule in _CANONICAL_SUBMODULES:
         mod = importlib.import_module(f"{package.__name__}.{submodule}")
         assert mod is not None, (
             f"{package.__name__}.{submodule} failed to import. The "
             "schema/engine/excel/ui layout is mandatory for every product "
             "subpackage; add the file as a re-export shim."
         )
+
+
+@pytest.mark.parametrize("pkg_name", _discover_on_disk_product_packages())
+@pytest.mark.parametrize("submodule", _CANONICAL_SUBMODULES)
+def test_every_product_package_canonical_shims_import(
+    pkg_name: str, submodule: str
+) -> None:
+    """Every on-disk product package must parse and import all canonical shims.
+
+    This is stronger than :func:`test_every_product_subpackage_exposes_canonical_layout`
+    (SPIA/Term/RILA only): newer products' ``__init__.py`` often wires
+    ``ProductDefinition`` from legacy modules without ever importing
+    ``products.<pkg>.engine``. Syntax errors there must still fail CI.
+    """
+    shim_path = PRODUCTS_ROOT / pkg_name / f"{submodule}.py"
+    if not shim_path.is_file():
+        pytest.skip(f"products/{pkg_name}/{submodule}.py not present yet")
+    importlib.import_module(f"products.{pkg_name}.{submodule}")
 
 
 @pytest.mark.parametrize(
