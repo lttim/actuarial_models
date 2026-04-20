@@ -50,6 +50,14 @@ CI enforces all of these:
 * Runbooks: [parity break](runbooks/investigate_parity_break.md),
   [validator](runbooks/debug_validator_failure.md),
   [Excel cache](runbooks/regenerate_excel_cache.md),
-  [release](runbooks/release.md)
+  [release](runbooks/release.md),
+  [assumption guardrail](runbooks/assumption_release_guardrail.md)
 * Governance: [CHANGELOG](CHANGELOG.md), [model change log](model_change_log.md),
-  [CODEOWNERS rationale](CODEOWNERS_RATIONALE.md)
+  [CODEOWNERS rationale](CODEOWNERS_RATIONALE.md),
+  [model inventory](model_inventory.md),
+  [assumption governance](assumption_governance.md),
+  [gap register](platform_gap_register.md),
+  [independent challenge activation](independent_challenge_activation.md)
+* Roadmaps: [actuarial fidelity backlog](actuarial_fidelity_backlog.md),
+  [platform engineering roadmap](platform_engineering_roadmap.md),
+  [implementation phasing](implementation_phasing.md)

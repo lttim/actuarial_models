@@ -34,6 +34,10 @@ smoke:
 docs-check:
     cd annuity_model && python scripts/render_parity_contract.py --check
 
+# Release guardrail for placeholder/synthetic assumptions.
+assumption-guardrail:
+    cd annuity_model && python scripts/check_assumption_release_guardrails.py
+
 # Regenerate tolerance docs from parity_constants.py.
 docs-render:
     cd annuity_model && python scripts/render_parity_contract.py

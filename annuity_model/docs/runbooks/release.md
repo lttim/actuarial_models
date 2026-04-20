@@ -18,6 +18,7 @@ constant changed.
    python -m pytest -q
    python scripts/deep_smoke.py
    python scripts/render_parity_contract.py --check
+   python scripts/check_assumption_release_guardrails.py
    ```
 
 3. Confirm tolerance constants did not silently change since last tag:
@@ -26,6 +27,10 @@ constant changed.
    ```
    If non-empty, ensure each change is accompanied by a `model_change_log.md`
    entry.
+
+4. If placeholder assumptions are present, provide explicit waiver evidence
+   at `.release/assumption_waiver.md` and collect approver/challenger signoff.
+   See [assumption_release_guardrail.md](assumption_release_guardrail.md).
 
 ## Bump the version
 
@@ -125,4 +130,5 @@ in the same PR that renames the job.
 
 * [debug_validator_failure.md](debug_validator_failure.md)
 * [investigate_parity_break.md](investigate_parity_break.md)
+* [assumption_release_guardrail.md](assumption_release_guardrail.md)
 * `annuity_model/docs/CODEOWNERS_RATIONALE.md`
