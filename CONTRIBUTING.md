@@ -3,7 +3,9 @@
 Thanks for working on the actuarial models in this workspace. This file is the
 short, human-facing version of the contribution flow. The detailed,
 agent-facing version lives in [`AGENTS.md`](AGENTS.md) and
-[`annuity_model/AGENTS.md`](annuity_model/AGENTS.md).
+[`annuity_model/AGENTS.md`](annuity_model/AGENTS.md). For a complete map of
+rules, skills, subagent/delegation behavior, regression gates, and control
+framework, read [`PROJECT_DEVELOPMENT_GUIDE.md`](PROJECT_DEVELOPMENT_GUIDE.md).
 
 ## TL;DR before you open a PR
 

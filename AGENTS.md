@@ -4,6 +4,10 @@ This workspace contains actuarial pricing and ALM projection models. Each produc
 its own subdirectory and has its own parity contract between the Python engine and generated
 Excel workbooks.
 
+For a consolidated development-governance map that is explicit for both humans and
+cross-platform AI agents (Cursor, Claude Code, Codex, etc.), read
+`PROJECT_DEVELOPMENT_GUIDE.md`.
+
 ## Workspace structure
 
 | Directory | Product |

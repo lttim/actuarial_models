@@ -3,6 +3,10 @@
 This project implements SPIA, Term Life, and RILA (accumulation) pricing with ALM projection
 and two synchronised calculation engines where applicable: Python and Excel.
 
+For a cross-platform overview of project-development controls (rules, skills, delegated
+reviews/subagents, regressions, and governance workflow), see
+`../PROJECT_DEVELOPMENT_GUIDE.md`.
+
 > **AI coding agents:** read [`docs/AI_AGENT_PREFLIGHT.md`](docs/AI_AGENT_PREFLIGHT.md)
 > *first*. It contains the source-of-truth map, decision tree, and hard
 > rules an autonomous agent must follow on this repo. This file

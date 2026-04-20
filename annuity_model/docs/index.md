@@ -7,6 +7,8 @@ workbook generator. Python is the source of truth; Excel is the auditor.
 
 * **New to the codebase?** Read [Glossary](glossary.md) first, then the
   [SPIA / ALM parity contract](model_parity_contract.md).
+* **Need the development governance map (humans + AI platforms)?** Read
+  [Project development guide](../../PROJECT_DEVELOPMENT_GUIDE.md).
 * **Adding a product?** The 2-file walkthrough lives in the
   [repository README](https://github.com/lttim/actuarial_models/blob/main/annuity_model/README.md).
 * **Debugging a parity break?** Open

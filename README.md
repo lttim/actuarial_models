@@ -24,7 +24,9 @@ static Excel formula validator that gates every workbook before it is written.
 |------------|------------|
 | Human dev on macOS | [MACOS_HANDOFF.md](MACOS_HANDOFF.md) |
 | Human dev on Windows | [AGENTS.md](AGENTS.md) (Windows section) |
+| Human dev needing full governance map | [PROJECT_DEVELOPMENT_GUIDE.md](PROJECT_DEVELOPMENT_GUIDE.md) |
 | AI agent / Cursor session | [AGENTS.md](AGENTS.md) → [annuity_model/AGENTS.md](annuity_model/AGENTS.md) → `annuity_model/.cursor/rules/*.mdc` |
+| AI agent on any platform (Cursor/Claude Code/Codex) | [PROJECT_DEVELOPMENT_GUIDE.md](PROJECT_DEVELOPMENT_GUIDE.md) → [annuity_model/docs/AI_AGENT_PREFLIGHT.md](annuity_model/docs/AI_AGENT_PREFLIGHT.md) |
 | Actuary / model owner | [annuity_model/docs/model_parity_contract.md](annuity_model/docs/model_parity_contract.md), [annuity_model/docs/rila_parity_contract.md](annuity_model/docs/rila_parity_contract.md), [annuity_model/docs/rila_product_spec.md](annuity_model/docs/rila_product_spec.md) |
 | Release manager | [annuity_model/docs/parity_test_checklist.md](annuity_model/docs/parity_test_checklist.md) |
 
