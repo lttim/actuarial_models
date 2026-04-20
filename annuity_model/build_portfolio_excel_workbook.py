@@ -27,6 +27,15 @@ def _policy_cf_row(pricing: object, n_months: int) -> list[float]:
     return out
 
 
+def _policy_cf_rows(policy_results: list[object], n_months: int) -> list[list[float]]:
+    """Precompute one liability cashflow vector per policy."""
+    rows: list[list[float]] = []
+    for pr in policy_results:
+        pricing = getattr(pr, "pricing")
+        rows.append(_policy_cf_row(pricing, n_months))
+    return rows
+
+
 def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
     """Create an .xlsx with ``PolicyCashflows`` grid, formula-linked ``LiabilityAggregate`` total, and ``ModelCheck``."""
     wb = Workbook()
@@ -68,12 +77,12 @@ def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
     for j, pr in enumerate(res.policy_results, start=first_pc):
         hdr = str(pr.policy_id).replace("[", "").replace("]", "").replace("*", "").replace("?", "")[:200]
         ws_pc.cell(row=1, column=j, value=hdr or f"policy_{j}").font = Font(bold=True)
+    policy_cf_rows = _policy_cf_rows(list(res.policy_results), n)
     for i in range(n):
         rr = 2 + i
         ws_pc.cell(row=rr, column=1, value=i + 1)
         ws_pc.cell(row=rr, column=2, value=float(total.times_years[i]))
-        for j, pr in enumerate(res.policy_results, start=first_pc):
-            series = _policy_cf_row(pr.pricing, n)
+        for j, series in enumerate(policy_cf_rows, start=first_pc):
             ws_pc.cell(row=rr, column=j, value=float(series[i]))
 
     # --- ProductTypeRollups ---
