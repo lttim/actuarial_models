@@ -38,6 +38,7 @@ from openpyxl import load_workbook
 
 import pricing_projection as sp
 from build_pricing_excel_workbook import (
+    ExcelPythonSnapshot,
     excel_spec_from_launcher,
     build_workbook_from_spec,
 )
@@ -89,7 +90,16 @@ def _build_small_spia_workbook() -> tuple[bytes, sp.SPIAProjectionResult]:
         index_levels_at_payment=np.full(12, 100.0),
         expense_annual_inflation=0.0,
     )
-    blob = build_workbook_from_spec(spec)
+    blob = build_workbook_from_spec(
+        spec,
+        python_snapshot=ExcelPythonSnapshot(
+            pv_benefit=float(res.pv_benefit),
+            pv_monthly_expenses=float(res.pv_monthly_expenses),
+            pv_monthly_total=float(res.pv_benefit + res.pv_monthly_expenses),
+            single_premium=float(res.single_premium),
+            annuity_factor=float(res.annuity_factor),
+        ),
+    )
     return blob, res
 
 
@@ -103,7 +113,7 @@ def libreoffice_or_skip() -> None:
 
 
 def test_modelcheck_cells_recalc_to_python_values(libreoffice_or_skip: None) -> None:
-    """ModelCheck!B5 (PV benefit) and ModelCheck!B9 (annuity factor) must
+    """ModelCheck!C5 (PV benefit) and ModelCheck!C9 (annuity factor) must
     recalc within Excel's actual formula engine to the Python values within
     ``MODELCHECK_TOL``."""
     blob, res = _build_small_spia_workbook()
@@ -111,37 +121,37 @@ def test_modelcheck_cells_recalc_to_python_values(libreoffice_or_skip: None) -> 
     # Sanity: the formula strings are present in the as-built workbook.
     wb = load_workbook(io.BytesIO(blob), data_only=False)
     ws = wb["ModelCheck"]
-    assert isinstance(ws["B5"].value, str) and ws["B5"].value.startswith("=")
-    assert isinstance(ws["B9"].value, str) and ws["B9"].value.startswith("=")
+    assert isinstance(ws["C5"].value, str) and ws["C5"].value.startswith("=")
+    assert isinstance(ws["C9"].value, str) and ws["C9"].value.startswith("=")
 
     recalculated = recalc_workbook(blob, timeout=120.0)
     cells = read_recalculated_cells(
-        recalculated, ["ModelCheck!B5", "ModelCheck!B9"]
+        recalculated, ["ModelCheck!C5", "ModelCheck!C9"]
     )
 
-    assert cells["ModelCheck!B5"] is not None, (
-        "soffice did not produce a cached value for ModelCheck!B5; the "
+    assert cells["ModelCheck!C5"] is not None, (
+        "soffice did not produce a cached value for ModelCheck!C5; the "
         "workbook may have a recalc-time error (open it in Excel and look "
         "for #VALUE! / #NAME? in the ModelCheck sheet)."
     )
-    assert cells["ModelCheck!B9"] is not None, (
-        "soffice did not produce a cached value for ModelCheck!B9; see B5 hint."
+    assert cells["ModelCheck!C9"] is not None, (
+        "soffice did not produce a cached value for ModelCheck!C9; see C5 hint."
     )
 
     np.testing.assert_allclose(
-        float(cells["ModelCheck!B5"]),
+        float(cells["ModelCheck!C5"]),
         float(res.pv_benefit),
         rtol=0.0,
         atol=MODELCHECK_TOL or 1e-6,
         err_msg=(
             "Runtime Excel recalc disagrees with Python on PV benefit. "
             "This means the emitted formula string and the Python pricing "
-            "engine compute different values -- check the ModelCheck!B5 "
+            "engine compute different values -- check the ModelCheck!C5 "
             "formula and the corresponding python path in pricing_projection."
         ),
     )
     np.testing.assert_allclose(
-        float(cells["ModelCheck!B9"]),
+        float(cells["ModelCheck!C9"]),
         float(res.annuity_factor),
         rtol=0.0,
         atol=MODELCHECK_TOL or 1e-6,
