@@ -1,0 +1,11 @@
+policy_id,product_type,issue_age,sex,benefit_annual,death_benefit,monthly_premium,term_years,participation,cap,floor,rider_fee_annual,me_charge_annual,single_premium,declared_rate_annual,guarantee_years,face_amount,horizon_years,gmdb_basis
+default_spia,spia,65,male,100000.0,,,,,,,,,,,,,,
+default_term_life,term_life,65,male,,250000.0,250.0,20.0,,,,,,,,,,,
+default_rila,rila,65,male,,,,,1.0,0.1,0.0,0.01,,,,,,,
+default_myga,myga,65,male,,,,,,,,,,100000.0,0.045,5.0,,,
+default_fia,fia,65,male,,,,,0.8,0.07,0.0,0.0,,100000.0,,,,10.0,
+default_variable_annuity,variable_annuity,65,male,,,,,,,,,0.014,100000.0,,,,20.0,return_of_premium
+default_whole_life,whole_life,65,male,,,,,,,,,,,,,250000.0,,
+default_universal_life,universal_life,65,male,,,,,,,,,,25000.0,,,250000.0,,
+default_indexed_ul,indexed_ul,65,male,,,,,1.0,0.1,0.0,,,25000.0,,,250000.0,,
+default_variable_ul,variable_ul,65,male,,,,,,,,,,25000.0,,,250000.0,,

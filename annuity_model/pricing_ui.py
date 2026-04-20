@@ -59,7 +59,8 @@ from build_pricing_excel_workbook import (
 )
 from build_portfolio_excel_workbook import build_portfolio_workbook_bytes
 from inforce_io import load_policy_inputs_from_csv
-from portfolio import PolicyInput, Portfolio, RunScenario
+from liability_aggregation import padded_cashflows_on_portfolio_grid
+from portfolio import PolicyInput, Portfolio, PortfolioResult, RunScenario
 from portfolio_config import (
     portfolio_disabled_explanation_markdown,
     portfolio_sidebar_visible,
@@ -1034,6 +1035,259 @@ def _build_profit_decomposition_rows(
         "Product-specific decomposition should replace this as each product is implemented."
     )
     return rows, caption
+
+
+def _merge_profit_waterfall_row_sets(
+    row_sets: list[list[tuple[str, float, bool]]],
+) -> list[tuple[str, float, bool]]:
+    if not row_sets:
+        raise ValueError("row_sets must be non-empty")
+    ref = row_sets[0]
+    for rs in row_sets[1:]:
+        if len(rs) != len(ref):
+            raise ValueError("incompatible waterfall row counts")
+        for i, (lab, _, is_tot) in enumerate(ref):
+            lab2, _, is2 = rs[i]
+            if lab != lab2 or is_tot != is2:
+                raise ValueError("incompatible waterfall row labels or total flags")
+    return [
+        (ref[i][0], float(sum(float(rs[i][1]) for rs in row_sets)), ref[i][2])
+        for i in range(len(ref))
+    ]
+
+
+def _build_portfolio_generic_pv_bridge_rows(
+    res: PortfolioResult,
+    expenses: sp.ExpenseAssumptions | None,
+) -> tuple[list[tuple[str, float, bool]], str]:
+    sum_pv_b = 0.0
+    sum_pv_m = 0.0
+    sum_sp = 0.0
+    n_pol = 0
+    for pr in res.policy_results:
+        p = pr.pricing
+        if hasattr(p, "pv_benefit"):
+            sum_pv_b += float(getattr(p, "pv_benefit"))
+        if hasattr(p, "pv_monthly_expenses"):
+            sum_pv_m += float(getattr(p, "pv_monthly_expenses"))
+        if hasattr(p, "single_premium"):
+            sum_sp += float(getattr(p, "single_premium"))
+        n_pol += 1
+    issue_total = (
+        float(expenses.policy_expense_dollars) * n_pol
+        if isinstance(expenses, sp.ExpenseAssumptions)
+        else 0.0
+    )
+    rows = [
+        ("PV benefits (portfolio sum)", sum_pv_b, True),
+        ("PV monthly cashflow component (portfolio sum)", sum_pv_m, False),
+        ("Issue expense (portfolio sum)", issue_total, False),
+        ("Modeled net premium / value (portfolio sum)", sum_sp, True),
+    ]
+    caption = (
+        "Portfolio-level PV bridge: per-policy PV components and issue expense summed. "
+        "For mixed product books, intermediate steps are not a single-product story."
+    )
+    return rows, caption
+
+
+def _build_portfolio_profit_decomposition_rows(
+    res: PortfolioResult,
+    expenses: sp.ExpenseAssumptions | None,
+) -> tuple[list[tuple[str, float, bool]], str]:
+    prs = list(res.policy_results)
+    types = {pr.product_type for pr in prs}
+    if len(types) == 1:
+        pt = next(iter(types))
+        try:
+            row_sets: list[list[tuple[str, float, bool]]] = []
+            for pr in prs:
+                rows_one, _c = _build_profit_decomposition_rows(
+                    res=pr.pricing,  # type: ignore[arg-type]
+                    contract=pr.contract,
+                    expenses=expenses,
+                    product_type=pt,
+                )
+                row_sets.append(rows_one)
+            merged = _merge_profit_waterfall_row_sets(row_sets)
+            if pt == ProductType.TERM_LIFE:
+                cap = (
+                    "Portfolio Term book: same waterfall interpretation as Pricing Run; table amounts sum policies."
+                )
+            elif pt == ProductType.SPIA:
+                cap = "Portfolio SPIA book: same ladder as Pricing Run; table amounts sum policies."
+            else:
+                cap = "Homogeneous portfolio: PV bridge rows summed across policies."
+            return merged, cap
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return _build_portfolio_generic_pv_bridge_rows(res, expenses)
+
+
+def _render_portfolio_profit_waterfall(
+    res: PortfolioResult, expenses: sp.ExpenseAssumptions | None
+) -> None:
+    rows, caption = _build_portfolio_profit_decomposition_rows(res, expenses)
+    wf_df = _build_profit_waterfall_chart_df(rows)
+    st.subheader("Portfolio profit decomposition")
+    net_prem = sum(
+        float(getattr(pr.pricing, "single_premium", 0.0) or 0.0) for pr in res.policy_results
+    )
+    if net_prem < 0:
+        st.caption(
+            "Note: aggregate modeled premium / value is negative (e.g. net premium outflow to policyholders)."
+        )
+    st.altair_chart(_altair_profit_waterfall_chart(wf_df), use_container_width=True)
+    st.caption(
+        "Blue = subtotal / reconciliation pillars from zero; green = upward step; red = downward step (table amount)."
+    )
+    table = pd.DataFrame([{"Component": label, "Amount ($)": val} for label, val, _ in rows])
+    table_display = _round_for_visuals(table)
+    st.dataframe(
+        table_display,
+        use_container_width=True,
+        hide_index=True,
+        column_config=_number_cols_no_decimals(table_display),
+    )
+    st.caption(caption)
+
+
+def _render_portfolio_liability_projection_chart(res: PortfolioResult) -> None:
+    st.subheader("Liability cashflow projection")
+    st.caption(
+        "Nominal expected outflows from priced liability paths (the same series fed to ALM). "
+        "Per-product paths are zero-padded after the last month for that type."
+    )
+    n = len(res.liability_path_total.expected_total_cashflows)
+    ty = np.asarray(res.liability_path_total.times_years, dtype=float)
+    types_sorted = sorted(res.rollups_by_product_type.keys(), key=lambda x: x.value)
+    options = ["Aggregate"] + [pt.value for pt in types_sorted]
+    run_tag = int(st.session_state.get(PORTFOLIO_KEY.RUN_ID, 0))
+    selected = st.multiselect(
+        "Series to plot (aggregate plus product types)",
+        options=options,
+        default=options,
+        key=f"portfolio_proj_series_{run_tag}",
+    )
+    cumulative = st.toggle("Cumulative cashflows", value=False, key="portfolio_projection_cumulative")
+    if not selected:
+        st.info("Select at least one series to plot.")
+        return
+    frames: list[pd.DataFrame] = []
+    if "Aggregate" in selected:
+        cf = np.asarray(res.liability_path_total.expected_total_cashflows, dtype=float)
+        y = np.cumsum(cf) if cumulative else cf
+        frames.append(pd.DataFrame({"time_years": ty, "series": "Aggregate", "value": y}))
+    for pt in types_sorted:
+        if pt.value not in selected:
+            continue
+        path = res.rollups_by_product_type[pt]
+        cf = padded_cashflows_on_portfolio_grid(path, n)
+        y = np.cumsum(cf) if cumulative else cf
+        frames.append(pd.DataFrame({"time_years": ty, "series": pt.value, "value": y}))
+    plot_df = pd.concat(frames, ignore_index=True)
+    y_title = "Cumulative cashflow ($)" if cumulative else "Expected cashflow ($)"
+    chart = (
+        alt.Chart(plot_df)
+        .mark_line()
+        .encode(
+            x=alt.X("time_years:Q", title="Time (years)"),
+            y=alt.Y("value:Q", title=y_title),
+            color=alt.Color("series:N", title="Series"),
+            tooltip=[
+                alt.Tooltip("time_years:Q", format=".4f", title="Time (y)"),
+                alt.Tooltip("series:N", title="Series"),
+                alt.Tooltip("value:Q", format=",.2f", title="Amount"),
+            ],
+        )
+        .properties(height=420)
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+
+def _render_portfolio_alm_baseline_section(res: PortfolioResult) -> None:
+    alm = res.alm_result
+    if alm is None:
+        return
+    st.subheader("Portfolio ALM (baseline)")
+    st.caption(
+        "Deterministic Treasury ladder versus **aggregated** liability outflows, using the same yield curve and "
+        "credit spread as this portfolio run. Rules match `alm_engine_baseline_assumptions` (Pricing Run ALM "
+        "defaults), not the interactive optimizer."
+    )
+    fr = np.asarray(alm.funding_ratio, dtype=float)
+    fr0 = float(fr[0]) if fr.size else float("nan")
+    min_fr = float(np.nanmin(fr)) if fr.size else float("nan")
+    min_surp = float(np.min(np.asarray(alm.surplus, dtype=float))) if alm.surplus.size else float("nan")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("Initial funding ratio", f"{fr0:.4f}")
+    with c2:
+        st.metric("Min funding ratio", f"{min_fr:.4f}")
+    with c3:
+        st.metric("Min surplus ($)", f"{min_surp:,.0f}")
+    with c4:
+        st.metric("Duration gap (years)", f"{alm.duration_gap:.4f}")
+    st.caption(
+        f"PV01 net: {alm.pv01_net:,.2f} · PV01 assets: {alm.pv01_assets:,.2f} · "
+        f"PV01 liabilities: {alm.pv01_liabilities:,.2f}"
+    )
+    ty_vis = np.asarray(alm.times_years, dtype=float)
+    sur = np.asarray(alm.surplus, dtype=float)
+    df_s = pd.DataFrame({"Time (years)": ty_vis, "Surplus": sur})
+    line = (
+        alt.Chart(df_s)
+        .mark_line()
+        .encode(
+            x=alt.X("Time (years):Q", title="Time (years)"),
+            y=alt.Y("Surplus:Q", title="Surplus ($)"),
+        )
+    )
+    rule = (
+        alt.Chart(pd.DataFrame({"y": [0.0]}))
+        .mark_rule(color="#888", strokeDash=[4, 4])
+        .encode(y="y:Q")
+    )
+    st.altair_chart((line + rule).properties(height=320, title="Surplus path"), use_container_width=True)
+    fr_df = pd.DataFrame({"Time (years)": ty_vis, "Funding ratio": fr})
+    fr_chart = (
+        alt.Chart(fr_df)
+        .mark_line(color="#1f77b4")
+        .encode(
+            x=alt.X("Time (years):Q"),
+            y=alt.Y("Funding ratio:Q", scale=alt.Scale(zero=False)),
+        )
+        .properties(height=260, title="Funding ratio")
+    )
+    st.altair_chart(fr_chart, use_container_width=True)
+
+
+def _execute_portfolio_pricing(
+    policies: tuple[PolicyInput, ...],
+    scen: RunScenario,
+) -> tuple[PortfolioResult, str | None]:
+    """Price portfolio with baseline ALM when aggregate premium supports it."""
+    alm_asm = sp.alm_engine_baseline_assumptions()
+    try:
+        res = run_portfolio(
+            portfolio=Portfolio(policies=policies),
+            scenario=scen,
+            alm_assumptions=alm_asm,
+        )
+        return res, None
+    except ValueError as exc:
+        msg = str(exc)
+        if "initial_asset_market_value" in msg or "single_premium" in msg:
+            res = run_portfolio(
+                portfolio=Portfolio(policies=policies),
+                scenario=scen,
+                alm_assumptions=None,
+            )
+            return res, (
+                "Portfolio ALM was skipped: aggregate assets inferred from single premiums are not positive. "
+                "Pricing and liability aggregation are shown without ALM."
+            )
+        raise
 
 
 def _shock_yield_curve(curve: sp.YieldCurve, rate_shift_bps: float) -> sp.YieldCurve:
@@ -5001,13 +5255,16 @@ def _render_portfolio_section() -> None:
                     else:
                         policies = load_policy_inputs_from_csv_from_dataframe(df)
                         scen = _portfolio_run_scenario_for_policies(tuple(policies))
-                        res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
+                        res, alm_skip_msg = _execute_portfolio_pricing(tuple(policies), scen)
                         st.session_state[PORTFOLIO_KEY.RESULT] = res
+                        st.session_state[PORTFOLIO_KEY.LAST_SCENARIO] = scen
                         st.session_state[PORTFOLIO_KEY.RUN_ID] = (
                             int(st.session_state.get(PORTFOLIO_KEY.RUN_ID, 0)) + 1
                         )
                         st.session_state[PORTFOLIO_KEY.UPLOAD_NAME] = "scratch_table.csv"
                         st.success("Portfolio pricing completed (from table).")
+                        if alm_skip_msg:
+                            st.warning(alm_skip_msg)
         except Exception as exc:  # noqa: BLE001 -- surface parse/pricing errors to the user
             st.error(f"{type(exc).__name__}: {exc}")
 
@@ -5024,13 +5281,16 @@ def _render_portfolio_section() -> None:
             try:
                 policies = load_policy_inputs_from_csv(tmp)
                 scen = _portfolio_run_scenario_for_policies(tuple(policies))
-                res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
+                res, alm_skip_msg = _execute_portfolio_pricing(tuple(policies), scen)
                 st.session_state[PORTFOLIO_KEY.RESULT] = res
+                st.session_state[PORTFOLIO_KEY.LAST_SCENARIO] = scen
                 st.session_state[PORTFOLIO_KEY.RUN_ID] = (
                     int(st.session_state.get(PORTFOLIO_KEY.RUN_ID, 0)) + 1
                 )
                 st.session_state[PORTFOLIO_KEY.UPLOAD_NAME] = getattr(up, "name", "inforce.csv")
                 st.success("Portfolio pricing completed.")
+                if alm_skip_msg:
+                    st.warning(alm_skip_msg)
             finally:
                 tmp.unlink(missing_ok=True)
 
@@ -5038,6 +5298,11 @@ def _render_portfolio_section() -> None:
     if res is not None:
         summ = portfolio_result_to_summary_dict(res)
         st.json(summ, expanded=False)
+        scen_last = st.session_state.get(PORTFOLIO_KEY.LAST_SCENARIO)
+        expenses_last = scen_last.expenses if isinstance(scen_last, RunScenario) else None
+        _render_portfolio_liability_projection_chart(res)
+        _render_portfolio_profit_waterfall(res, expenses_last)
+        _render_portfolio_alm_baseline_section(res)
         rows = []
         for pt in sorted(res.rollups_by_product_type, key=lambda x: x.value):
             scal = res.product_type_scalar_rollups[pt]

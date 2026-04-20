@@ -75,6 +75,16 @@ def aggregate_by_product_type(
     return out
 
 
+def padded_cashflows_on_portfolio_grid(path: sp.LiabilityPath, portfolio_n_months: int) -> np.ndarray:
+    """Return *path* expected cashflows left-aligned on a *portfolio_n_months* grid.
+
+    Trailing months are zero. If *path* is longer than *portfolio_n_months*, raises
+    (aggregation never truncates). Validates the standard monthly ``times_years`` grid.
+    """
+    _validate_times_alignment(path, len(np.asarray(path.expected_total_cashflows)))
+    return _pad_cashflows(path, int(portfolio_n_months))
+
+
 def assert_rollups_sum_to_total(
     *,
     rollups_by_product_type: Mapping[ProductType, sp.LiabilityPath],
@@ -104,4 +114,5 @@ __all__ = [
     "aggregate_by_product_type",
     "aggregate_liability_paths",
     "assert_rollups_sum_to_total",
+    "padded_cashflows_on_portfolio_grid",
 ]

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 import pricing_projection as sp
 import term_projection as tp
+from inforce_io import load_policy_inputs_from_csv
 from portfolio import PolicyInput, Portfolio, RunScenario
 from portfolio_runner import run_portfolio
+from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
 from product_registry import ProductType
 
 import rila_projection as rp
@@ -78,6 +82,27 @@ def test_default_portfolio_scenario_rila_has_positive_outputs() -> None:
     assert sp > 0.0
     cf_sum = float(np.sum(np.asarray(rila_pr.pricing.expected_total_cashflows, dtype=float)))
     assert cf_sum > 0.0
+
+
+def test_run_portfolio_baseline_alm_matches_direct_liability_path() -> None:
+    root = Path(__file__).resolve().parents[2]
+    policies = load_policy_inputs_from_csv(root / "tests/data/inforce/example_v1/inforce.csv")
+    sex_raw = str(getattr(policies[0].contract, "sex", "male")).strip().lower()
+    sex = "female" if sex_raw == "female" else "male"
+    scen = run_scenario_for_portfolio_policies({}, policies, sex=sex, repo_root=ANN_MODEL_ROOT)
+    asm = sp.alm_engine_baseline_assumptions()
+    res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen, alm_assumptions=asm)
+    assert res.alm_result is not None
+    aum = sum(float(pr.pricing.single_premium) for pr in res.policy_results)  # type: ignore[attr-defined]
+    direct = sp.run_alm_projection_from_liability_path(
+        liability_path=res.liability_path_total,
+        yield_curve=scen.yield_curve,
+        spread=scen.spread,
+        assumptions=asm,
+        initial_asset_market_value=aum,
+    )
+    np.testing.assert_allclose(res.alm_result.surplus, direct.surplus, rtol=0, atol=1e-6)
+    np.testing.assert_allclose(res.alm_result.funding_ratio, direct.funding_ratio, rtol=0, atol=1e-9)
 
 
 def test_run_portfolio_two_spias_mixed_types() -> None:

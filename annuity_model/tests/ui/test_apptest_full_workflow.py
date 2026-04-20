@@ -529,6 +529,11 @@ def test_portfolio_section_upload_run_and_workbook(
 
     pres = _session_get(at, PORTFOLIO_KEY.RESULT)
     assert pres is not None, "portfolio_res not populated after Run portfolio"
+    assert getattr(pres, "alm_result", None) is not None, (
+        "baseline portfolio ALM should populate for canonical inforce (positive aggregate premium)"
+    )
+    proj_ms = [w for w in at.multiselect if str(w.key).startswith("portfolio_proj_series_")]
+    assert proj_ms, "portfolio liability projection multiselect missing"
 
     xlsx = build_portfolio_workbook_bytes(pres)
     wb = load_workbook(io.BytesIO(bytes(xlsx)), data_only=False)

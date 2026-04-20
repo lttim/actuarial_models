@@ -1427,6 +1427,27 @@ def alm_default_allocation_spec() -> ALMAllocationSpec:
     return ALMAllocationSpec(buckets=buckets, weights=w)
 
 
+def alm_engine_baseline_assumptions() -> ALMAssumptions:
+    """Baseline deterministic ALM assumptions aligned with Pricing Run ALM defaults (initial widgets).
+
+    Used for portfolio batch runs and CLI parity where users have not interacted with the full ALM panel.
+    """
+    return ALMAssumptions(
+        allocation=alm_default_allocation_spec(),
+        rebalance_band=0.05,
+        rebalance_frequency_months=1,
+        reinvest_rule="pro_rata",
+        disinvest_rule="shortest_first",
+        rebalance_policy="liquidity_only",
+        borrowing_policy="borrow_after_assets_insufficient",
+        borrowing_rate_mode="scenario_linked",
+        borrowing_rate_tenor_years=1.0,
+        borrowing_spread_annual=0.01,
+        borrowing_rate_annual=0.05,
+        liquidity_near_liquid_years=0.25,
+    )
+
+
 def liability_pv_after_paid_months(
     res: SPIAProjectionResult,
     yield_curve: YieldCurve,

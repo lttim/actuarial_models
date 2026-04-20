@@ -584,5 +584,6 @@ class PORTFOLIO_KEY:
     RUN_ID = "portfolio_run_id"
     UPLOAD_NAME = "portfolio_upload_name"
     MANUAL_ROWS = "portfolio_manual_row_ids"
+    LAST_SCENARIO = "portfolio_last_scenario"
     # Sidebar-only: show Portfolio section when ``portfolio_v1_enabled()`` is False.
     UI_FORCE_SIDEBAR = "_pricing_ui_show_portfolio_sidebar"

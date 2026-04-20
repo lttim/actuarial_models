@@ -11,6 +11,7 @@ from liability_aggregation import (
     aggregate_by_product_type,
     aggregate_liability_paths,
     assert_rollups_sum_to_total,
+    padded_cashflows_on_portfolio_grid,
 )
 from parity_constants import PORTFOLIO_ROLLUP_TOL
 from product_registry import ProductType
@@ -79,6 +80,20 @@ def test_aggregate_partition_by_type_matches_total(
         portfolio=total,
         atol=PORTFOLIO_ROLLUP_TOL,
     )
+
+
+def test_padded_cashflows_extends_with_zeros() -> None:
+    short = _path(3, 2.0)
+    out = padded_cashflows_on_portfolio_grid(short, 5)
+    assert out.shape == (5,)
+    np.testing.assert_allclose(out[:3], short.expected_total_cashflows)
+    np.testing.assert_allclose(out[3:], 0.0)
+
+
+def test_padded_cashflows_rejects_truncation() -> None:
+    long = _path(6, 1.0)
+    with pytest.raises(ValueError, match="exceeds target grid"):
+        padded_cashflows_on_portfolio_grid(long, 4)
 
 
 def test_aggregate_rejects_nonstandard_times_grid() -> None:
