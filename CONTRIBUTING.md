@@ -16,10 +16,11 @@ python -m pytest tests/parity -q                      # 1. parity gate
 python -m pytest -q                                   # 2. full unit tests
 python scripts/deep_smoke.py                          # 3. end-to-end smoke
 python scripts/render_parity_contract.py --check      # 4. tolerance docs in sync
-pre-commit run --all-files                            # 5. lint / format / type
+python scripts/check_documentation_map.py             # 5. docs inventory in sync
+pre-commit run --all-files                            # 6. lint / format / type
 ```
 
-All five must exit 0. CI will rerun them on every push to your PR.
+All checks must exit 0. CI will rerun them on every push to your PR.
 
 ## Where to land changes
 

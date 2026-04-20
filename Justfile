@@ -33,6 +33,7 @@ smoke:
 # Verify tolerance docs are in sync with parity_constants.py.
 docs-check:
     cd annuity_model && python scripts/render_parity_contract.py --check
+    cd annuity_model && python scripts/check_documentation_map.py
 
 # Release guardrail for placeholder/synthetic assumptions.
 assumption-guardrail:
@@ -88,6 +89,7 @@ preflight:
     @echo "[4/4] tolerance + actuarial-benchmark docs in sync"
     @cd annuity_model && python scripts/render_parity_contract.py --check
     @cd annuity_model && python scripts/render_actuarial_benchmarks.py --check
+    @cd annuity_model && python scripts/check_documentation_map.py
     @echo ""
     @echo "READY TO COMMIT: all four canonical gates passed."
     @echo "Reminder: trigger gate 5 from the AI agent -- '!actuaryreview'"

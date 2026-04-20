@@ -150,3 +150,10 @@ repos:
         language: system
         pass_filenames: false
         files: ^(annuity_model/(pyproject\.toml|run_pricing_ui\.(sh|command|bat)|tests/test_launcher_invariants\.py))$
+
+      - id: documentation-map-inventory
+        name: docs inventory map is in sync
+        entry: bash -c 'PY="./annuity_model/.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" annuity_model/scripts/check_documentation_map.py'
+        language: system
+        pass_filenames: false
+        files: ^(DOCUMENTATION_MAP\.md|.*\.md|annuity_model/scripts/check_documentation_map\.py|annuity_model/tests/test_documentation_map\.py)$

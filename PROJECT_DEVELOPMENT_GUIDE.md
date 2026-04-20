@@ -62,6 +62,7 @@ Development is controlled by layered safeguards. A change is acceptable only whe
 2. **Static guards**
    - Formula safety: `annuity_model/excel_workbook_validator.py`
    - Rule constraints in `.cursor/rules/*.mdc`
+   - Docs inventory integrity: `annuity_model/scripts/check_documentation_map.py`
 3. **Regression gates**
    - Parity suite: `annuity_model/tests/parity/`
    - Unit and integration suites: `annuity_model/tests/`

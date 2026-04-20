@@ -1,0 +1,18 @@
+---
+description: Keep documentation continuously synced with code and docs inventory
+alwaysApply: true
+---
+
+# Documentation Freshness Protocol
+
+When a task changes behavior, workflows, commands, guardrails, or file layout:
+
+1. Proactively update the relevant docs in the same task/PR (do not wait for user prompting).
+2. If any markdown file is added/removed/renamed, update `DOCUMENTATION_MAP.md` in the same change.
+3. Before declaring completion, run:
+   - `python annuity_model/scripts/check_documentation_map.py`
+   - `python annuity_model/scripts/render_parity_contract.py --check` (when parity/tolerance docs might be affected)
+4. If the docs map check fails, fix documentation first; do not defer.
+5. Prefer linking to canonical docs instead of duplicating command blocks across files.
+
+This rule is mandatory for both direct edits and subagent-produced edits.
