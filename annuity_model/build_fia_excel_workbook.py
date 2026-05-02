@@ -225,14 +225,16 @@ def build_fia_workbook_from_spec(
         ws_pr.cell(row=r, column=1, value=f'=IF(ROW()-3>{nm_ref},"",ROW()-3)')
         ws_pr.cell(row=r, column=2, value=f'=IF({a}="","",{a}/{freq_ref})')
         ws_pr.cell(row=r, column=3, value=f'=IF({a}="","",{issue_age_ref}+({a}-1)/{freq_ref})')
-        ws_pr.cell(
-            row=r, column=4,
-            value=(
-                f'=IF({a}="","",IFERROR(POWER(1-MIN(MAX(IFERROR(INDEX({SHEET_QX}!$B$2:$B$200,'
-                f'MATCH(INT({issue_age_ref}+({a}-1)/12),{SHEET_QX}!$A$2:$A$200,0)),0),0),0.999),'
-                f'{a}/12)*1,0))'
-            ),
+        qx_expr = (
+            f"MIN(MAX(IFERROR(INDEX({SHEET_QX}!$B$2:$B$200,"
+            f"MATCH(INT({issue_age_ref}+({a}-1)/12),{SHEET_QX}!$A$2:$A$200,0)),0),0),0.999)"
         )
+        p_m_expr = f"EXP(-(-LN(1-{qx_expr}))/12)"
+        if r == first:
+            surv_end_formula = f'=IF({a}="","",{p_m_expr})'
+        else:
+            surv_end_formula = f'=IF({a}="","",D{r - 1}*{p_m_expr})'
+        ws_pr.cell(row=r, column=4, value=surv_end_formula)
         if r == first:
             ws_pr.cell(row=r, column=5, value=f'=IF({a}="","",1)')
         else:

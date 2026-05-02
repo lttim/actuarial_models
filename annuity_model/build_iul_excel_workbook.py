@@ -1,9 +1,10 @@
 """IUL Excel workbook builder.
 
-Same structure as UL but with the segment-credited rate path
-(annual point-to-point with cap/floor/participation). AV path is
-exported as Python literals; per-month cashflows use Excel formulas
-referencing the literals.
+The workbook includes the Python pricing snapshot plus an editable monthly
+schedule sheet and formula-driven audit columns for the mechanics-production
+IUL state engine. Python remains authoritative for portfolio/Monte Carlo
+aggregation, while Excel independently recalculates selected deterministic
+paths from workbook inputs.
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ LIABILITY_SHEET_NAME = "Liabilities"
 SHEET_INPUTS = "Inputs"
 SHEET_QX = "QxTable"
 SHEET_INDEX = "IndexScenario"
+SHEET_SCHEDULES = "PolicySchedules"
 IUL_PROJ_MAX_ROWS = 1000
 
 _IN_ROW_ISSUE_AGE = 3
@@ -53,7 +55,9 @@ _IN_ROW_EXP_CHG = 11
 _IN_ROW_PART = 12
 _IN_ROW_CAP = 13
 _IN_ROW_FLOOR = 14
-_IN_ROW_NMONTHS = 18
+_IN_ROW_EXP_M = 17
+_IN_ROW_EXP_INF = 18
+_IN_ROW_NMONTHS = 22
 
 
 def _in_addr(col: str, row: int) -> str:
@@ -214,14 +218,47 @@ def build_iul_workbook_from_spec(
         ws_ix.cell(row=2 + j, column=1, value=int(j))
         ws_ix.cell(row=2 + j, column=2, value=float(L[j]))
 
+    sched_months = min(int(res.months.shape[0]), IUL_PROJ_MAX_ROWS)
+    planned_premiums = spec.contract.planned_premiums.values(sched_months)
+    withdrawal_sched = spec.contract.withdrawals.values(sched_months)
+    loan_draw_sched = spec.contract.loan_terms.draws.values(sched_months)
+    loan_repay_sched = spec.contract.loan_terms.repayments.values(sched_months)
+    surrender_rates = spec.contract.surrender_charges.monthly_rates(sched_months)
+
+    ws_sched = wb.create_sheet(SHEET_SCHEDULES)
+    ws_sched["A1"] = "month"
+    ws_sched["B1"] = "planned_premium"
+    ws_sched["C1"] = "withdrawal"
+    ws_sched["D1"] = "loan_draw"
+    ws_sched["E1"] = "loan_repayment"
+    ws_sched["F1"] = "surrender_charge_rate"
+    ws_sched["H1"] = "loan_monthly_rate"
+    ws_sched["H2"] = float(spec.contract.loan_terms.monthly_rate())
+    ws_sched["H3"] = str(spec.contract.db_type)
+    ws_sched["G3"] = "death_benefit_type"
+    for c in range(1, 9):
+        ws_sched.cell(row=1, column=c).font = Font(bold=True)
+    for j in range(IUL_PROJ_MAX_ROWS):
+        r = 2 + j
+        ws_sched.cell(row=r, column=1, value=int(j + 1))
+        if j < sched_months:
+            ws_sched.cell(row=r, column=2, value=float(planned_premiums[j]))
+            ws_sched.cell(row=r, column=3, value=float(withdrawal_sched[j]))
+            ws_sched.cell(row=r, column=4, value=float(loan_draw_sched[j]))
+            ws_sched.cell(row=r, column=5, value=float(loan_repay_sched[j]))
+            ws_sched.cell(row=r, column=6, value=float(surrender_rates[j]))
+        else:
+            for c in range(2, 7):
+                ws_sched.cell(row=r, column=c, value=0.0)
+
     nm_ref = _in_addr("B", _IN_ROW_NMONTHS)
     last_cap_row = 3 + IUL_PROJ_MAX_ROWS
     first = 4
     issue_age_ref = _in_addr("B", _IN_ROW_ISSUE_AGE)
     freq_ref = _in_addr("B", _IN_ROW_FREQ)
     sp_ref = _in_addr("B", _IN_ROW_SP)
-    exp_m_ref = _in_addr("B", 17)
-    exp_inf_ref = _in_addr("B", 18)
+    exp_m_ref = _in_addr("B", _IN_ROW_EXP_M)
+    exp_inf_ref = _in_addr("B", _IN_ROW_EXP_INF)
     mc_ref = f"{RECALC_MONTHLY_CURVE_SHEET}!$L:$L"
 
     ws_pr = wb.create_sheet(LIABILITY_SHEET_NAME)
@@ -254,6 +291,31 @@ def build_iul_workbook_from_spec(
         "PVBenefitCF",    # T
         "PVExpenseCF",    # U
         "PVNetOutflow",   # V
+        "",               # W reserved for summary labels
+        "",               # X reserved for summary values
+        "",               # Y
+        "",               # Z
+        "Premium_XL",     # AA
+        "Withdrawal_XL",  # AB
+        "LoanDraw_XL",    # AC
+        "LoanRepay_XL",   # AD
+        "SurrRate_XL",    # AE
+        "RawSegReturn_XL",# AF
+        "SegCredit_XL",   # AG
+        "AVBeforeCharge_XL", # AH
+        "GrossDB_XL",     # AI
+        "NAR_XL",         # AJ
+        "COI_XL",         # AK
+        "AV_end_XL",      # AL
+        "LoanInterest_XL",# AM
+        "LoanBalance_XL", # AN
+        "NetDB_XL",       # AO
+        "SurrCharge_XL",  # AP
+        "SurrValue_XL",   # AQ
+        "DeathCF_XL",     # AR
+        "PolicyAccessCF_XL", # AS
+        "ExpBenefitCF_XL",# AT
+        "PVBenefitCF_XL", # AU
     )
     for c, h in enumerate(hdr, start=1):
         cell = ws_pr.cell(row=3, column=c, value=h if h else None)
@@ -263,6 +325,19 @@ def build_iul_workbook_from_spec(
     db_arr = np.asarray(res.db_end_month, dtype=float)
     seg_credits_arr = np.asarray(res.segment_credited_rate, dtype=float)
     n_months_used = int(av_end_arr.shape[0])
+    face_ref = _in_addr("B", _IN_ROW_FACE)
+    load_ref = _in_addr("B", _IN_ROW_LOAD)
+    part_ref = _in_addr("B", _IN_ROW_PART)
+    cap_ref = _in_addr("B", _IN_ROW_CAP)
+    floor_ref = _in_addr("B", _IN_ROW_FLOOR)
+    sched_month_col = f"{SHEET_SCHEDULES}!$A$2:$A${1 + IUL_PROJ_MAX_ROWS}"
+    sched_prem_col = f"{SHEET_SCHEDULES}!$B$2:$B${1 + IUL_PROJ_MAX_ROWS}"
+    sched_wd_col = f"{SHEET_SCHEDULES}!$C$2:$C${1 + IUL_PROJ_MAX_ROWS}"
+    sched_draw_col = f"{SHEET_SCHEDULES}!$D$2:$D${1 + IUL_PROJ_MAX_ROWS}"
+    sched_repay_col = f"{SHEET_SCHEDULES}!$E$2:$E${1 + IUL_PROJ_MAX_ROWS}"
+    sched_surr_col = f"{SHEET_SCHEDULES}!$F$2:$F${1 + IUL_PROJ_MAX_ROWS}"
+    loan_rate_ref = f"{SHEET_SCHEDULES}!$H$2"
+    db_type_ref = f"{SHEET_SCHEDULES}!$H$3"
 
     for r in range(first, last_cap_row + 1):
         a = f"A{r}"
@@ -278,14 +353,16 @@ def build_iul_workbook_from_spec(
         ws_pr.cell(row=r, column=1, value=f'=IF(ROW()-3>{nm_ref},"",ROW()-3)')
         ws_pr.cell(row=r, column=2, value=f'=IF({a}="","",{a}/{freq_ref})')
         ws_pr.cell(row=r, column=3, value=f'=IF({a}="","",{issue_age_ref}+({a}-1)/{freq_ref})')
-        ws_pr.cell(
-            row=r, column=4,
-            value=(
-                f'=IF({a}="","",IFERROR(POWER(1-MIN(MAX(IFERROR(INDEX({SHEET_QX}!$B$2:$B$200,'
-                f'MATCH(INT({issue_age_ref}+({a}-1)/12),{SHEET_QX}!$A$2:$A$200,0)),0),0),0.999),'
-                f'{a}/12)*1,0))'
-            ),
+        qx_expr = (
+            f"MIN(MAX(IFERROR(INDEX({SHEET_QX}!$B$2:$B$200,"
+            f"MATCH(INT({issue_age_ref}+({a}-1)/12),{SHEET_QX}!$A$2:$A$200,0)),0),0),0.999)"
         )
+        p_m_expr = f"EXP(-(-LN(1-{qx_expr}))/12)"
+        if r == first:
+            surv_end_formula = f'=IF({a}="","",{p_m_expr})'
+        else:
+            surv_end_formula = f'=IF({a}="","",D{r - 1}*{p_m_expr})'
+        ws_pr.cell(row=r, column=4, value=surv_end_formula)
         if r == first:
             ws_pr.cell(row=r, column=5, value=f'=IF({a}="","",1)')
         else:
@@ -310,19 +387,90 @@ def build_iul_workbook_from_spec(
         ws_pr.cell(row=r, column=20, value=f'=IF({a}="",0,Q{r}*O{r})')
         ws_pr.cell(row=r, column=21, value=f'=IF({a}="",0,R{r}*O{r})')
         ws_pr.cell(row=r, column=22, value=f'=IF({a}="",0,S{r}*O{r})')
+        prev_av = "0" if r == first else f"AL{r - 1}"
+        prev_loan = "0" if r == first else f"AN{r - 1}"
+        ws_pr.cell(
+            row=r,
+            column=27,
+            value=(
+                f'=IF({a}="",0,IF({a}=1,{sp_ref},0)'
+                f'+IFERROR(INDEX({sched_prem_col},MATCH({a},{sched_month_col},0)),0))'
+            ),
+        )
+        ws_pr.cell(
+            row=r,
+            column=28,
+            value=f'=IF({a}="",0,IFERROR(INDEX({sched_wd_col},MATCH({a},{sched_month_col},0)),0))',
+        )
+        ws_pr.cell(
+            row=r,
+            column=29,
+            value=f'=IF({a}="",0,IFERROR(INDEX({sched_draw_col},MATCH({a},{sched_month_col},0)),0))',
+        )
+        ws_pr.cell(
+            row=r,
+            column=30,
+            value=f'=IF({a}="",0,IFERROR(INDEX({sched_repay_col},MATCH({a},{sched_month_col},0)),0))',
+        )
+        ws_pr.cell(
+            row=r,
+            column=31,
+            value=f'=IF({a}="",0,IFERROR(INDEX({sched_surr_col},MATCH({a},{sched_month_col},0)),0))',
+        )
+        ws_pr.cell(
+            row=r,
+            column=32,
+            value=(
+                f'=IF({a}="","",IF(AND({a}>={int(spec.contract.segment_months)},'
+                f'MOD({a},{int(spec.contract.segment_months)})=0),'
+                f'IFERROR(INDEX({SHEET_INDEX}!$B$2:$B$10000,MATCH({a},{SHEET_INDEX}!$A$2:$A$10000,0))'
+                f'/INDEX({SHEET_INDEX}!$B$2:$B$10000,MATCH({a}-{int(spec.contract.segment_months)},{SHEET_INDEX}!$A$2:$A$10000,0))-1,0),0))'
+            ),
+        )
+        ws_pr.cell(
+            row=r,
+            column=33,
+            value=(
+                f'=IF({a}="","",IF(AND({a}>={int(spec.contract.segment_months)},'
+                f'MOD({a},{int(spec.contract.segment_months)})=0),'
+                f'MAX({floor_ref},MIN({cap_ref},{part_ref}*AF{r})),0))'
+            ),
+        )
+        ws_pr.cell(row=r, column=34, value=f'=IF({a}="",0,MAX(0,({prev_av}+AA{r}*(1-{load_ref}))*(1+AG{r})))')
+        ws_pr.cell(
+            row=r,
+            column=35,
+            value=f'=IF({a}="",0,IF({db_type_ref}="return_of_av",{face_ref}+AH{r},MAX({face_ref},AH{r})))',
+        )
+        ws_pr.cell(row=r, column=36, value=f'=IF({a}="",0,MAX(0,AI{r}-AH{r}))')
+        ws_pr.cell(row=r, column=37, value=f'=IF({a}="",0,G{r}*AJ{r})')
+        ws_pr.cell(row=r, column=38, value=f'=IF({a}="",0,MAX(0,AH{r}-AK{r}-{_in_addr("B", _IN_ROW_EXP_CHG)}-AB{r}))')
+        ws_pr.cell(row=r, column=39, value=f'=IF({a}="",0,{prev_loan}*{loan_rate_ref})')
+        ws_pr.cell(
+            row=r,
+            column=40,
+            value=f'=IF({a}="",0,MAX(0,{prev_loan}+AM{r}+AC{r}-MIN(AD{r},{prev_loan}+AM{r}+AC{r})))',
+        )
+        ws_pr.cell(row=r, column=41, value=f'=IF({a}="",0,MAX(0,AI{r}-AN{r}))')
+        ws_pr.cell(row=r, column=42, value=f'=IF({a}="",0,MAX(0,AL{r}-AN{r})*AE{r})')
+        ws_pr.cell(row=r, column=43, value=f'=IF({a}="",0,MAX(0,MAX(0,AL{r}-AN{r})-AP{r}))')
+        ws_pr.cell(row=r, column=44, value=f'=IF({a}="",0,IF(AL{r}<=0,0,AO{r}*F{r}))')
+        ws_pr.cell(row=r, column=45, value=f'=IF({a}="",0,(AB{r}+AC{r})*E{r})')
+        ws_pr.cell(row=r, column=46, value=f'=IF({a}="",0,AR{r}+AS{r})')
+        ws_pr.cell(row=r, column=47, value=f'=IF({a}="",0,AT{r}*O{r})')
 
-    money_cols = (8, 10, 11, 12, 17, 18, 19, 20, 21, 22)
+    money_cols = tuple(range(8, 13)) + tuple(range(17, 23)) + tuple(range(27, 31)) + tuple(range(34, 48))
     for r in range(first, last_cap_row + 1):
         for c in money_cols:
             ws_pr.cell(row=r, column=c).number_format = "#,##0.00"
-        for c in (2, 3, 4, 5, 6, 7, 9, 15):
+        for c in (2, 3, 4, 5, 6, 7, 9, 15, 31, 32, 33):
             ws_pr.cell(row=r, column=c).number_format = "0.000000"
 
     write_liability_summary_block(
         ws_pr,
         LiabilitySummaryBlockSpec(
             rows=(
-                (4, "PV claims (DB × death-prob)", f"=SUM(T{first}:T{last_cap_row})"),
+                (4, "PV benefits (formula mechanics)", f"=SUM(AU{first}:AU{last_cap_row})"),
                 (5, "PV expenses", f"=SUM(U{first}:U{last_cap_row})"),
                 (6, "Σ l_end · v (annuity-style factor)",
                  f"=SUMPRODUCT(D{first}:D{last_cap_row},O{first}:O{last_cap_row})"),
@@ -351,10 +499,9 @@ def build_iul_workbook_from_spec(
         wb, snap_py, alm_layout=None, alm_snapshot=None, pricing_rows=iul_rows,
         sheet_title=f"Python snapshot vs Excel ({LIABILITY_SHEET_NAME})",
         subtitle=(
-            "IUL: like UL but with annual point-to-point credit on segment anniversaries. "
-            "AV path is exported as Python literals; segment credit is the "
-            "cap/floor/participation result for that anniversary month. "
-            "DeathCF = DB × death-prob this month."
+            "IUL: annual point-to-point crediting with editable planned premium, withdrawal, "
+            "loan, surrender charge, and death-benefit-type inputs. Python-owned literals are "
+            "retained for audit; ModelCheck references the formula mechanics columns."
         ),
     )
 

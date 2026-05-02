@@ -31,6 +31,7 @@ from excel_builder_helpers import (
     write_liability_summary_block,
     write_model_check_sheet,
 )
+from policy_features import SegmentAllocation, normalize_segment_allocations
 from recalc_excel_shared import (
     RECALC_MONTHLY_CURVE_SHEET,
     write_monthly_curve_logdf,
@@ -42,6 +43,8 @@ SHEET_INPUTS = "Inputs"
 SHEET_QX = "QxTable"
 SHEET_MTH_QX = "MortalMonthly"
 SHEET_INDEX = "IndexScenario"
+SHEET_SCHEDULES = "PolicySchedules"
+SHEET_SEGMENTS = "SegmentAllocations"
 
 _IN_ROW_ISSUE_AGE = 3
 _IN_ROW_PART = 4
@@ -257,6 +260,73 @@ def build_rila_workbook_from_spec(
         ws_ix.cell(row=2 + j, column=1, value=int(j))
         ws_ix.cell(row=2 + j, column=2, value=float(L[j]))
 
+    sched_months = min(int(res.months.shape[0]), RILA_PROJ_MAX_ROWS)
+    withdrawal_sched = spec.contract.withdrawals.values(sched_months)
+    surrender_rates = spec.contract.surrender_charges.monthly_rates(sched_months)
+    ws_sched = wb.create_sheet(SHEET_SCHEDULES)
+    ws_sched["A1"] = "month"
+    ws_sched["B1"] = "withdrawal"
+    ws_sched["C1"] = "surrender_charge_rate"
+    ws_sched["G1"] = "death_benefit_type"
+    ws_sched["H1"] = str(spec.contract.death_benefit_type)
+    ws_sched["G2"] = "glwb_enabled"
+    ws_sched["H2"] = bool(spec.contract.glwb.enabled)
+    ws_sched["G3"] = "glwb_rollup_monthly"
+    ws_sched["H3"] = (
+        float((1.0 + float(spec.contract.glwb.rollup_annual)) ** (1.0 / 12.0) - 1.0)
+        if spec.contract.glwb.enabled
+        else 0.0
+    )
+    ws_sched["G4"] = "glwb_fee_monthly"
+    ws_sched["H4"] = (
+        float(spec.contract.glwb.fee_annual) / 12.0 if spec.contract.glwb.enabled else 0.0
+    )
+    ws_sched["G5"] = "glwb_income_start_month"
+    ws_sched["H5"] = int(spec.contract.glwb.income_start_month)
+    ws_sched["G6"] = "glwb_withdrawal_monthly"
+    ws_sched["H6"] = (
+        float(spec.contract.glwb.withdrawal_rate) / 12.0
+        if spec.contract.glwb.enabled
+        else 0.0
+    )
+    ws_sched["G7"] = "glwb_ratchet"
+    ws_sched["H7"] = bool(spec.contract.glwb.ratchet)
+    for c in range(1, 9):
+        ws_sched.cell(row=1, column=c).font = Font(bold=True)
+    for j in range(RILA_PROJ_MAX_ROWS):
+        r = 2 + j
+        ws_sched.cell(row=r, column=1, value=int(j + 1))
+        if j < sched_months:
+            ws_sched.cell(row=r, column=2, value=float(withdrawal_sched[j]))
+            ws_sched.cell(row=r, column=3, value=float(surrender_rates[j]))
+        else:
+            ws_sched.cell(row=r, column=2, value=0.0)
+            ws_sched.cell(row=r, column=3, value=0.0)
+
+    allocations = normalize_segment_allocations(
+        spec.contract.segment_allocations
+        or (
+            SegmentAllocation(
+                weight=1.0,
+                design="cap_floor",
+                participation=float(spec.contract.participation),
+                cap=float(spec.contract.cap),
+                floor=float(spec.contract.floor),
+            ),
+        )
+    )
+    ws_seg = wb.create_sheet(SHEET_SEGMENTS)
+    seg_hdr = ("weight", "design", "participation", "cap", "floor", "buffer")
+    for c, h in enumerate(seg_hdr, start=1):
+        ws_seg.cell(row=1, column=c, value=h).font = Font(bold=True)
+    for i, alloc in enumerate(allocations, start=2):
+        ws_seg.cell(row=i, column=1, value=float(alloc.weight))
+        ws_seg.cell(row=i, column=2, value=str(alloc.design))
+        ws_seg.cell(row=i, column=3, value=float(alloc.participation))
+        ws_seg.cell(row=i, column=4, value=float(alloc.cap))
+        ws_seg.cell(row=i, column=5, value=float(alloc.floor))
+        ws_seg.cell(row=i, column=6, value=float(alloc.buffer))
+
     if isinstance(spec.mortality, sp.MortalityTableQx):
         ws_q = wb.create_sheet(SHEET_QX)
         ws_q["A1"] = "age"
@@ -316,6 +386,31 @@ def build_rila_workbook_from_spec(
         "DiscountFactor",
         "PVBenefitCF",
         "PVExpenseCF",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "WithdrawalSched_XL",
+        "SurrRate_XL",
+        "RawSegReturn_XL",
+        "CreditedSeg_XL",
+        "BenefitBase_XL",
+        "GLWBWithdrawal_XL",
+        "WithdrawalPaid_XL",
+        "RiderFee_XL",
+        "AV_end_XL",
+        "SurrCharge_XL",
+        "SurrValue_XL",
+        "DeathBenefit_XL",
+        "DeathCF_XL",
+        "PolicyAccessCF_XL",
+        "ExpBenefitCF_XL",
+        "PVBenefitCF_XL",
     )
     for c, h in enumerate(hdr, start=1):
         cell = ws_pr.cell(row=3, column=c, value=h if h else None)
@@ -330,6 +425,35 @@ def build_rila_workbook_from_spec(
     prem = _in_addr("B", _IN_ROW_PREMIUM)
     exp_m = _in_addr("B", _IN_ROW_EXP_MTH)
     exp_if = _in_addr("B", _IN_ROW_EXP_INF)
+    sched_month_col = f"{SHEET_SCHEDULES}!$A$2:$A${1 + RILA_PROJ_MAX_ROWS}"
+    sched_wd_col = f"{SHEET_SCHEDULES}!$B$2:$B${1 + RILA_PROJ_MAX_ROWS}"
+    sched_surr_col = f"{SHEET_SCHEDULES}!$C$2:$C${1 + RILA_PROJ_MAX_ROWS}"
+    db_type_ref = f"{SHEET_SCHEDULES}!$H$1"
+    glwb_enabled_ref = f"{SHEET_SCHEDULES}!$H$2"
+    glwb_roll_ref = f"{SHEET_SCHEDULES}!$H$3"
+    glwb_fee_ref = f"{SHEET_SCHEDULES}!$H$4"
+    glwb_start_ref = f"{SHEET_SCHEDULES}!$H$5"
+    glwb_withdrawal_ref = f"{SHEET_SCHEDULES}!$H$6"
+    glwb_ratchet_ref = f"{SHEET_SCHEDULES}!$H$7"
+
+    def _allocation_credit_formula(raw_cell: str) -> str:
+        terms: list[str] = []
+        for idx in range(len(allocations)):
+            row = 2 + idx
+            w = f"{SHEET_SEGMENTS}!$A${row}"
+            design = f"{SHEET_SEGMENTS}!$B${row}"
+            p = f"{SHEET_SEGMENTS}!$C${row}"
+            c = f"{SHEET_SEGMENTS}!$D${row}"
+            f = f"{SHEET_SEGMENTS}!$E${row}"
+            b = f"{SHEET_SEGMENTS}!$F${row}"
+            terms.append(
+                (
+                    f"{w}*IF({design}=\"buffer\","
+                    f"IF({raw_cell}>=0,MIN({c},{p}*{raw_cell}),MIN(0,{raw_cell}+{b})),"
+                    f"MAX({f},MIN({c},{p}*{raw_cell})))"
+                )
+            )
+        return "+".join(terms) if terms else "0"
 
     for r in range(first, last_cap_row + 1):
         a = f"A{r}"
@@ -386,19 +510,84 @@ def build_rila_workbook_from_spec(
         )
         ws_pr.cell(row=r, column=16, value=f'=IF({a}="",0,K{r}*O{r})')
         ws_pr.cell(row=r, column=17, value=f'=IF({a}="",0,L{r}*O{r})')
+        prev_av = prem if r == first else f"AI{r - 1}"
+        prev_base = prem if r == first else f"AE{r - 1}"
+        ws_pr.cell(
+            row=r,
+            column=27,
+            value=f'=IF({a}="",0,IFERROR(INDEX({sched_wd_col},MATCH({a},{sched_month_col},0)),0))',
+        )
+        ws_pr.cell(
+            row=r,
+            column=28,
+            value=f'=IF({a}="",0,IFERROR(INDEX({sched_surr_col},MATCH({a},{sched_month_col},0)),0))',
+        )
+        ws_pr.cell(
+            row=r,
+            column=29,
+            value=(
+                f'=IF({a}="","",IF(AND({a}>=12,MOD({a},12)=0),'
+                f"IFERROR(INDEX({idx_b},MATCH({a},{idx_a},0))/INDEX({idx_b},MATCH({a}-12,{idx_a},0))-1,0),0))"
+            ),
+        )
+        ws_pr.cell(
+            row=r,
+            column=30,
+            value=f'=IF({a}="","",IF(AND({a}>=12,MOD({a},12)=0),{_allocation_credit_formula(f"AC{r}")},0))',
+        )
+        av_after_credit = f"({prev_av}*(1+AD{r}))"
+        base_roll = f"IF(AND({glwb_enabled_ref},{a}<{glwb_start_ref}),{prev_base}*(1+{glwb_roll_ref}),{prev_base})"
+        base_ratchet = (
+            f"IF(AND({glwb_enabled_ref},{glwb_ratchet_ref},{a}<{glwb_start_ref},MOD({a},12)=0),"
+            f"MAX({base_roll},{av_after_credit}),{base_roll})"
+        )
+        ws_pr.cell(row=r, column=31, value=f'=IF({a}="",0,{base_ratchet})')
+        ws_pr.cell(
+            row=r,
+            column=32,
+            value=(
+                f'=IF({a}="",0,IF(AND({glwb_enabled_ref},{a}>={glwb_start_ref}),'
+                f'MIN({av_after_credit},AE{r}*{glwb_withdrawal_ref}),0))'
+            ),
+        )
+        ws_pr.cell(
+            row=r,
+            column=33,
+            value=f'=IF({a}="",0,MIN(MAX(0,{av_after_credit}-AF{r}),AA{r}))',
+        )
+        ws_pr.cell(
+            row=r,
+            column=34,
+            value=(
+                f'=IF({a}="",0,MAX(0,{av_after_credit}-AF{r}-AG{r})*{rider}/12'
+                f'+MAX(0,AE{r})*{glwb_fee_ref})'
+            ),
+        )
+        ws_pr.cell(
+            row=r,
+            column=35,
+            value=f'=IF({a}="",0,MAX(0,MAX(0,{av_after_credit}-AF{r}-AG{r})*(1-{rider}/12)-AE{r}*{glwb_fee_ref}))',
+        )
+        ws_pr.cell(row=r, column=36, value=f'=IF({a}="",0,AI{r}*AB{r})')
+        ws_pr.cell(row=r, column=37, value=f'=IF({a}="",0,MAX(0,AI{r}-AJ{r}))')
+        ws_pr.cell(row=r, column=38, value=f'=IF({a}="",0,IF({db_type_ref}="return_of_premium",MAX(AI{r},{prem}),AI{r}))')
+        ws_pr.cell(row=r, column=39, value=f'=IF({a}="",0,AL{r}*F{r})')
+        ws_pr.cell(row=r, column=40, value=f'=IF({a}="",0,(AF{r}+AG{r})*E{r})')
+        ws_pr.cell(row=r, column=41, value=f'=IF({a}="",0,AM{r}+AN{r})')
+        ws_pr.cell(row=r, column=42, value=f'=IF({a}="",0,AO{r}*O{r})')
 
-    money_cols = (7, 8, 9, 10, 11, 12, 13, 16, 17)
+    money_cols = (7, 8, 9, 10, 11, 12, 13, 16, 17, 27, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42)
     for r in range(first, last_cap_row + 1):
         for c in money_cols:
             ws_pr.cell(row=r, column=c).number_format = "#,##0.00"
-        for c in (2, 3, 4, 5, 6, 15):
+        for c in (2, 3, 4, 5, 6, 15, 28, 29, 30):
             ws_pr.cell(row=r, column=c).number_format = "0.000000"
 
     write_liability_summary_block(
         ws_pr,
         LiabilitySummaryBlockSpec(
             rows=(
-                (4, "PV benefits (claims)", f"=SUM(P{first}:P{last_cap_row})"),
+                (4, "PV benefits (formula mechanics)", f"=SUM(AP{first}:AP{last_cap_row})"),
                 (5, "PV expenses", f"=SUM(Q{first}:Q{last_cap_row})"),
                 (
                     6,

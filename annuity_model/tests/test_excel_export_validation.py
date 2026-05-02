@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 from openpyxl import load_workbook
 
+import iul_projection as iul
 import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
@@ -35,6 +36,10 @@ from build_pricing_excel_workbook import (
 from build_rila_excel_workbook import (
     build_rila_workbook_from_spec,
     rila_excel_spec_from_launcher,
+)
+from build_iul_excel_workbook import (
+    build_iul_workbook_from_spec,
+    iul_excel_spec_from_launcher,
 )
 from build_term_excel_workbook import (
     build_term_workbook_from_spec,
@@ -252,6 +257,57 @@ def test_rila_long_horizon_workbook_passes_excel_formula_validation():
         expense_annual_inflation=0.0,
     )
     raw = build_rila_workbook_from_spec(spec)
+    _validate_xlsx_bytes(raw)
+
+
+def test_iul_workbook_passes_excel_formula_validation():
+    contract = iul.IULContract(
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=25_000.0,
+        premium_load_pct=0.06,
+        monthly_expense_charge=7.50,
+        participation=1.0,
+        cap=0.10,
+        floor=0.0,
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.clip(0.005 + ages * 1e-5, 1e-6, 0.4)
+    mort = sp.MortalityTableQx(ages, qx)
+    ex = sp.ExpenseAssumptions(0.0, 0.0, 0.0)
+    n_months = (80 - contract.issue_age) * 12
+    rng = np.random.default_rng(42)
+    levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
+    res = iul.price_iul_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        spread=0.0,
+        valuation_year=None,
+        expenses=ex,
+        index_s0=100.0,
+        index_levels_payment=levels,
+        expense_annual_inflation=0.0,
+    )
+    spec = iul_excel_spec_from_launcher(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=80,
+        spread=0.0,
+        valuation_year=2025,
+        expenses=ex,
+        yield_mode_label="flat",
+        mortality_mode_label="synthetic",
+        expense_mode_label="manual",
+        index_s0=float(res.index_s0),
+        index_levels_at_payment=res.index_level_at_payment,
+        expense_annual_inflation=0.0,
+    )
+    raw = build_iul_workbook_from_spec(spec)
     _validate_xlsx_bytes(raw)
 
 

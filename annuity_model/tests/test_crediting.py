@@ -36,6 +36,23 @@ def test_annual_p2p_validates_bounds():
         crediting.AnnualPointToPointCapped(participation=1.0, cap=0.05, floor=0.10)
 
 
+def test_annual_p2p_buffer_absorbs_downside_before_loss():
+    s = crediting.AnnualPointToPointBuffer(participation=1.0, cap=0.12, buffer=0.10)
+    assert s.credit_segment(raw_index_return=0.20) == pytest.approx(0.12)
+    assert s.credit_segment(raw_index_return=0.06) == pytest.approx(0.06)
+    assert s.credit_segment(raw_index_return=-0.08) == pytest.approx(0.0)
+    assert s.credit_segment(raw_index_return=-0.15) == pytest.approx(-0.05)
+
+
+def test_annual_p2p_buffer_validates_bounds():
+    with pytest.raises(ValueError, match="participation"):
+        crediting.AnnualPointToPointBuffer(participation=-0.1, cap=0.10, buffer=0.10)
+    with pytest.raises(ValueError, match="cap"):
+        crediting.AnnualPointToPointBuffer(participation=1.0, cap=-0.01, buffer=0.10)
+    with pytest.raises(ValueError, match="buffer"):
+        crediting.AnnualPointToPointBuffer(participation=1.0, cap=0.10, buffer=1.10)
+
+
 def test_segment_credited_return_from_strategy_round_trips():
     s = crediting.AnnualPointToPointCapped(participation=0.85, cap=0.09, floor=-0.02)
     # Identical to direct call.

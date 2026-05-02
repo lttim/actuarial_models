@@ -426,7 +426,12 @@ def _make_fia_case() -> ProductRecalcCase:
             "ModelCheck!B7": pv_t,
             "ModelCheck!B8": float(res.single_premium),
         },
-        modelcheck_formula_cells={},
+        modelcheck_formula_cells={
+            "ModelCheck!C5": pv_b,
+            "ModelCheck!C6": pv_e,
+            "ModelCheck!C7": pv_t,
+            "ModelCheck!C8": float(res.single_premium),
+        },
     )
 
 
@@ -618,7 +623,12 @@ def _make_iul_case() -> ProductRecalcCase:
             "ModelCheck!B7": pv_t,
             "ModelCheck!B8": float(res.single_premium),
         },
-        modelcheck_formula_cells={},
+        modelcheck_formula_cells={
+            "ModelCheck!C5": pv_b,
+            "ModelCheck!C6": pv_e,
+            "ModelCheck!C7": pv_t,
+            "ModelCheck!C8": float(res.single_premium),
+        },
     )
 
 

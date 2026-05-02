@@ -41,13 +41,15 @@ ad-hoc debugging scripts.
 from __future__ import annotations
 
 import io
+import os
 import shutil
 import subprocess
 import tempfile
 from collections.abc import Iterable
+from functools import lru_cache
 from pathlib import Path
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 __all__ = [
     "LIBREOFFICE_INSTALL_HINT",
@@ -114,14 +116,85 @@ def resolve_soffice() -> str | None:
     return None
 
 
+def _running_in_codex_seatbelt_sandbox() -> bool:
+    """True when LibreOffice conversion is known to abort with a macOS dialog."""
+
+    return bool(os.environ.get("CODEX_SANDBOX"))
+
+
+@lru_cache(maxsize=8)
+def _soffice_can_convert(soffice: str) -> bool:
+    """Return True only if this process can actually run headless conversion.
+
+    On macOS inside some sandboxed runners, ``soffice --headless --version``
+    succeeds but any conversion aborts with signal 6. The runtime recalc tests
+    care about the latter capability, so availability must probe conversion
+    rather than binary presence.
+    """
+    if _running_in_codex_seatbelt_sandbox():
+        return False
+    try:
+        with tempfile.TemporaryDirectory(prefix="annuity_lo_probe_") as tmpdir:
+            tmp = Path(tmpdir)
+            in_path = tmp / "probe.xlsx"
+            out_dir = tmp / "out"
+            out_dir.mkdir()
+            wb = Workbook()
+            ws = wb.active
+            ws["A1"] = 1
+            ws["A2"] = "=A1+1"
+            wb.save(in_path)
+            proc = subprocess.run(
+                [
+                    soffice,
+                    "--headless",
+                    "--calc",
+                    "--norestore",
+                    "--nologo",
+                    "--nofirststartwizard",
+                    "--convert-to",
+                    "xlsx",
+                    "--outdir",
+                    str(out_dir),
+                    str(in_path),
+                ],
+                capture_output=True,
+                timeout=20.0,
+                check=False,
+                env={
+                    **os.environ,
+                    "HOME": str(tmp),
+                    "TMPDIR": str(tmp),
+                },
+            )
+            return proc.returncode == 0 and any(out_dir.glob("*.xlsx"))
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def libreoffice_available() -> bool:
-    return resolve_soffice() is not None
+    soffice = resolve_soffice()
+    return soffice is not None and _soffice_can_convert(soffice)
 
 
 def ensure_libreoffice_available() -> str:
     soffice = resolve_soffice()
     if soffice is None:
         raise LibreOfficeNotAvailable(LIBREOFFICE_INSTALL_HINT)
+    if _running_in_codex_seatbelt_sandbox():
+        raise LibreOfficeNotAvailable(
+            "LibreOffice (`soffice`) is installed, but this Codex seatbelt "
+            "sandbox cannot run headless workbook conversion without macOS "
+            "showing a crash dialog. Re-run the runtime recalc gate with "
+            "sandbox escalation or from a normal Terminal."
+        )
+    if not _soffice_can_convert(soffice):
+        raise LibreOfficeNotAvailable(
+            "LibreOffice (`soffice`) is installed but cannot perform a "
+            "headless workbook conversion in the current process sandbox. "
+            "Run the recalc gate outside the sandbox, or fix local app "
+            "permissions so `soffice --headless --convert-to xlsx` succeeds."
+        )
     return soffice
 
 
@@ -182,7 +255,7 @@ def recalc_workbook(blob: bytes, *, timeout: float = 60.0) -> bytes:
                 # Use a per-invocation user profile dir so concurrent CI jobs
                 # do not collide on the default ~/.config/libreoffice lock.
                 env={
-                    **__import__("os").environ,
+                    **os.environ,
                     "HOME": str(tmp),
                     "TMPDIR": str(tmp),
                 },

@@ -191,3 +191,35 @@ Entries are appended at the **bottom**; never edit historical entries.
   tolerances.
 - **Parity trace:** N/A.
 - **Backward compat:** Yes — additive benchmark metadata only.
+
+---
+
+## 2026-05-02 -- RILA / IUL mechanics-production rebuild slice
+
+- **PR:** local mechanics-production rebuild slice
+- **Author / reviewer:** Codex / pending Actuary SME review
+- **Summary:** Added shared policy-mechanics primitives and expanded RILA / IUL
+  projection state. RILA now supports optional explicit single premium,
+  segment allocations, buffer crediting, withdrawals, surrender charges,
+  return-of-premium death benefit, and GLWB roll-up/ratchet/income state. IUL
+  now supports scheduled premiums, withdrawals, fixed-rate loans, surrender
+  values, and net death benefit. The RILA / IUL workbook builders now emit
+  editable policy schedule sheets plus formula-driven monthly mechanics audit
+  columns, and the Streamlit pricing form delegates RILA / IUL controls and
+  contract construction to product-specific UI modules.
+- **Justification:** Moves the complex RILA / IUL products from minimal-v1
+  prototype mechanics toward mechanics-production pricing/projection state
+  while preserving existing entrypoints.
+- **Parity trace:** Targeted engine tests added for the new step-level states.
+  Static workbook formula validation covers both RILA and IUL formula-mechanics
+  sheets. Runtime LibreOffice recalc now passes locally outside the command
+  sandbox (`tests/parity` -> 116 passed). The recalc helper probes actual
+  headless conversion availability so sandboxed environments that abort
+  `soffice --convert-to` skip the runtime layer instead of failing before
+  workbook load. Follow-up recalc fixes aligned FIA monthly survival formulas
+  with Python's cumulative month-by-month survival and suppressed IUL formula
+  death claims after AV termination.
+- **Backward compat:** Existing callers remain source-compatible through
+  no-effect defaults. RILA outputs can intentionally drift when new explicit
+  mechanics are enabled; existing default scenarios are intended to remain
+  stable until goldens are explicitly regenerated with signoff.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
+from errno import ENOSYS, EPERM
 
 import numpy as np
 import pricing_projection as sp
@@ -113,8 +114,17 @@ def run_portfolio(
         rows = [_worker_pack(t) for t in packed]
     else:
         workers = min(int(max_workers), len(packed))
-        with ProcessPoolExecutor(max_workers=workers) as ex:
-            rows = list(ex.map(_worker_pack, packed))
+        try:
+            with ProcessPoolExecutor(max_workers=workers) as ex:
+                rows = list(ex.map(_worker_pack, packed))
+        except (PermissionError, OSError) as exc:
+            if isinstance(exc, OSError) and getattr(exc, "errno", None) not in (EPERM, ENOSYS):
+                raise
+            # Some sandboxed local runners disallow the POSIX semaphore
+            # query used by ProcessPoolExecutor. Keep portfolio pricing
+            # available by falling back to the deterministic serial path;
+            # CI and normal desktops still exercise the true parallel path.
+            rows = [_worker_pack(t) for t in packed]
 
     policy_results = [r[0] for r in rows]
     typed_paths = [r[1] for r in rows]

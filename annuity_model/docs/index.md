@@ -1,8 +1,11 @@
 # annuity_model documentation
 
-Production-quality **10-product** pricing engine (SPIA, Term, RILA, MYGA, FIA,
-VA, WL, UL, IUL, VUL), ALM ladder, and Excel workbook generator. Python is the
-source of truth; Excel is the auditor. Rollout narrative:
+Controlled actuarial prototype for a **10-product** pricing/projection platform
+(SPIA, Term, RILA, MYGA, FIA, VA, WL, UL, IUL, VUL), ALM ladder, and Excel
+workbook generator. Python is the source of truth; Excel is the auditor. RILA
+and IUL are being promoted toward mechanics-production product mechanics with
+expanded policy-access state, while assumption governance remains advisory and
+must be disclosed in run/export evidence. Rollout narrative:
 [`seven_product_rollout_plan.md`](seven_product_rollout_plan.md).
 
 ## Where to start
@@ -58,6 +61,7 @@ CI enforces all of these:
 * Parity contracts: [SPIA / ALM](model_parity_contract.md),
   [RILA](rila_parity_contract.md), [Portfolio](portfolio_parity_contract.md)
 * Product / runner specs: [RILA product spec](rila_product_spec.md),
+  [IUL product spec](iul_product_spec.md),
   [Portfolio runner spec](portfolio_runner_spec.md)
 * [Release checklist](parity_test_checklist.md)
 * Runbooks: [parity break](runbooks/investigate_parity_break.md),

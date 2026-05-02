@@ -5,6 +5,12 @@ import pytest
 
 import pricing_projection as sp
 import rila_projection as rp
+from policy_features import (
+    GLWBRider,
+    MonthlySchedule,
+    SegmentAllocation,
+    SurrenderChargeSchedule,
+)
 
 pytestmark = pytest.mark.product_rila
 
@@ -276,6 +282,87 @@ def test_monte_carlo_raise_policy_preserves_legacy_behavior():
             s0=100.0,
             infeasible_path_policy="raise",
         )
+
+
+def test_rila_buffer_segment_and_withdrawal_state_are_projected():
+    contract = rp.RILAContract(
+        issue_age=60,
+        sex="male",
+        participation=1.0,
+        cap=0.10,
+        floor=0.0,
+        rider_fee_annual=0.0,
+        single_premium=100_000.0,
+        segment_allocations=(
+            SegmentAllocation(
+                weight=1.0, design="buffer", participation=1.0, cap=0.12, buffer=0.10
+            ),
+        ),
+        withdrawals=MonthlySchedule((0.0,) * 11 + (1_000.0,)),
+        surrender_charges=SurrenderChargeSchedule((0.07, 0.05)),
+        death_benefit_type="return_of_premium",
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.zeros_like(ages, dtype=float)
+    mort = sp.MortalityTableQx(ages, qx)
+    levels = np.full(24, 100.0, dtype=float)
+    levels[11] = 85.0  # month 12 raw return is -15%, 10% buffer -> -5%
+    levels[12:] = 85.0
+    res = rp.price_rila_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=62,
+        valuation_year=None,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        index_s0=100.0,
+        index_levels_payment=levels,
+    )
+    assert res.segment_credited_rate[11] == pytest.approx(-0.05)
+    assert res.withdrawal_cashflows[11] == pytest.approx(1_000.0)
+    assert res.account_value_end_month[11] == pytest.approx(94_000.0)
+    assert res.surrender_charge_dollars[11] == pytest.approx(94_000.0 * 0.07)
+    assert res.surrender_value_end_month[11] == pytest.approx(94_000.0 * 0.93)
+    assert res.expected_claim_cashflows.sum() == pytest.approx(0.0)
+
+
+def test_rila_glwb_rollup_ratchet_and_income_withdrawal():
+    contract = rp.RILAContract(
+        issue_age=60,
+        sex="male",
+        participation=1.0,
+        cap=0.10,
+        floor=0.0,
+        rider_fee_annual=0.0,
+        single_premium=100_000.0,
+        glwb=GLWBRider(
+            enabled=True,
+            fee_annual=0.0,
+            rollup_annual=0.06,
+            withdrawal_rate=0.06,
+            income_start_month=13,
+            ratchet=True,
+        ),
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    mort = sp.MortalityTableQx(ages, np.zeros_like(ages, dtype=float))
+    res = rp.price_rila_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=62,
+        valuation_year=None,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        index_s0=100.0,
+        index_levels_payment=np.full(24, 100.0),
+    )
+    assert res.benefit_base_end_month[11] > 100_000.0
+    assert res.glwb_withdrawal_cashflows[12] == pytest.approx(
+        res.benefit_base_end_month[12] * 0.06 / 12.0
+    )
+    assert res.account_value_end_month[12] < res.account_value_end_month[11]
 
 
 def test_monte_carlo_benign_params_have_no_infeasible_paths():

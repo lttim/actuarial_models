@@ -15,8 +15,10 @@ a fixed term. Modelled in `term_projection.py`. Liability cashflow is
 expected-claims minus expected-premiums per month.
 
 **RILA -- Registered Index-Linked Annuity.** Single-premium, deferred annuity
-whose account value tracks an equity index with a participation rate, cap, and
-buffer/floor on segment crediting. Modelled in `rila_projection.py`.
+whose account value tracks one or more indexed segments with cap/floor or
+buffer crediting. The mechanics-production prototype includes scheduled
+withdrawals, surrender charge values, account-value or return-of-premium death
+benefits, and a GLWB state path. Modelled in `rila_projection.py`.
 
 **MYGA -- Multi-Year Guaranteed Annuity.** Single-premium fixed deferred annuity
 that guarantees an annual declared rate for the guarantee period (typically 3, 5,
@@ -44,9 +46,11 @@ load → declared-rate credit → COI (`q_x_m × NAR`) → expense charge. Type 
 benefit (`max(face, AV)`). AV depletion terminates the contract. Modelled in
 `ul_projection.py`.
 
-**IUL -- Indexed UL.** Universal Life variant whose monthly credit comes from
-an annual point-to-point credit on segment anniversaries (capped + floored).
-Otherwise identical to UL. Modelled in `iul_projection.py`.
+**IUL -- Indexed UL.** Universal Life variant whose account value receives
+annual point-to-point indexed credits on segment anniversaries. The
+mechanics-production prototype supports flexible scheduled premiums, loads,
+COI/monthly charges, withdrawals, fixed policy loans, surrender values, and net
+death benefit. Modelled in `iul_projection.py`.
 
 **VUL -- Variable UL.** Universal Life variant whose monthly credit is the
 sub-account simple return. Otherwise identical to UL. Modelled in
@@ -69,8 +73,10 @@ and expense.
 withdrawn from the sub-account each month in a VA. Industry typical ~140 bps.
 
 **Segment crediting.** The mechanism for crediting an indexed product on
-segment anniversaries (typically 12 months for the v1 platform). Computed as
-`max(floor, min(cap, participation × raw_index_return))`.
+segment anniversaries. Cap/floor designs use
+`max(floor, min(cap, participation × raw_index_return))`; RILA buffer designs
+credit upside to the cap and absorb downside through the buffer before passing
+losses to account value.
 
 **Account value (AV).** The notional balance of an UL / IUL / VUL / FIA / VA
 contract; never negative. The monthly cycle that evolves it lives in
@@ -125,12 +131,21 @@ the lower-indexed bucket sells first. The `5e-10` threshold is half the
 inter-bucket epsilon (`EXCEL_DISINVEST_EPSILON = 1e-9`); both values live in
 `parity_constants.py`. See `docs/model_parity_contract.md` section 2.
 
-**P2P -- Point-to-Point (RILA).** A segment whose return is computed as
-`L[end] / L[start] - 1` over the segment window (typically 12 months for an
-annual P2P).
+**P2P -- Point-to-Point.** A segment whose return is computed as
+`L[end] / L[start] - 1` over the segment window, typically 12 months for annual
+RILA/IUL P2P crediting.
 
-**Cap / Floor / Participation (RILA).** Crediting transformation:
-`credited = clip(participation * raw, floor, cap)`.
+**Cap / Floor / Participation.** Crediting transformation:
+`credited = clip(participation * raw, floor, cap)` for cap/floor designs.
+
+**GLWB -- Guaranteed Lifetime Withdrawal Benefit.** A RILA rider path with a
+benefit base, optional roll-up before income start, annual ratchet, rider fee,
+and level withdrawals after income start. The current prototype models the
+mechanics but does not certify statutory or illustration compliance.
+
+**Policy loan.** Fixed-rate IUL access feature that tracks draw, repayment,
+interest accrual, loan balance, and net death benefit reduction. Overloan
+protection is out of current scope.
 
 **Account value (AV).** RILA's balance: starts at single premium, scales by
 `(1 + credited)` at each segment boundary, and pays a monthly multiplicative

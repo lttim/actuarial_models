@@ -82,6 +82,19 @@ class RUN_KEY:
     RILA_CAP = "run_rila_cap"
     RILA_FLOOR = "run_rila_floor"
     RILA_RIDER_FEE = "run_rila_rider_fee"
+    RILA_DEATH_BENEFIT_TYPE = "run_rila_death_benefit_type"
+    RILA_BUFFER_WEIGHT = "run_rila_buffer_weight"
+    RILA_BUFFER = "run_rila_buffer"
+    RILA_WITHDRAWAL_AMOUNT = "run_rila_withdrawal_amount"
+    RILA_WITHDRAWAL_START = "run_rila_withdrawal_start"
+    RILA_WITHDRAWAL_END = "run_rila_withdrawal_end"
+    RILA_SURRENDER_CHARGE_Y1 = "run_rila_surrender_charge_y1"
+    RILA_SURRENDER_CHARGE_YEARS = "run_rila_surrender_charge_years"
+    RILA_GLWB_ENABLED = "run_rila_glwb_enabled"
+    RILA_GLWB_FEE = "run_rila_glwb_fee"
+    RILA_GLWB_ROLLUP = "run_rila_glwb_rollup"
+    RILA_GLWB_INCOME_START = "run_rila_glwb_income_start"
+    RILA_GLWB_WITHDRAWAL_RATE = "run_rila_glwb_withdrawal_rate"
 
     # MYGA
     MYGA_SINGLE_PREMIUM = "run_myga_single_premium"
@@ -121,6 +134,22 @@ class RUN_KEY:
     IUL_PARTICIPATION = "run_iul_participation"
     IUL_CAP = "run_iul_cap"
     IUL_FLOOR = "run_iul_floor"
+    IUL_DEATH_BENEFIT_TYPE = "run_iul_death_benefit_type"
+    IUL_PLANNED_PREMIUM = "run_iul_planned_premium"
+    IUL_PREMIUM_MODE_MONTHS = "run_iul_premium_mode_months"
+    IUL_PREMIUM_END_MONTH = "run_iul_premium_end_month"
+    IUL_WITHDRAWAL_AMOUNT = "run_iul_withdrawal_amount"
+    IUL_WITHDRAWAL_START = "run_iul_withdrawal_start"
+    IUL_WITHDRAWAL_END = "run_iul_withdrawal_end"
+    IUL_SURRENDER_CHARGE_Y1 = "run_iul_surrender_charge_y1"
+    IUL_SURRENDER_CHARGE_YEARS = "run_iul_surrender_charge_years"
+    IUL_LOAN_RATE = "run_iul_loan_rate"
+    IUL_LOAN_DRAW = "run_iul_loan_draw"
+    IUL_LOAN_DRAW_START = "run_iul_loan_draw_start"
+    IUL_LOAN_DRAW_END = "run_iul_loan_draw_end"
+    IUL_LOAN_REPAY = "run_iul_loan_repay"
+    IUL_LOAN_REPAY_START = "run_iul_loan_repay_start"
+    IUL_LOAN_REPAY_END = "run_iul_loan_repay_end"
 
     # VUL
     VUL_FACE_AMOUNT = "run_vul_face_amount"
@@ -215,6 +244,17 @@ PRICING_RUN_NUMBER_INPUT_KEYS: frozenset[str] = frozenset(
         RUN_KEY.RILA_CAP,
         RUN_KEY.RILA_FLOOR,
         RUN_KEY.RILA_RIDER_FEE,
+        RUN_KEY.RILA_BUFFER_WEIGHT,
+        RUN_KEY.RILA_BUFFER,
+        RUN_KEY.RILA_WITHDRAWAL_AMOUNT,
+        RUN_KEY.RILA_WITHDRAWAL_START,
+        RUN_KEY.RILA_WITHDRAWAL_END,
+        RUN_KEY.RILA_SURRENDER_CHARGE_Y1,
+        RUN_KEY.RILA_SURRENDER_CHARGE_YEARS,
+        RUN_KEY.RILA_GLWB_FEE,
+        RUN_KEY.RILA_GLWB_ROLLUP,
+        RUN_KEY.RILA_GLWB_INCOME_START,
+        RUN_KEY.RILA_GLWB_WITHDRAWAL_RATE,
         # MYGA
         RUN_KEY.MYGA_SINGLE_PREMIUM,
         RUN_KEY.MYGA_DECLARED_RATE,
@@ -245,6 +285,21 @@ PRICING_RUN_NUMBER_INPUT_KEYS: frozenset[str] = frozenset(
         RUN_KEY.IUL_PARTICIPATION,
         RUN_KEY.IUL_CAP,
         RUN_KEY.IUL_FLOOR,
+        RUN_KEY.IUL_PLANNED_PREMIUM,
+        RUN_KEY.IUL_PREMIUM_MODE_MONTHS,
+        RUN_KEY.IUL_PREMIUM_END_MONTH,
+        RUN_KEY.IUL_WITHDRAWAL_AMOUNT,
+        RUN_KEY.IUL_WITHDRAWAL_START,
+        RUN_KEY.IUL_WITHDRAWAL_END,
+        RUN_KEY.IUL_SURRENDER_CHARGE_Y1,
+        RUN_KEY.IUL_SURRENDER_CHARGE_YEARS,
+        RUN_KEY.IUL_LOAN_RATE,
+        RUN_KEY.IUL_LOAN_DRAW,
+        RUN_KEY.IUL_LOAN_DRAW_START,
+        RUN_KEY.IUL_LOAN_DRAW_END,
+        RUN_KEY.IUL_LOAN_REPAY,
+        RUN_KEY.IUL_LOAN_REPAY_START,
+        RUN_KEY.IUL_LOAN_REPAY_END,
         # VUL
         RUN_KEY.VUL_FACE_AMOUNT,
         RUN_KEY.VUL_SINGLE_PREMIUM,
@@ -417,6 +472,19 @@ def build_run_form_seed_defaults(
         RUN_KEY.RILA_CAP: float(saved_inputs.get("rila_cap", 0.10)),
         RUN_KEY.RILA_FLOOR: float(saved_inputs.get("rila_floor", 0.0)),
         RUN_KEY.RILA_RIDER_FEE: float(saved_inputs.get("rila_rider_fee_annual", 0.01)),
+        RUN_KEY.RILA_DEATH_BENEFIT_TYPE: str(saved_inputs.get("rila_death_benefit_type", "account_value")),
+        RUN_KEY.RILA_BUFFER_WEIGHT: float(saved_inputs.get("rila_buffer_weight", 0.0)),
+        RUN_KEY.RILA_BUFFER: float(saved_inputs.get("rila_buffer", 0.10)),
+        RUN_KEY.RILA_WITHDRAWAL_AMOUNT: float(saved_inputs.get("rila_withdrawal_amount", 0.0)),
+        RUN_KEY.RILA_WITHDRAWAL_START: int(saved_inputs.get("rila_withdrawal_start", 121)),
+        RUN_KEY.RILA_WITHDRAWAL_END: int(saved_inputs.get("rila_withdrawal_end", 240)),
+        RUN_KEY.RILA_SURRENDER_CHARGE_Y1: float(saved_inputs.get("rila_surrender_charge_y1", 0.07)),
+        RUN_KEY.RILA_SURRENDER_CHARGE_YEARS: int(saved_inputs.get("rila_surrender_charge_years", 7)),
+        RUN_KEY.RILA_GLWB_ENABLED: bool(saved_inputs.get("rila_glwb_enabled", False)),
+        RUN_KEY.RILA_GLWB_FEE: float(saved_inputs.get("rila_glwb_fee", 0.01)),
+        RUN_KEY.RILA_GLWB_ROLLUP: float(saved_inputs.get("rila_glwb_rollup", 0.05)),
+        RUN_KEY.RILA_GLWB_INCOME_START: int(saved_inputs.get("rila_glwb_income_start", 121)),
+        RUN_KEY.RILA_GLWB_WITHDRAWAL_RATE: float(saved_inputs.get("rila_glwb_withdrawal_rate", 0.05)),
         # MYGA
         RUN_KEY.MYGA_SINGLE_PREMIUM: float(saved_inputs.get("myga_single_premium", 100_000.0)),
         RUN_KEY.MYGA_DECLARED_RATE: float(saved_inputs.get("myga_declared_rate", 0.045)),
@@ -450,6 +518,22 @@ def build_run_form_seed_defaults(
         RUN_KEY.IUL_PARTICIPATION: float(saved_inputs.get("iul_participation", 1.0)),
         RUN_KEY.IUL_CAP: float(saved_inputs.get("iul_cap", 0.10)),
         RUN_KEY.IUL_FLOOR: float(saved_inputs.get("iul_floor", 0.0)),
+        RUN_KEY.IUL_DEATH_BENEFIT_TYPE: str(saved_inputs.get("iul_death_benefit_type", "level_face")),
+        RUN_KEY.IUL_PLANNED_PREMIUM: float(saved_inputs.get("iul_planned_premium", 0.0)),
+        RUN_KEY.IUL_PREMIUM_MODE_MONTHS: int(saved_inputs.get("iul_premium_mode_months", 12)),
+        RUN_KEY.IUL_PREMIUM_END_MONTH: int(saved_inputs.get("iul_premium_end_month", 240)),
+        RUN_KEY.IUL_WITHDRAWAL_AMOUNT: float(saved_inputs.get("iul_withdrawal_amount", 0.0)),
+        RUN_KEY.IUL_WITHDRAWAL_START: int(saved_inputs.get("iul_withdrawal_start", 121)),
+        RUN_KEY.IUL_WITHDRAWAL_END: int(saved_inputs.get("iul_withdrawal_end", 240)),
+        RUN_KEY.IUL_SURRENDER_CHARGE_Y1: float(saved_inputs.get("iul_surrender_charge_y1", 0.07)),
+        RUN_KEY.IUL_SURRENDER_CHARGE_YEARS: int(saved_inputs.get("iul_surrender_charge_years", 7)),
+        RUN_KEY.IUL_LOAN_RATE: float(saved_inputs.get("iul_loan_rate", 0.05)),
+        RUN_KEY.IUL_LOAN_DRAW: float(saved_inputs.get("iul_loan_draw", 0.0)),
+        RUN_KEY.IUL_LOAN_DRAW_START: int(saved_inputs.get("iul_loan_draw_start", 121)),
+        RUN_KEY.IUL_LOAN_DRAW_END: int(saved_inputs.get("iul_loan_draw_end", 240)),
+        RUN_KEY.IUL_LOAN_REPAY: float(saved_inputs.get("iul_loan_repay", 0.0)),
+        RUN_KEY.IUL_LOAN_REPAY_START: int(saved_inputs.get("iul_loan_repay_start", 241)),
+        RUN_KEY.IUL_LOAN_REPAY_END: int(saved_inputs.get("iul_loan_repay_end", 360)),
         # VUL
         RUN_KEY.VUL_FACE_AMOUNT: float(saved_inputs.get("vul_face_amount", 250_000.0)),
         RUN_KEY.VUL_SMOKER_CLASS: str(saved_inputs.get("vul_smoker_class", "nonsmoker")),

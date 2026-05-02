@@ -100,6 +100,11 @@ from product_registry import (
     product_label,
     product_options_for_ui,
 )
+from products.indexed_ul.ui import (
+    build_indexed_ul_contract_from_session,
+    render_indexed_ul_pricing_controls,
+)
+from products.rila.ui import build_rila_contract_from_session, render_rila_pricing_controls
 from test_dashboard import render_unit_tests_page
 
 
@@ -2707,49 +2712,7 @@ def _render_run_and_results() -> None:
             premium_mode_choice = "n/a"
             benefit_timing_choice = "n/a"
             monthly_premium = 0.0
-            r1, r2, r3, r4 = st.columns(4)
-            with r1:
-                run_number_input(
-                    "Participation",
-                    "run_rila_participation",
-                    default=1.0,
-                    min_value=0.0,
-                    max_value=5.0,
-                    format="%.4f",
-                    help=(
-                        "Very high participation with a high cap can make pricing infeasible "
-                        "(PV of death benefits per $1 premium + premium expense rate ≥ 1). "
-                        "If pricing fails, reduce participation or cap."
-                    ),
-                )
-            with r2:
-                run_number_input(
-                    "Annual cap (decimal)",
-                    "run_rila_cap",
-                    default=0.10,
-                    min_value=-1.0,
-                    max_value=2.0,
-                    format="%.4f",
-                    help="e.g. 0.10 = +10% credited return cap per segment",
-                )
-            with r3:
-                run_number_input(
-                    "Annual floor (decimal)",
-                    "run_rila_floor",
-                    default=0.0,
-                    min_value=-1.0,
-                    max_value=1.0,
-                    format="%.4f",
-                )
-            with r4:
-                run_number_input(
-                    "Rider fee (annual on AV)",
-                    "run_rila_rider_fee",
-                    default=0.01,
-                    min_value=0.0,
-                    max_value=1.0,
-                    format="%.4f",
-                )
+            render_rila_pricing_controls(st, run_number_input)
         elif selected_product == ProductType.MYGA:
             benefit_annual = 0.0
             term_choice = "n/a"
@@ -2884,43 +2847,7 @@ def _render_run_and_results() -> None:
             premium_mode_choice = "n/a"
             benefit_timing_choice = "n/a"
             monthly_premium = 0.0
-            i1, i2, i3, i4 = st.columns(4)
-            with i1:
-                run_number_input(
-                    "Face amount ($)", "run_iul_face_amount",
-                    default=250_000.0, min_value=1.0, step=10_000.0,
-                )
-                st.selectbox(
-                    "Smoker class", options=["nonsmoker", "smoker"],
-                    key="run_iul_smoker_class",
-                )
-            with i2:
-                run_number_input(
-                    "Single premium ($)", "run_iul_single_premium",
-                    default=25_000.0, min_value=1.0, step=1_000.0,
-                )
-                run_number_input(
-                    "Premium load", "run_iul_premium_load",
-                    default=0.06, min_value=0.0, max_value=0.5, format="%.4f",
-                )
-            with i3:
-                run_number_input(
-                    "Monthly expense", "run_iul_monthly_expense",
-                    default=7.50, min_value=0.0, step=0.50,
-                )
-                run_number_input(
-                    "Participation", "run_iul_participation",
-                    default=1.0, min_value=0.0, max_value=5.0, format="%.4f",
-                )
-            with i4:
-                run_number_input(
-                    "Annual cap", "run_iul_cap",
-                    default=0.10, min_value=-1.0, max_value=2.0, format="%.4f",
-                )
-                run_number_input(
-                    "Annual floor", "run_iul_floor",
-                    default=0.0, min_value=-1.0, max_value=1.0, format="%.4f",
-                )
+            render_indexed_ul_pricing_controls(st, run_number_input)
         elif selected_product == ProductType.VARIABLE_UL:
             benefit_annual = 0.0
             term_choice = "n/a"
@@ -3068,13 +2995,10 @@ def _render_run_and_results() -> None:
                     benefit_timing=benefit_timing_value,  # type: ignore[arg-type]
                 )
             elif selected_product == ProductType.RILA:
-                contract = rp.RILAContract(
+                contract = build_rila_contract_from_session(
+                    st.session_state,
                     issue_age=int(issue_age),
-                    sex="male" if sex == "male" else "female",
-                    participation=float(st.session_state.get("run_rila_participation", 1.0)),
-                    cap=float(st.session_state.get("run_rila_cap", 0.10)),
-                    floor=float(st.session_state.get("run_rila_floor", 0.0)),
-                    rider_fee_annual=float(st.session_state.get("run_rila_rider_fee", 0.01)),
+                    sex=str(sex),
                 )
             elif selected_product == ProductType.MYGA:
                 import myga_projection as my_proj
@@ -3126,18 +3050,10 @@ def _render_run_and_results() -> None:
                     declared_rate_annual=float(st.session_state.get("run_ul_declared_rate", 0.04)),
                 )
             elif selected_product == ProductType.INDEXED_UL:
-                import iul_projection as iul_proj
-                contract = iul_proj.IULContract(
+                contract = build_indexed_ul_contract_from_session(
+                    st.session_state,
                     issue_age=int(issue_age),
-                    sex="male" if sex == "male" else "female",
-                    smoker_class=str(st.session_state.get("run_iul_smoker_class", "nonsmoker")),  # type: ignore[arg-type]
-                    face_amount=float(st.session_state.get("run_iul_face_amount", 250_000.0)),
-                    single_premium=float(st.session_state.get("run_iul_single_premium", 25_000.0)),
-                    premium_load_pct=float(st.session_state.get("run_iul_premium_load", 0.06)),
-                    monthly_expense_charge=float(st.session_state.get("run_iul_monthly_expense", 7.50)),
-                    participation=float(st.session_state.get("run_iul_participation", 1.0)),
-                    cap=float(st.session_state.get("run_iul_cap", 0.10)),
-                    floor=float(st.session_state.get("run_iul_floor", 0.0)),
+                    sex=str(sex),
                 )
             elif selected_product == ProductType.VARIABLE_UL:
                 import vul_projection as vul_proj

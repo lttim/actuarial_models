@@ -7,6 +7,14 @@ import numpy as np
 
 import pricing_projection as sp
 from _observability import traced
+from policy_features import (
+    GLWBRider,
+    MonthlySchedule,
+    SegmentAllocation,
+    SurrenderChargeSchedule,
+    normalize_segment_allocations,
+    segment_credited_return as policy_segment_credited_return,
+)
 
 
 @dataclass(frozen=True)
@@ -19,6 +27,12 @@ class RILAContract:
     cap: float
     floor: float
     rider_fee_annual: float
+    single_premium: float | None = None
+    segment_allocations: tuple[SegmentAllocation, ...] = ()
+    withdrawals: MonthlySchedule = MonthlySchedule()
+    surrender_charges: SurrenderChargeSchedule = SurrenderChargeSchedule()
+    death_benefit_type: Literal["account_value", "return_of_premium"] = "account_value"
+    glwb: GLWBRider = GLWBRider()
     segment_months: int = 12
     payment_freq_per_year: int = 12
 
@@ -55,6 +69,12 @@ class RILAProjectionResult:
     account_value_end_month: np.ndarray
     segment_credited_rate: np.ndarray
     expected_claim_cashflows: np.ndarray
+    withdrawal_cashflows: np.ndarray
+    surrender_charge_dollars: np.ndarray
+    surrender_value_end_month: np.ndarray
+    benefit_base_end_month: np.ndarray
+    glwb_withdrawal_cashflows: np.ndarray
+    rider_fee_cashflows: np.ndarray
 
 
 class RILAPricingInfeasibleError(ValueError):
@@ -150,9 +170,12 @@ def _rila_claims_rel_per_premium_dollar(
     contract: RILAContract,
     L: np.ndarray,
     death_prob: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Relative simulation with initial AV=1. Returns (claim_rate, av_end, cred_rate_month).
+    Relative simulation with initial AV=1.
+
+    Returns (claim_rate, av_end, cred_rate_month, withdrawals, surrender_charges,
+    surrender_value, benefit_base, glwb_withdrawals).
 
     cred_rate_month[k] holds annual segment **credited decimal** applied at end of month k+1
     if that month is a crediting anniversary; else 0.
@@ -164,29 +187,88 @@ def _rila_claims_rel_per_premium_dollar(
     if L.shape[0] != n_months + 1:
         raise ValueError("L must have shape (n_months + 1,).")
 
-    av = 1.0
+    basis = float(contract.single_premium) if contract.single_premium is not None else 1.0
+    av = basis
+    initial_av = basis
+    benefit_base = basis
     claims = np.zeros(n_months, dtype=float)
     av_end = np.zeros(n_months, dtype=float)
     cred_m = np.zeros(n_months, dtype=float)
+    withdrawals = np.zeros(n_months, dtype=float)
+    surrender_charges = np.zeros(n_months, dtype=float)
+    surrender_value = np.zeros(n_months, dtype=float)
+    benefit_base_path = np.zeros(n_months, dtype=float)
+    glwb_withdrawals = np.zeros(n_months, dtype=float)
     fee_m = float(contract.rider_fee_annual) / 12.0
     if not (0.0 <= fee_m < 1.0):
         raise ValueError("rider_fee_annual must imply monthly fee in [0,1).")
+    glwb_fee_m = float(contract.glwb.fee_annual) / 12.0 if contract.glwb.enabled else 0.0
+    glwb_roll_m = (
+        (1.0 + float(contract.glwb.rollup_annual)) ** (1.0 / 12.0) - 1.0
+        if contract.glwb.enabled
+        else 0.0
+    )
+    w_sched = contract.withdrawals.values(n_months)
+    surrender_rates = contract.surrender_charges.monthly_rates(n_months)
+    allocations = normalize_segment_allocations(
+        contract.segment_allocations
+        or (
+            SegmentAllocation(
+                weight=1.0,
+                design="cap_floor",
+                participation=float(contract.participation),
+                cap=float(contract.cap),
+                floor=float(contract.floor),
+            ),
+        )
+    )
 
     for m in range(1, n_months + 1):
         if m >= seg and (m % seg) == 0:
             raw = float(L[m] / L[m - seg] - 1.0)
-            cr = segment_credited_return(
-                raw=raw,
-                participation=contract.participation,
-                cap=contract.cap,
-                floor=contract.floor,
+            cr = float(
+                sum(
+                    float(a.weight)
+                    * policy_segment_credited_return(allocation=a, raw_index_return=raw)
+                    for a in allocations
+                )
             )
             cred_m[m - 1] = cr
             av *= 1.0 + cr
+        if contract.glwb.enabled and m < int(contract.glwb.income_start_month):
+            benefit_base *= 1.0 + glwb_roll_m
+            if contract.glwb.ratchet and m % 12 == 0:
+                benefit_base = max(benefit_base, av)
+        if contract.glwb.enabled and m >= int(contract.glwb.income_start_month):
+            gwb = min(av, benefit_base * float(contract.glwb.withdrawal_rate) / 12.0)
+            av -= gwb
+            glwb_withdrawals[m - 1] = gwb
+        wd = min(av, float(w_sched[m - 1]))
+        av -= wd
+        withdrawals[m - 1] = wd
         av *= 1.0 - fee_m
-        claims[m - 1] = float(death_prob[m - 1] * av)
+        if glwb_fee_m > 0.0:
+            fee_base = max(0.0, benefit_base)
+            av = max(0.0, av - fee_base * glwb_fee_m)
+        if contract.death_benefit_type == "return_of_premium":
+            db = max(av, initial_av)
+        else:
+            db = av
+        claims[m - 1] = float(death_prob[m - 1] * db)
         av_end[m - 1] = float(av)
-    return claims, av_end, cred_m
+        surrender_charges[m - 1] = float(av * surrender_rates[m - 1])
+        surrender_value[m - 1] = float(max(0.0, av - surrender_charges[m - 1]))
+        benefit_base_path[m - 1] = float(benefit_base)
+    return (
+        claims,
+        av_end,
+        cred_m,
+        withdrawals,
+        surrender_charges,
+        surrender_value,
+        benefit_base_path,
+        glwb_withdrawals,
+    )
 
 
 @traced("pricing.rila.deterministic")
@@ -254,7 +336,12 @@ def price_rila_single_premium(
         levels_payment = np.asarray(index_levels_payment, dtype=float)
         if levels_payment.shape != (n_months,):
             raise ValueError(f"index_levels_payment must have shape ({n_months},).")
-        if np.any(levels_payment <= 0.0) or not np.isfinite(index_s0):
+        if (
+            np.any(levels_payment <= 0.0)
+            or np.any(~np.isfinite(levels_payment))
+            or not np.isfinite(index_s0)
+            or float(index_s0) <= 0.0
+        ):
             raise ValueError("index levels and index_s0 must be finite and strictly positive.")
         s0 = float(index_s0)
     elif index_scenario_csv_path is None:
@@ -265,7 +352,16 @@ def price_rila_single_premium(
         )
 
     L = levels_end_by_policy_month(s0=s0, levels_payment=levels_payment)
-    claims_rel, av_end_rel, cred_m = _rila_claims_rel_per_premium_dollar(
+    (
+        claims_rel,
+        av_end_rel,
+        cred_m,
+        withdrawal_rel,
+        surrender_charge_rel,
+        surrender_value_rel,
+        benefit_base_rel,
+        glwb_withdrawal_rel,
+    ) = _rila_claims_rel_per_premium_dollar(
         contract=contract,
         L=L,
         death_prob=death_prob,
@@ -281,16 +377,22 @@ def price_rila_single_premium(
     )
     expected_expense_cashflows = expense_sched * survival
 
-    K = float(np.sum(claims_rel * df))
+    access_rel = (withdrawal_rel + glwb_withdrawal_rel) * survival_start
+    K = float(np.sum((claims_rel + access_rel) * df))
     pv_exp_sched = float(np.sum(expected_expense_cashflows * df))
     rate = float(expenses.premium_expense_rate)
     if rate >= 1.0:
         raise ValueError("premium_expense_rate must be < 1.")
-    denom = 1.0 - rate - K
-    if denom <= 1e-12:
-        raise RILAPricingInfeasibleError(k_loading=float(K), premium_expense_rate=float(rate))
-    single_premium = float((float(expenses.policy_expense_dollars) + pv_exp_sched) / denom)
-    if not np.isfinite(single_premium) or single_premium <= 0.0:
+    if contract.single_premium is None:
+        denom = 1.0 - rate - K
+        if denom <= 1e-12:
+            raise RILAPricingInfeasibleError(k_loading=float(K), premium_expense_rate=float(rate))
+        single_premium = float((float(expenses.policy_expense_dollars) + pv_exp_sched) / denom)
+    else:
+        single_premium = float(contract.single_premium)
+        if not np.isfinite(single_premium) or single_premium <= 0.0:
+            raise ValueError("single_premium must be finite and > 0 when provided.")
+    if contract.single_premium is None and (not np.isfinite(single_premium) or single_premium <= 0.0):
         raise ValueError(
             "RILA priced single premium is non-positive. With the current implicit premium "
             "formula, the numerator is policy expenses plus the PV of scheduled monthly "
@@ -301,8 +403,10 @@ def price_rila_single_premium(
             "or pass explicit positive policy / monthly expense dollars."
         )
 
-    expected_benefit_cashflows = claims_rel * single_premium
-    expected_claim_cashflows = np.asarray(expected_benefit_cashflows, dtype=float)
+    scale = 1.0 if contract.single_premium is not None else single_premium
+    expected_access_cashflows = access_rel * scale
+    expected_claim_cashflows = claims_rel * scale
+    expected_benefit_cashflows = expected_claim_cashflows + expected_access_cashflows
     expected_total_cashflows = expected_benefit_cashflows + expected_expense_cashflows
 
     pv_benefit = float(np.sum(expected_benefit_cashflows * df))
@@ -335,7 +439,18 @@ def price_rila_single_premium(
         cumu_ret[k] = cur / float(s0) - 1.0
         prev = cur
 
-    account_value_end_month = av_end_rel * single_premium
+    account_value_end_month = av_end_rel * scale
+    withdrawal_cashflows = withdrawal_rel * scale * survival_start
+    glwb_withdrawal_cashflows = glwb_withdrawal_rel * scale * survival_start
+    surrender_charge_dollars = surrender_charge_rel * scale
+    surrender_value_end_month = surrender_value_rel * scale
+    benefit_base_end_month = benefit_base_rel * scale
+    rider_fee_cashflows = (
+        benefit_base_rel
+        * scale
+        * (float(contract.glwb.fee_annual) / 12.0 if contract.glwb.enabled else 0.0)
+        * survival_start
+    )
 
     return RILAProjectionResult(
         months=months,
@@ -363,6 +478,12 @@ def price_rila_single_premium(
         account_value_end_month=account_value_end_month,
         segment_credited_rate=cred_m,
         expected_claim_cashflows=expected_claim_cashflows,
+        withdrawal_cashflows=withdrawal_cashflows,
+        surrender_charge_dollars=surrender_charge_dollars,
+        surrender_value_end_month=surrender_value_end_month,
+        benefit_base_end_month=benefit_base_end_month,
+        glwb_withdrawal_cashflows=glwb_withdrawal_cashflows,
+        rider_fee_cashflows=rider_fee_cashflows,
     )
 
 

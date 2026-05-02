@@ -1,9 +1,12 @@
 # Code_Sandbox — Actuarial Pricing & ALM Platform
 
-Python ↔ Excel parity-tested pricing engine for **SPIA** (single-premium immediate
-annuity), **Term Life**, and **RILA** (registered-index-linked annuity) products,
-with an ALM (asset–liability management) ladder, a Streamlit pricing UI, and a
-static Excel formula validator that gates every workbook before it is written.
+Controlled actuarial prototype for **SPIA**, **Term Life**, **RILA**, **MYGA**,
+**FIA**, **VA**, **WL**, **UL**, **IUL**, and **VUL** pricing/projection, with
+an ALM (asset–liability management) ladder, a Streamlit pricing UI, generated
+Excel workbooks, and a static Excel formula validator that gates every workbook
+before it is written. SPIA / Term / RILA have the deepest parity lineage; richer
+RILA / IUL mechanics are being promoted toward mechanics-production while
+assumption governance remains disclosure-based rather than blocking.
 
 ## Workspace layout
 

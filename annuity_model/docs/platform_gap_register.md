@@ -16,7 +16,7 @@ It is intended to be updated quarterly and referenced in release planning.
 | Domain | Capability | Current | Target | Gap summary | Primary evidence |
 |---|---|---:|---:|---|---|
 | Governance | Independent challenge | L2 | L4 | CODEOWNERS routing exists, but enforceable second-party review is not yet active under solo-owner branch protection. | [`.github/CODEOWNERS`](../../.github/CODEOWNERS), [`.github/branch-protection.json`](../../.github/branch-protection.json) |
-| Governance | Model inventory and tiering | L1 | L3 | No formal model inventory with tier/materiality, ownership, and review cadence metadata. | [`product_registry.py`](../product_registry.py) |
+| Governance | Model inventory and tiering | L2 | L3 | Model inventory now exists, but maturity labels and limitation updates still require ongoing synchronization with implementation. | [`docs/model_inventory.md`](model_inventory.md) |
 | Governance | Assumption approval workflow | L2 | L4 | Technical artifact registry is strong, but approval/challenger/validity metadata is not yet formalized. | [`data_registry.py`](../data_registry.py) |
 | Governance | Placeholder release controls | L1 | L4 | Placeholder assumptions are documented but no hard release-time guardrail is mandated. | [`mortality_2017_cso.py`](../mortality_2017_cso.py), [`pricing_projection.py`](../pricing_projection.py) |
 | Governance | Ongoing performance monitoring | L2 | L4 | Strong pre-merge gates exist; post-merge KRIs and drift governance are not yet formalized. | [`docs/actuarial_benchmarks.md`](actuarial_benchmarks.md) |

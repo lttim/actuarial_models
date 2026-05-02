@@ -17,10 +17,15 @@ import numpy as np
 
 import pricing_projection as sp
 from _observability import traced
-from account_value import AVConfig, evolve_account_value
 from crediting import AnnualPointToPointCapped
 from lapse import LapseAssumption
 from mortality_2017_cso import MortalityTable2017CSO
+from policy_features import (
+    LevelPremiumSchedule,
+    LoanTerms,
+    MonthlySchedule,
+    SurrenderChargeSchedule,
+)
 
 
 @dataclass(frozen=True)
@@ -32,6 +37,10 @@ class IULContract:
     single_premium: float = 25_000.0
     premium_load_pct: float = 0.06
     monthly_expense_charge: float = 7.50
+    planned_premiums: LevelPremiumSchedule = LevelPremiumSchedule()
+    withdrawals: MonthlySchedule = MonthlySchedule()
+    loan_terms: LoanTerms = LoanTerms()
+    surrender_charges: SurrenderChargeSchedule = SurrenderChargeSchedule()
     participation: float = 1.0
     cap: float = 0.10
     floor: float = 0.0
@@ -78,6 +87,15 @@ class IULProjectionResult:
     is_terminated_after_month: np.ndarray
     face_amount: float
     smoker_class: str
+    premium_cashflows: np.ndarray
+    withdrawal_cashflows: np.ndarray
+    loan_draw_cashflows: np.ndarray
+    loan_repayment_cashflows: np.ndarray
+    loan_balance_end_month: np.ndarray
+    loan_interest_dollars: np.ndarray
+    surrender_charge_dollars: np.ndarray
+    surrender_value_end_month: np.ndarray
+    net_death_benefit_end_month: np.ndarray
 
 
 def _resolve_mortality(mortality, *, sex, smoker_class):
@@ -94,6 +112,131 @@ def _per_month_q(survival_end: np.ndarray) -> np.ndarray:
     surv_step[0] = survival_end[0]
     surv_step[1:] = survival_end[1:] / np.clip(survival_end[:-1], 1e-15, None)
     return np.clip(1.0 - surv_step, 0.0, 1.0)
+
+
+def _evolve_iul_policy_state(
+    *,
+    contract: IULContract,
+    n_months: int,
+    monthly_credit: np.ndarray,
+    monthly_q: np.ndarray,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
+    """Monthly IUL state with scheduled premiums, withdrawals, and fixed loans."""
+
+    cred = np.asarray(monthly_credit, dtype=float)
+    qm = np.asarray(monthly_q, dtype=float)
+    if cred.shape != (n_months,) or qm.shape != (n_months,):
+        raise ValueError("monthly_credit and monthly_q must match n_months.")
+
+    planned = contract.planned_premiums.values(n_months)
+    premium = planned.copy()
+    if n_months:
+        premium[0] += float(contract.single_premium)
+    withdrawals = contract.withdrawals.values(n_months)
+    loan_draws = contract.loan_terms.draws.values(n_months)
+    loan_repayments = contract.loan_terms.repayments.values(n_months)
+    loan_rate_m = contract.loan_terms.monthly_rate()
+    surrender_rates = contract.surrender_charges.monthly_rates(n_months)
+
+    av_end = np.zeros(n_months, dtype=float)
+    db_end = np.zeros(n_months, dtype=float)
+    net_db_end = np.zeros(n_months, dtype=float)
+    coi = np.zeros(n_months, dtype=float)
+    nar = np.zeros(n_months, dtype=float)
+    loan_bal = np.zeros(n_months, dtype=float)
+    loan_interest = np.zeros(n_months, dtype=float)
+    surrender_charge = np.zeros(n_months, dtype=float)
+    surrender_value = np.zeros(n_months, dtype=float)
+    credit_applied = np.zeros(n_months, dtype=float)
+    terminated = np.zeros(n_months, dtype=bool)
+    withdrawal_paid = np.zeros(n_months, dtype=float)
+
+    av = 0.0
+    loan = 0.0
+    is_term = False
+    for t in range(n_months):
+        if is_term:
+            terminated[t] = True
+            loan *= 1.0 + loan_rate_m
+            loan_bal[t] = loan
+            continue
+        li = loan * loan_rate_m
+        loan += li
+        loan_interest[t] = li
+
+        prem = float(premium[t])
+        av += prem * (1.0 - float(contract.premium_load_pct))
+        cr = float(cred[t])
+        av_after_credit = av * (1.0 + cr)
+        gross_db = (
+            max(float(contract.face_amount), av_after_credit)
+            if contract.db_type == "level_face"
+            else float(contract.face_amount) + max(0.0, av_after_credit)
+        )
+        nar_t = max(0.0, gross_db - av_after_credit)
+        coi_t = float(qm[t]) * nar_t
+        av = av_after_credit - coi_t - float(contract.monthly_expense_charge)
+
+        draw = float(loan_draws[t])
+        loan += draw
+        repay = min(float(loan_repayments[t]), loan)
+        loan -= repay
+        loan_repayments[t] = repay
+
+        wd = min(max(0.0, av), float(withdrawals[t]))
+        av -= wd
+        withdrawal_paid[t] = wd
+
+        if av <= 0.0:
+            av = 0.0
+            is_term = True
+
+        net_account = max(0.0, av - loan)
+        sc = net_account * float(surrender_rates[t])
+        av_end[t] = av
+        db_end[t] = gross_db
+        net_db_end[t] = max(0.0, gross_db - loan)
+        coi[t] = coi_t
+        nar[t] = nar_t
+        loan_bal[t] = loan
+        surrender_charge[t] = sc
+        surrender_value[t] = max(0.0, net_account - sc)
+        credit_applied[t] = cr
+        terminated[t] = is_term
+
+    return (
+        av_end,
+        db_end,
+        net_db_end,
+        coi,
+        nar,
+        credit_applied,
+        terminated,
+        premium,
+        withdrawal_paid,
+        loan_draws,
+        loan_repayments,
+        loan_bal,
+        loan_interest,
+        surrender_charge,
+        surrender_value,
+    )
 
 
 @traced("pricing.iul.deterministic")
@@ -155,6 +298,13 @@ def price_iul_single_premium(
         levels_payment = np.asarray(index_levels_payment, dtype=float)
         if levels_payment.shape != (n_months,):
             raise ValueError(f"index_levels_payment must have shape ({n_months},).")
+        if (
+            np.any(levels_payment <= 0.0)
+            or np.any(~np.isfinite(levels_payment))
+            or not np.isfinite(index_s0)
+            or float(index_s0) <= 0.0
+        ):
+            raise ValueError("index levels and index_s0 must be finite and strictly positive.")
         s0 = float(index_s0)
     elif index_scenario_csv_path is None:
         s0, levels_payment = sp.flat_index_scenario(n_months)
@@ -182,22 +332,31 @@ def price_iul_single_premium(
             monthly_credit[m - 1] = cr
             seg_credits[m - 1] = cr
 
-    av_cfg = AVConfig(
-        initial_premium=float(contract.single_premium),
-        premium_load_pct=float(contract.premium_load_pct),
-        monthly_expense_charge=float(contract.monthly_expense_charge),
-        db_type=contract.db_type,
-        face_amount=float(contract.face_amount),
-    )
-    evol = evolve_account_value(
-        config=av_cfg,
+    (
+        av_end,
+        db_end,
+        net_db_end,
+        coi_dollars,
+        nar_end,
+        credit_applied,
+        terminated,
+        premium_cashflows,
+        withdrawal_paid,
+        loan_draws,
+        loan_repayments,
+        loan_bal,
+        loan_interest,
+        surrender_charge,
+        surrender_value,
+    ) = _evolve_iul_policy_state(
+        contract=contract,
         n_months=n_months,
-        monthly_credit_rate=monthly_credit,
-        monthly_coi_q=monthly_q,
+        monthly_credit=monthly_credit,
+        monthly_q=monthly_q,
     )
-    if np.any(evol.is_terminated_after_month):
-        first_term = int(np.argmax(evol.is_terminated_after_month))
-        if evol.is_terminated_after_month[first_term]:
+    if np.any(terminated):
+        first_term = int(np.argmax(terminated))
+        if terminated[first_term]:
             death_prob_month[first_term:] = 0.0
             survival_end[first_term:] = float(survival_end[first_term - 1]) if first_term > 0 else 1.0
             survival_start[first_term + 1:] = float(survival_end[first_term])
@@ -217,7 +376,7 @@ def price_iul_single_premium(
         survival_end = survival_combined
         survival_start = survival_combined_start
 
-    death_cf = evol.db_end_month * death_prob_month
+    death_cf = net_db_end * death_prob_month
 
     if expenses is None:
         try:
@@ -234,7 +393,8 @@ def price_iul_single_premium(
     )
     expected_expense_cashflows = expense_sched * survival_start
 
-    expected_benefit_cashflows = death_cf
+    expected_policy_access_cashflows = (withdrawal_paid + loan_draws) * survival_start
+    expected_benefit_cashflows = death_cf + expected_policy_access_cashflows
     expected_total_cashflows = expected_benefit_cashflows + expected_expense_cashflows
     expected_claim_cashflows = death_cf
 
@@ -288,19 +448,28 @@ def price_iul_single_premium(
         index_simple_return=simp_ret,
         index_log_return=log_ret,
         index_cumulative_return=cumu_ret,
-        benefit_nominal_scheduled=np.array(evol.db_end_month, dtype=float),
+        benefit_nominal_scheduled=np.array(net_db_end, dtype=float),
         expense_nominal_scheduled=expense_sched,
         expense_annual_inflation=float(expense_annual_inflation),
         index_s0=float(s0),
-        account_value_end_month=evol.account_value_end_month,
-        db_end_month=evol.db_end_month,
-        coi_dollars=evol.coi_dollars,
-        nar_end_month=evol.nar_end_month,
+        account_value_end_month=av_end,
+        db_end_month=db_end,
+        coi_dollars=coi_dollars,
+        nar_end_month=nar_end,
         segment_credited_rate=seg_credits,
         expected_claim_cashflows=expected_claim_cashflows,
-        is_terminated_after_month=evol.is_terminated_after_month,
+        is_terminated_after_month=terminated,
         face_amount=float(contract.face_amount),
         smoker_class=str(contract.smoker_class),
+        premium_cashflows=premium_cashflows,
+        withdrawal_cashflows=withdrawal_paid * survival_start,
+        loan_draw_cashflows=loan_draws * survival_start,
+        loan_repayment_cashflows=loan_repayments * survival_start,
+        loan_balance_end_month=loan_bal,
+        loan_interest_dollars=loan_interest,
+        surrender_charge_dollars=surrender_charge,
+        surrender_value_end_month=surrender_value,
+        net_death_benefit_end_month=net_db_end,
     )
 
 

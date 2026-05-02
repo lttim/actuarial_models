@@ -50,7 +50,8 @@ Complete catalog of tracked documentation in this repository, with one-line purp
 - `annuity_model/docs/model_parity_contract.md` — SPIA/ALM parity contract and tolerance table.
 - `annuity_model/docs/rila_parity_contract.md` — RILA-specific parity contract addendum.
 - `annuity_model/docs/portfolio_parity_contract.md` — portfolio aggregation parity addendum.
-- `annuity_model/docs/rila_product_spec.md` — RILA v1 product behavior/spec definition.
+- `annuity_model/docs/rila_product_spec.md` — RILA mechanics-production product behavior/spec definition.
+- `annuity_model/docs/iul_product_spec.md` — IUL mechanics-production product behavior/spec definition.
 - `annuity_model/docs/portfolio_runner_spec.md` — multi-policy portfolio runner behavior/spec definition.
 - `annuity_model/docs/parity_test_checklist.md` — merge/release parity checklist.
 - `annuity_model/docs/release_assumption_waiver.md` — waiver template when placeholder assumptions are used.

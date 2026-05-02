@@ -25,6 +25,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from policy_features import buffer_credited_return
+
 
 class CreditingStrategy(Protocol):
     """Per-segment crediting strategy.
@@ -92,6 +94,36 @@ class AnnualPointToPointCapped:
         return float(max(float(self.floor), min(float(self.cap), x)))
 
 
+@dataclass(frozen=True, slots=True)
+class AnnualPointToPointBuffer:
+    """Annual point-to-point RILA buffer design.
+
+    Positive returns receive participation up to ``cap``. Negative returns
+    are protected by ``buffer`` first, so a -15% raw return with a 10% buffer
+    credits -5%.
+    """
+
+    participation: float
+    cap: float
+    buffer: float
+
+    def __post_init__(self) -> None:
+        if float(self.participation) < 0.0:
+            raise ValueError("participation must be >= 0.")
+        if float(self.cap) < 0.0:
+            raise ValueError("cap must be >= 0 for buffer designs.")
+        if not (0.0 <= float(self.buffer) <= 1.0):
+            raise ValueError("buffer must be in [0, 1].")
+
+    def credit_segment(self, *, raw_index_return: float) -> float:
+        return buffer_credited_return(
+            raw_index_return=float(raw_index_return),
+            participation=float(self.participation),
+            cap=float(self.cap),
+            buffer=float(self.buffer),
+        )
+
+
 def segment_credited_return_from_strategy(
     *, strategy: CreditingStrategy, raw_index_return: float
 ) -> float:
@@ -105,6 +137,7 @@ def segment_credited_return_from_strategy(
 
 
 __all__ = [
+    "AnnualPointToPointBuffer",
     "AnnualPointToPointCapped",
     "CreditingStrategy",
     "FixedDeclaredRate",

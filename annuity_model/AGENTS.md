@@ -1,7 +1,10 @@
 # Agent Instructions — SPIA Annuity Model
 
-This project implements SPIA, Term Life, and RILA (accumulation) pricing with ALM projection
-and two synchronised calculation engines where applicable: Python and Excel.
+This project implements SPIA, Term Life, RILA, MYGA, FIA, VA, WL, UL, IUL, and VUL
+pricing/projection with ALM projection and two synchronised calculation engines where
+applicable: Python and Excel. RILA and IUL are classified as mechanics-production
+product-mechanics prototypes: policy mechanics and selected-path Excel replication are
+production-grade, while assumption governance remains advisory until Actuary SME signoff.
 
 For a cross-platform overview of project-development controls (rules, skills, delegated
 reviews/subagents, regressions, and governance workflow), see
@@ -149,7 +152,8 @@ through `parity_constants.py` plus `model_change_log.md`.
 | `tests/parity/test_alm_parity.py` | Parity regression tests |
 | `rila_projection.py` | RILA liability / crediting (Python) |
 | `build_rila_excel_workbook.py` | RILA Excel workbook + `ModelCheck` |
-| `docs/rila_product_spec.md` | RILA v1 product definition |
+| `docs/rila_product_spec.md` | RILA mechanics-production product definition |
+| `docs/iul_product_spec.md` | IUL mechanics-production product definition |
 | `docs/rila_parity_contract.md` | RILA Python ↔ Excel parity addendum |
 | `tests/parity/test_rila_parity.py` | RILA parity tests |
 | `portfolio_runner.py` | Multi-policy pricing loop + optional process pool |
@@ -191,8 +195,8 @@ through `parity_constants.py` plus `model_change_log.md`.
    the column letters that match your product's `Liabilities` layout (e.g. RILA
    uses `liability_total_col="M"`). The end-to-end gate
    `tests/test_excel_export_validation.py` builds workbooks for every implemented
-   product (SPIA, Term, RILA) and runs the validator on them; that test must
-   always pass.
+   workbook-backed product, including RILA and IUL formula-mechanics sheets, and
+   runs the validator on them; that test must always pass.
 
 ## Parity kit for future products
 
