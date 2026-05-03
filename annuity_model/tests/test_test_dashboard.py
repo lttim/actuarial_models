@@ -14,7 +14,10 @@ def test_discover_tests_metadata_non_empty() -> None:
     rows = td.discover_tests_metadata()
     assert len(rows) > 500, "expected dashboard discovery to reflect the full pytest suite"
     nodeids = {r["nodeid"] for r in rows}
-    assert "tests/test_pricing_projection.py::test_yield_curve_from_flat_rate_discount_factors" in nodeids
+    assert (
+        "tests/test_pricing_projection.py::test_yield_curve_from_flat_rate_discount_factors"
+        in nodeids
+    )
     assert any(
         n.startswith("tests/test_regression_matrix.py::test_regression_matrix_cell[")
         for n in nodeids

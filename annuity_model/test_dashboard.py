@@ -333,7 +333,9 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
                 label_visibility="collapsed",
             )
         with c_run:
-            if st.button("Run selected", type="primary", use_container_width=True, key="pytest_run_embedded"):
+            if st.button(
+                "Run selected", type="primary", use_container_width=True, key="pytest_run_embedded"
+            ):
                 _run_clicked()
     else:
         with st.sidebar:
@@ -369,7 +371,10 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
     st.divider()
 
     # Group by section
-    st.caption(f"Showing `{selected_preset}` tests" + (f" matching `-k {filter_text}`." if filter_text else "."))
+    st.caption(
+        f"Showing `{selected_preset}` tests"
+        + (f" matching `-k {filter_text}`." if filter_text else ".")
+    )
 
     sections: dict[str, list[dict[str, Any]]] = {}
     for m in meta:

@@ -41,10 +41,8 @@ if str(ROOT) not in sys.path:
 import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
-from assumption_provenance import provenance_rows_from_pricing_state
-from dynamic_lapse import DynamicLapseConfig, dynamic_lapse_path, persistency_from_monthly_lapse
-from experience_study import sample_experience_rows
 from alm_excel_ladder import ALM_ENGINE_SHEET
+from assumption_provenance import provenance_rows_from_pricing_state
 from build_portfolio_excel_workbook import build_portfolio_workbook_bytes
 from build_pricing_excel_workbook import (
     ALM_ENGINE_FIELD_GUIDE_SHEET,
@@ -61,8 +59,11 @@ from build_pricing_excel_workbook import (
     alm_excel_truncate_snapshot,
     mc_excel_snapshot_from_result,
 )
+from dynamic_lapse import DynamicLapseConfig, dynamic_lapse_path, persistency_from_monthly_lapse
+from experience_study import sample_experience_rows
 from inforce_io import load_policy_inputs_from_csv
 from liability_aggregation import padded_cashflows_on_portfolio_grid
+from parity_constants import MODELCHECK_TOL
 from portfolio import PolicyInput, Portfolio, PortfolioResult, RunScenario
 from portfolio_config import (
     portfolio_disabled_explanation_markdown,
@@ -71,7 +72,6 @@ from portfolio_config import (
 )
 from portfolio_runner import run_portfolio
 from portfolio_summary import portfolio_result_to_summary_dict
-from parity_constants import MODELCHECK_TOL
 from pricing_run_form_state import (
     PORTFOLIO_INFORCE_SCRATCH_COLUMNS,
     PORTFOLIO_KEY,
@@ -1342,8 +1342,12 @@ def _execute_portfolio_pricing(
 
 
 def _pricing_metrics_dict(result: Any) -> dict[str, float]:
-    reserve = np.asarray(getattr(result, "economic_reserve", np.asarray([], dtype=float)), dtype=float)
-    av = np.asarray(getattr(result, "account_value_end_month", np.asarray([], dtype=float)), dtype=float)
+    reserve = np.asarray(
+        getattr(result, "economic_reserve", np.asarray([], dtype=float)), dtype=float
+    )
+    av = np.asarray(
+        getattr(result, "account_value_end_month", np.asarray([], dtype=float)), dtype=float
+    )
     expected_cf = np.asarray(
         getattr(result, "expected_total_cashflows", np.asarray([], dtype=float)), dtype=float
     )
@@ -1364,7 +1368,9 @@ def _pricing_metrics_dict(result: Any) -> dict[str, float]:
         "margin": premium - (pv_benefit + pv_expenses),
         "reserve_at_issue": float(reserve[0]) if reserve.size else float("nan"),
         "account_value_at_horizon": float(av[-1]) if av.size else float("nan"),
-        "undiscounted_cashflow_sum": float(np.sum(expected_cf)) if expected_cf.size else float("nan"),
+        "undiscounted_cashflow_sum": float(np.sum(expected_cf))
+        if expected_cf.size
+        else float("nan"),
         "cashflow_weighted_duration": weighted_duration,
     }
 
@@ -1401,8 +1407,14 @@ def _render_assumption_provenance_panel() -> None:
         "warning",
     ]
     df = pd.DataFrame(rows)
-    st.dataframe(df[[c for c in show_cols if c in df.columns]], use_container_width=True, hide_index=True)
-    risky = df[df.get("requires_waiver_for_release", False).astype(bool)] if "requires_waiver_for_release" in df else pd.DataFrame()
+    st.dataframe(
+        df[[c for c in show_cols if c in df.columns]], use_container_width=True, hide_index=True
+    )
+    risky = (
+        df[df.get("requires_waiver_for_release", False).astype(bool)]
+        if "requires_waiver_for_release" in df
+        else pd.DataFrame()
+    )
     if not risky.empty:
         st.warning(
             "One or more assumptions are provisional or waiver-controlled. This is visible by design for demo governance."
@@ -1467,8 +1479,7 @@ def _price_workbench_scenario(
         index_scenario_csv_path=index_scenario_csv_path,
         expense_annual_inflation=max(
             -0.99,
-            float(expense_annual_inflation)
-            + float(scenario.expense_inflation_shift_pct) / 100.0,
+            float(expense_annual_inflation) + float(scenario.expense_inflation_shift_pct) / 100.0,
         ),
     )
 
@@ -1512,7 +1523,9 @@ def _render_pricing_workbench() -> None:
     contract = st.session_state.get("pricing_contract")
     ctx = st.session_state.get("pricing_excel_context") or {}
     if base_res is None or contract is None:
-        st.info("Run Pricing Run first; the workbench uses that contract and assumption package as its base.")
+        st.info(
+            "Run Pricing Run first; the workbench uses that contract and assumption package as its base."
+        )
         return
     product_raw = st.session_state.get("pricing_product_type", ProductType.SPIA.value)
     try:
@@ -1527,7 +1540,9 @@ def _render_pricing_workbench() -> None:
         or not isinstance(base_mortality, (sp.MortalityTableQx, sp.MortalityTableRP2014MP2016))
         or not isinstance(base_expenses, sp.ExpenseAssumptions)
     ):
-        st.warning("Workbench needs yield curve, mortality, and expenses from the active pricing run.")
+        st.warning(
+            "Workbench needs yield curve, mortality, and expenses from the active pricing run."
+        )
         return
 
     catalog = list(list_pricing_scenarios())
@@ -1614,7 +1629,7 @@ def _render_pricing_workbench() -> None:
                         s0=float(mc_params.get("s0", 100.0)),
                     )
                     if hasattr(mc, "premium_p95"):
-                        tail_p95 = float(getattr(mc, "premium_p95"))
+                        tail_p95 = float(mc.premium_p95)
                     else:
                         arr = np.asarray(getattr(mc, "pv_benefit", np.asarray([])), dtype=float)
                         arr = arr[np.isfinite(arr)]
@@ -4562,9 +4577,12 @@ def _render_alm_section() -> None:
     aum0 = st.number_input(
         "Initial asset market value ($)",
         min_value=0.0,
-        value=float(res.single_premium),
+        value=max(float(res.single_premium), 0.0),
         step=10_000.0,
-        help="Usually the priced single premium invested at issue.",
+        help=(
+            "Usually the priced single premium invested at issue. Defaults to $0 when "
+            "the pricing result is a negative net liability."
+        ),
     )
 
     # Persist the current ALM selection so What-if and diagnostics can reflect the user's latest inputs

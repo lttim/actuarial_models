@@ -84,7 +84,6 @@ Complete catalog of tracked documentation in this repository, with one-line purp
 - `annuity_model/docs/runbooks/investigate_parity_break.md` — triage workflow for parity failures.
 - `annuity_model/docs/runbooks/debug_validator_failure.md` — triage workflow for workbook validator failures.
 - `annuity_model/docs/runbooks/regenerate_excel_cache.md` — formula-cache/recalc workflow for Excel workbooks.
-- `annuity_model/docs/runbooks/runtime_excel_recalc_gate.md` — runtime recalc gate rationale, setup, and CI behavior.
 - `annuity_model/docs/runbooks/portfolio_run.md` — CLI/UI and acceptance flow for portfolio runs.
 - `annuity_model/docs/runbooks/release.md` — release process, tagging, and branch-protection refresh workflow.
 - `annuity_model/docs/runbooks/assumption_release_guardrail.md` — release guardrail and waiver usage process.

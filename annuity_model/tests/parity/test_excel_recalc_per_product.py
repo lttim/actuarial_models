@@ -916,7 +916,10 @@ def test_modelcheck_formula_contract(
             f"linked to the canonical liability summary row: got {formula!r}, "
             f"expected {_MODELCHECK_FORMULA_TARGETS[coord_with_sheet]!r}."
         )
-        assert wb["Liabilities"][_MODELCHECK_FORMULA_TARGETS[coord_with_sheet].split("!", 1)[1]].value is not None
+        assert (
+            wb["Liabilities"][_MODELCHECK_FORMULA_TARGETS[coord_with_sheet].split("!", 1)[1]].value
+            is not None
+        )
 
 
 # ---------------------------------------------------------------------------

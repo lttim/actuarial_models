@@ -231,11 +231,12 @@ def _set_deterministic_pricing_inputs(at: Any) -> None:
     """Pin the random-ish inputs so the pricing run is deterministic.
 
     We don't need to set every widget -- the form has sensible defaults
-    seeded by ``build_run_form_seed_defaults``. We just nail down
-    ``run_issue_age`` to a value that's identical across all three
-    products and well inside every age-validation guard, so any
-    difference between products comes from product wiring, not from a
-    random default that happens to violate a per-product range.
+    seeded by ``build_run_form_seed_defaults``. We nail down the shared
+    age/horizon controls to values that are identical across products
+    and small enough for AppTest's 60-second rerun budget. This still
+    exercises the full form -> adapter -> engine -> workbook path, but
+    avoids using the production default horizon_age=110 for long RILA
+    workbook builds inside the UI harness.
     """
     # Match against RUN_KEY.ISSUE_AGE rather than the raw literal -- the
     # tests/test_run_state_key_drift.py ratchet forbids new files from
@@ -243,7 +244,8 @@ def _set_deterministic_pricing_inputs(at: Any) -> None:
     for inp in at.number_input:
         if inp.key == RUN_KEY.ISSUE_AGE:
             inp.set_value(55)
-            return
+        elif inp.key == RUN_KEY.HORIZON_AGE:
+            inp.set_value(65)
 
 
 _PRODUCT_RUN_CASES: list[tuple[str, str, str]] = [

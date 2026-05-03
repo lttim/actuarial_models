@@ -108,8 +108,10 @@ def provenance_rows_from_pricing_state(
             (pricing_run_inputs.get("yield_par_csv"), "Yield curve par source"),
             (None, "Yield curve bootstrapped zero"),
         ]:
-            artifact = _artifact_by_path(path) if path else next(
-                (a for a in REGISTRY if a.name == "treasury_zero_curve"), None
+            artifact = (
+                _artifact_by_path(path)
+                if path
+                else next((a for a in REGISTRY if a.name == "treasury_zero_curve"), None)
             )
             rows.append(
                 _entry(role=role, artifact=artifact, path=path, mode=y_mode, approvals=approvals)
@@ -170,7 +172,9 @@ def provenance_rows_from_pricing_state(
                 )
     else:
         rows.append(
-            _entry(role="Mortality table", artifact=None, path=None, mode=m_mode, approvals=approvals)
+            _entry(
+                role="Mortality table", artifact=None, path=None, mode=m_mode, approvals=approvals
+            )
         )
 
     expense_mode = str(

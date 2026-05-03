@@ -67,6 +67,10 @@ bench:
 ci: lint test smoke docs-check
     @echo "All CI gates passed locally."
 
+# Post-stall confidence sweep for Excel generation, product parity, docs, and CI lint.
+deep-assessment *args="":
+    cd annuity_model && python scripts/deep_assessment.py "$@"
+
 # AI-agent / contributor pre-merge gate: run the four canonical gates from
 # annuity_model/AGENTS.md in order and print "READY TO COMMIT" only when all
 # four exit 0. The PR template (.github/pull_request_template.md) lists the
