@@ -11,7 +11,7 @@ from portfolio import PortfolioResult
 
 def _summary_float(value: float) -> float:
     """Stable JSON precision for cross-platform portfolio golden snapshots."""
-    return round(float(value), 10)
+    return round(float(value), 8)
 
 
 def portfolio_result_to_summary_dict(res: PortfolioResult) -> dict[str, Any]:

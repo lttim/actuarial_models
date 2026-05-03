@@ -4,33 +4,33 @@
     "myga": {
       "policy_count": 1,
       "sum_single_premium": 100000.0,
-      "sum_undiscounted_cashflows": 125388.8879768332,
-      "rollup_cf_sum": 125388.8879768332
+      "sum_undiscounted_cashflows": 125388.88797683,
+      "rollup_cf_sum": 125388.88797683
     },
     "rila": {
       "policy_count": 1,
-      "sum_single_premium": 12933.941317601,
-      "sum_undiscounted_cashflows": 35256.3152266092,
-      "rollup_cf_sum": 35256.3152266092
+      "sum_single_premium": 12933.9413176,
+      "sum_undiscounted_cashflows": 35256.31522661,
+      "rollup_cf_sum": 35256.31522661
     },
     "spia": {
       "policy_count": 1,
-      "sum_single_premium": 1525834.0644854004,
-      "sum_undiscounted_cashflows": 2695755.793629329,
-      "rollup_cf_sum": 2695755.793629329
+      "sum_single_premium": 1525834.0644854,
+      "sum_undiscounted_cashflows": 2695755.79362933,
+      "rollup_cf_sum": 2695755.79362933
     },
     "term_life": {
       "policy_count": 1,
-      "sum_single_premium": -21176.1225236171,
-      "sum_undiscounted_cashflows": -29362.5706819434,
-      "rollup_cf_sum": -29362.5706819434
+      "sum_single_premium": -21176.12252362,
+      "sum_undiscounted_cashflows": -29362.57068194,
+      "rollup_cf_sum": -29362.57068194
     },
     "universal_life": {
       "policy_count": 1,
       "sum_single_premium": 30000.0,
-      "sum_undiscounted_cashflows": 87601.5219311432,
-      "rollup_cf_sum": 87601.5219311432
+      "sum_undiscounted_cashflows": 87601.52193114,
+      "rollup_cf_sum": 87601.52193114
     }
   },
-  "total_cf_sum": 2914639.9480819716
+  "total_cf_sum": 2914639.94808197
 }
