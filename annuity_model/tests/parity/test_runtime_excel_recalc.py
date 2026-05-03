@@ -44,7 +44,8 @@ from build_pricing_excel_workbook import (
 )
 from excel_runtime_recalc import (
     LIBREOFFICE_INSTALL_HINT,
-    libreoffice_available,
+    libreoffice_recalc_disabled_reason,
+    libreoffice_runtime_recalc_available,
     read_recalculated_cells,
     recalc_workbook,
 )
@@ -105,7 +106,10 @@ def _build_small_spia_workbook() -> tuple[bytes, sp.SPIAProjectionResult]:
 
 @pytest.fixture(scope="module")
 def libreoffice_or_skip() -> None:
-    if not libreoffice_available():
+    disabled_reason = libreoffice_recalc_disabled_reason()
+    if disabled_reason is not None:
+        pytest.skip(disabled_reason)
+    if not libreoffice_runtime_recalc_available():
         pytest.skip(
             "LibreOffice (soffice) not on PATH; runtime recalc gate skipped. "
             f"{LIBREOFFICE_INSTALL_HINT}"

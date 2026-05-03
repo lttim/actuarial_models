@@ -2,15 +2,29 @@
 
 ## Status
 
-**Active** since 2026-04-18 (P0 hardening, this PR).
+**Active in CI / opt-in on macOS local machines** since 2026-05-03.
 
 The gate is implemented as
 [`tests/parity/test_excel_recalc_per_product.py`](../../tests/parity/test_excel_recalc_per_product.py)
 plus the helper [`excel_runtime_recalc.py`](../../excel_runtime_recalc.py).
-It builds per-product workbooks and recalculates them via
+It builds per-product workbooks and, where enabled, recalculates them via
 **LibreOffice headless** (`soffice --headless --calc --convert-to xlsx`),
 then asserts the cached `ModelCheck` cells match the Python pricing result
 within `parity_constants.MODELCHECK_TOL`.
+
+On macOS developer machines this runtime layer is skipped by default because
+LibreOffice can surface desktop crash/reopen dialogs when automated headless
+Calc exits unexpectedly. To opt in for a single controlled local run:
+
+```bash
+ANNUITY_MODEL_ENABLE_MACOS_LIBREOFFICE_RECALC=1 \
+  annuity_model/.venv/bin/python -m pytest annuity_model/tests/parity/test_excel_recalc_per_product.py -q
+```
+
+The helper serializes all LibreOffice recalc invocations across local
+processes via a host-wide lock and passes a per-run
+`-env:UserInstallation=file://...` profile. This prevents the concurrent
+subagent/pytest collision that can make macOS LibreOffice unstable.
 
 ## Why LibreOffice instead of a pure-Python evaluator?
 
@@ -23,9 +37,9 @@ Pure-Python alternatives all have caveats:
   graph for thousands of cells. Unusable in CI on every PR.
 * `pycel` has narrower function coverage and a similar perf profile.
 
-LibreOffice is the same engine real users open these workbooks in, install
-size on Linux is ~250 MB via apt, and a SPIA recalc completes in <5
-seconds.
+LibreOffice remains the pragmatic CI answer: it is the same engine many users
+open these workbooks in, install size on Linux is ~250 MB via apt, and a SPIA
+recalc completes quickly on the Ubuntu parity runner.
 
 ## Local install
 
@@ -46,10 +60,11 @@ seconds.
 After installing, ensure `soffice` is on `PATH`. As a fallback, set
 `$LIBREOFFICE_SOFFICE` to its absolute path; the helper will pick it up.
 
-If LibreOffice is **not** installed locally, the test
-`test_modelcheck_cells_recalc_to_python_values` skips with a clear
-install hint -- contributors are NOT blocked. CI installs it on the
-parity-gate runner so the gate is enforced upstream.
+If LibreOffice is **not** installed locally, or if the machine is macOS and
+`ANNUITY_MODEL_ENABLE_MACOS_LIBREOFFICE_RECALC` is not set, the runtime recalc
+tests skip with a clear message. Contributors are NOT blocked. CI installs
+LibreOffice on Linux so the runtime gate is enforced upstream without macOS
+desktop dialogs.
 
 ## CI
 
@@ -80,6 +95,9 @@ ones.
 
 ## Audit trail (most recent first)
 
+* **2026-05-03: macOS guarded.** Added host-wide serialization, explicit
+  LibreOffice user-profile isolation, and a macOS local opt-in guard to avoid
+  desktop crash/reopen dialogs during parallel agent or pytest runs.
 * **2026-04-18: restored.** Switched to LibreOffice headless via
   `excel_runtime_recalc.py`. Test re-enabled. Quarterly review cadence
   retired (this is the steady-state).

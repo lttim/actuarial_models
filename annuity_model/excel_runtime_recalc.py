@@ -42,12 +42,16 @@ from __future__ import annotations
 
 import io
 import os
+import platform
 import shutil
 import subprocess
 import tempfile
+import time
+from contextlib import contextmanager
 from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
+from typing import Iterator
 
 from openpyxl import Workbook, load_workbook
 
@@ -55,10 +59,13 @@ __all__ = [
     "LIBREOFFICE_INSTALL_HINT",
     "LibreOfficeNotAvailable",
     "LibreOfficeNotAvailableError",
+    "MACOS_LIBREOFFICE_RECALC_ENV",
     "RecalcTimeout",
     "RecalcTimeoutError",
     "ensure_libreoffice_available",
     "libreoffice_available",
+    "libreoffice_recalc_disabled_reason",
+    "libreoffice_runtime_recalc_available",
     "read_recalculated_cells",
     "recalc_workbook",
     "resolve_soffice",
@@ -76,6 +83,16 @@ LIBREOFFICE_INSTALL_HINT = (
     "$LIBREOFFICE_SOFFICE to its absolute path)."
 )
 
+MACOS_LIBREOFFICE_RECALC_ENV = "ANNUITY_MODEL_ENABLE_MACOS_LIBREOFFICE_RECALC"
+"""Opt-in variable for real LibreOffice runtime recalc on macOS.
+
+macOS LibreOffice may surface desktop crash/reopen dialogs when automated
+headless Calc quits unexpectedly. The parity suite therefore skips runtime
+LibreOffice recalc on macOS by default. Linux CI still runs it when soffice is
+installed, and macOS users can opt in explicitly by setting this variable to a
+truthy value.
+"""
+
 
 class LibreOfficeNotAvailableError(RuntimeError):
     """Raised when LibreOffice is needed but not installed / not on PATH."""
@@ -87,6 +104,15 @@ class RecalcTimeoutError(RuntimeError):
 
 LibreOfficeNotAvailable = LibreOfficeNotAvailableError
 RecalcTimeout = RecalcTimeoutError
+LOCK_PATH = Path(tempfile.gettempdir()) / "annuity_model_libreoffice_recalc.lock"
+"""Host-wide lock used to serialize LibreOffice recalc across pytest agents.
+
+LibreOffice headless is reliable when one Calc process owns a user profile.
+On macOS it can abort or surface desktop crash dialogs when multiple headless
+``soffice`` processes launch concurrently, even with different ``HOME`` values.
+The lock is intentionally outside the repo so cloned worktrees and subagents on
+the same host still serialize through the same gate.
+"""
 
 
 def _candidate_paths() -> Iterable[str]:
@@ -179,11 +205,35 @@ def _soffice_can_convert(soffice: str) -> bool:
 
 
 def libreoffice_available() -> bool:
+    if libreoffice_recalc_disabled_reason() is not None:
+        return False
     soffice = resolve_soffice()
     return soffice is not None and _soffice_can_convert(soffice)
 
 
+def _truthy_env(name: str) -> bool:
+    return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def libreoffice_recalc_disabled_reason() -> str | None:
+    if platform.system() == "Darwin" and not _truthy_env(MACOS_LIBREOFFICE_RECALC_ENV):
+        return (
+            "LibreOffice runtime recalc is disabled by default on macOS because "
+            "headless soffice can trigger desktop crash/reopen dialogs. Set "
+            f"{MACOS_LIBREOFFICE_RECALC_ENV}=1 to opt in for a single controlled run. "
+            "Static workbook validation and Python-vs-Excel snapshot parity still run."
+        )
+    return None
+
+
+def libreoffice_runtime_recalc_available() -> bool:
+    return libreoffice_recalc_disabled_reason() is None and libreoffice_available()
+
+
 def ensure_libreoffice_available() -> str:
+    disabled = libreoffice_recalc_disabled_reason()
+    if disabled is not None:
+        raise LibreOfficeNotAvailable(disabled)
     soffice = resolve_soffice()
     if soffice is None:
         raise LibreOfficeNotAvailable(LIBREOFFICE_INSTALL_HINT)
@@ -202,6 +252,67 @@ def ensure_libreoffice_available() -> str:
             "permissions so `soffice --headless --convert-to xlsx` succeeds."
         )
     return soffice
+
+
+@contextmanager
+def _libreoffice_recalc_lock(*, timeout: float) -> Iterator[None]:
+    """Cross-process advisory lock around the fragile LibreOffice subprocess."""
+    deadline = time.monotonic() + max(float(timeout), 1.0)
+    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with LOCK_PATH.open("a+b") as fh:
+        try:
+            import fcntl
+        except ImportError:  # pragma: no cover - Windows fallback is exercised manually.
+            yield
+            return
+        while True:
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise RecalcTimeout(
+                        f"Timed out waiting for LibreOffice recalc lock at {LOCK_PATH}. "
+                        "Another pytest/subagent process is still recalculating a workbook."
+                    )
+                time.sleep(0.25)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
+def _soffice_command(
+    *,
+    soffice: str,
+    profile_dir: Path,
+    out_dir: Path,
+    in_path: Path,
+) -> list[str]:
+    return [
+        soffice,
+        f"-env:UserInstallation={profile_dir.as_uri()}",
+        "--headless",
+        "--calc",
+        "--norestore",
+        "--nologo",
+        "--nofirststartwizard",
+        "--convert-to",
+        "xlsx",
+        "--outdir",
+        str(out_dir),
+        str(in_path),
+    ]
+
+
+def _soffice_env(tmp: Path) -> dict[str, str]:
+    return {
+        **os.environ,
+        "HOME": str(tmp),
+        "TMPDIR": str(tmp),
+        "SAL_USE_VCLPLUGIN": os.environ.get("SAL_USE_VCLPLUGIN", "svp"),
+        "JAVA_TOOL_OPTIONS": os.environ.get("JAVA_TOOL_OPTIONS", "-Djava.awt.headless=true"),
+    }
 
 
 def recalc_workbook(blob: bytes, *, timeout: float = 60.0) -> bytes:
@@ -235,37 +346,31 @@ def recalc_workbook(blob: bytes, *, timeout: float = 60.0) -> bytes:
         tmp = Path(tmpdir)
         in_path = tmp / "in.xlsx"
         out_dir = tmp / "out"
+        profile_dir = tmp / "lo_profile"
         out_dir.mkdir()
+        profile_dir.mkdir()
         in_path.write_bytes(blob)
         # NOTE: soffice rewrites the output filename to match the input stem,
         # so we get out_dir / "in.xlsx".
-        cmd = [
-            soffice,
-            "--headless",
-            "--calc",
-            "--norestore",
-            "--nologo",
-            "--nofirststartwizard",
-            "--convert-to",
-            "xlsx",
-            "--outdir",
-            str(out_dir),
-            str(in_path),
-        ]
+        cmd = _soffice_command(
+            soffice=soffice,
+            profile_dir=profile_dir,
+            out_dir=out_dir,
+            in_path=in_path,
+        )
         try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                timeout=timeout,
-                check=False,
-                # Use a per-invocation user profile dir so concurrent CI jobs
-                # do not collide on the default ~/.config/libreoffice lock.
-                env={
-                    **os.environ,
-                    "HOME": str(tmp),
-                    "TMPDIR": str(tmp),
-                },
-            )
+            with _libreoffice_recalc_lock(timeout=timeout):
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    timeout=timeout,
+                    check=False,
+                    # Use a per-invocation user profile dir and a host-wide
+                    # lock. The profile prevents default ~/.config collisions;
+                    # the lock prevents macOS LibreOffice crash dialogs caused
+                    # by concurrent headless Calc startup.
+                    env=_soffice_env(tmp),
+                )
         except subprocess.TimeoutExpired as exc:
             raise RecalcTimeout(
                 f"soffice did not complete within {timeout}s. "

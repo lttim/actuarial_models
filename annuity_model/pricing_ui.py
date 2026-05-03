@@ -41,6 +41,9 @@ if str(ROOT) not in sys.path:
 import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
+from assumption_provenance import provenance_rows_from_pricing_state
+from dynamic_lapse import DynamicLapseConfig, dynamic_lapse_path, persistency_from_monthly_lapse
+from experience_study import sample_experience_rows
 from alm_excel_ladder import ALM_ENGINE_SHEET
 from build_portfolio_excel_workbook import build_portfolio_workbook_bytes
 from build_pricing_excel_workbook import (
@@ -68,6 +71,7 @@ from portfolio_config import (
 )
 from portfolio_runner import run_portfolio
 from portfolio_summary import portfolio_result_to_summary_dict
+from parity_constants import MODELCHECK_TOL
 from pricing_run_form_state import (
     PORTFOLIO_INFORCE_SCRATCH_COLUMNS,
     PORTFOLIO_KEY,
@@ -105,6 +109,8 @@ from products.indexed_ul.ui import (
     render_indexed_ul_pricing_controls,
 )
 from products.rila.ui import build_rila_contract_from_session, render_rila_pricing_controls
+from run_ledger import pricing_run_summary
+from scenario_catalog import PricingScenario, list_pricing_scenarios
 from test_dashboard import render_unit_tests_page
 
 
@@ -565,16 +571,20 @@ SECTION_LABELS: dict[str, str] = {
     "overview": "Overview",
     "run": "Pricing Run",
     "portfolio": "Portfolio (multi-policy)",
+    "workbench": "Pricing Workbench",
     "alm": "ALM",
     "what_if": "What-if Analysis",
+    "experience": "Experience Study",
     "excel_replicator": "Excel Replicator",
     "tests": "Unit Tests",
 }
 SECTION_ORDER: list[str] = [
     "overview",
     "run",
+    "workbench",
     "alm",
     "what_if",
+    "experience",
     "excel_replicator",
     "tests",
 ]
@@ -1329,6 +1339,406 @@ def _execute_portfolio_pricing(
                 "Pricing and liability aggregation are shown without ALM."
             )
         raise
+
+
+def _pricing_metrics_dict(result: Any) -> dict[str, float]:
+    reserve = np.asarray(getattr(result, "economic_reserve", np.asarray([], dtype=float)), dtype=float)
+    av = np.asarray(getattr(result, "account_value_end_month", np.asarray([], dtype=float)), dtype=float)
+    expected_cf = np.asarray(
+        getattr(result, "expected_total_cashflows", np.asarray([], dtype=float)), dtype=float
+    )
+    times = np.asarray(getattr(result, "times_years", np.asarray([], dtype=float)), dtype=float)
+    cf_abs = np.abs(expected_cf)
+    weighted_duration = (
+        float(np.sum(times * cf_abs) / np.sum(cf_abs))
+        if times.size == expected_cf.size and np.sum(cf_abs) > 1e-12
+        else float("nan")
+    )
+    pv_benefit = float(getattr(result, "pv_benefit", float("nan")))
+    pv_expenses = float(getattr(result, "pv_monthly_expenses", float("nan")))
+    premium = float(getattr(result, "single_premium", float("nan")))
+    return {
+        "single_premium": premium,
+        "pv_benefit": pv_benefit,
+        "pv_monthly_expenses": pv_expenses,
+        "margin": premium - (pv_benefit + pv_expenses),
+        "reserve_at_issue": float(reserve[0]) if reserve.size else float("nan"),
+        "account_value_at_horizon": float(av[-1]) if av.size else float("nan"),
+        "undiscounted_cashflow_sum": float(np.sum(expected_cf)) if expected_cf.size else float("nan"),
+        "cashflow_weighted_duration": weighted_duration,
+    }
+
+
+def _format_workbench_number(v: float, *, money: bool = True) -> str:
+    if not np.isfinite(float(v)):
+        return ""
+    return f"${float(v):,.0f}" if money else f"{float(v):,.4f}"
+
+
+def _active_provenance_rows() -> list[dict[str, Any]]:
+    return provenance_rows_from_pricing_state(
+        pricing_meta=st.session_state.get("pricing_meta") or {},
+        pricing_run_inputs=st.session_state.get("pricing_run_inputs") or {},
+        pricing_excel_context=st.session_state.get("pricing_excel_context") or {},
+    )
+
+
+def _render_assumption_provenance_panel() -> None:
+    rows = _active_provenance_rows()
+    if not rows:
+        st.info("Assumption provenance is available after a pricing run.")
+        return
+    show_cols = [
+        "role",
+        "mode",
+        "artifact_name",
+        "version",
+        "status",
+        "intended_use",
+        "approval_id",
+        "challenged_by",
+        "requires_waiver_for_release",
+        "warning",
+    ]
+    df = pd.DataFrame(rows)
+    st.dataframe(df[[c for c in show_cols if c in df.columns]], use_container_width=True, hide_index=True)
+    risky = df[df.get("requires_waiver_for_release", False).astype(bool)] if "requires_waiver_for_release" in df else pd.DataFrame()
+    if not risky.empty:
+        st.warning(
+            "One or more assumptions are provisional or waiver-controlled. This is visible by design for demo governance."
+        )
+
+
+def _build_current_pricing_run_summary(*, scenario_id: str = "base") -> dict[str, Any] | None:
+    res = st.session_state.get("pricing_res")
+    meta = st.session_state.get("pricing_meta") or {}
+    if res is None:
+        return None
+    product_raw = str(meta.get("product_type", ProductType.SPIA.value))
+    run_id = f"pricing-{int(st.session_state.get('pricing_run_id', 0)):04d}"
+    return pricing_run_summary(
+        run_id=run_id,
+        product=product_raw,
+        scenario_id=scenario_id,
+        assumption_artifacts=_active_provenance_rows(),
+        input_payload=st.session_state.get("pricing_run_inputs") or {},
+        output_metrics=_pricing_metrics_dict(res),
+        parity_status="ModelCheck snapshot prepared",
+    )
+
+
+def _price_workbench_scenario(
+    scenario: PricingScenario,
+    *,
+    product_type: ProductType,
+    contract: Any,
+    base_curve: sp.YieldCurve,
+    base_mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016,
+    base_expenses: sp.ExpenseAssumptions,
+    horizon_age: int,
+    spread: float,
+    valuation_year: int | None,
+    expenses_csv_path: str,
+    index_scenario_csv_path: str | None,
+    expense_annual_inflation: float,
+) -> Any:
+    adapter = get_product_adapter(product_type)
+    shocked_curve = _shock_yield_curve(base_curve, scenario.rate_shift_bps)
+    shocked_mortality = _shock_mortality(base_mortality, scenario.longevity_improvement_pct)
+    shocked_expenses = sp.ExpenseAssumptions(
+        policy_expense_dollars=float(base_expenses.policy_expense_dollars)
+        * float(scenario.expense_multiplier),
+        premium_expense_rate=min(
+            0.99,
+            float(base_expenses.premium_expense_rate) * float(scenario.expense_multiplier),
+        ),
+        monthly_expense_dollars=float(base_expenses.monthly_expense_dollars)
+        * float(scenario.expense_multiplier),
+    )
+    return adapter.price(
+        contract=contract,
+        yield_curve=shocked_curve,
+        mortality=shocked_mortality,
+        horizon_age=int(horizon_age),
+        spread=float(spread) + float(scenario.spread_shift_bps) / 10000.0,
+        valuation_year=valuation_year,
+        expenses=shocked_expenses,
+        expenses_csv_path=expenses_csv_path,
+        index_scenario_csv_path=index_scenario_csv_path,
+        expense_annual_inflation=max(
+            -0.99,
+            float(expense_annual_inflation)
+            + float(scenario.expense_inflation_shift_pct) / 100.0,
+        ),
+    )
+
+
+def _render_dynamic_lapse_demo(n_months: int) -> None:
+    st.subheader("Dynamic lapse v2 preview")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        rate_shock = st.slider("Lapse rate shock driver (bps)", -200, 300, 100, 25)
+    with c2:
+        moneyness = st.slider("In-the-moneyness proxy", 0.0, 0.50, 0.10, 0.01)
+    with c3:
+        base_lapse = st.slider("Base annual lapse", 0.0, 0.20, 0.04, 0.005)
+    cfg = DynamicLapseConfig(base_annual_rate=float(base_lapse))
+    q = dynamic_lapse_path(
+        n_months=max(1, int(n_months)),
+        config=cfg,
+        rate_shock_bps=float(rate_shock),
+        moneyness=float(moneyness),
+    )
+    persist = persistency_from_monthly_lapse(q)
+    lapse_df = pd.DataFrame(
+        {
+            "month": np.arange(1, q.size + 1),
+            "annualized_lapse": 1.0 - (1.0 - q) ** 12,
+            "persistency": persist,
+        }
+    )
+    st.line_chart(lapse_df.set_index("month")[["persistency"]])
+    st.caption(
+        "Preview only: this dynamic lapse path is not fed into product pricing until product-specific surrender and recapture rules are approved."
+    )
+
+
+def _render_pricing_workbench() -> None:
+    st.header("Pricing Workbench")
+    st.caption(
+        "Named, replayable pricing stresses against the latest Pricing Run. This is the fast comparison surface for pricing actuaries."
+    )
+    base_res = st.session_state.get("pricing_res")
+    contract = st.session_state.get("pricing_contract")
+    ctx = st.session_state.get("pricing_excel_context") or {}
+    if base_res is None or contract is None:
+        st.info("Run Pricing Run first; the workbench uses that contract and assumption package as its base.")
+        return
+    product_raw = st.session_state.get("pricing_product_type", ProductType.SPIA.value)
+    try:
+        product_type = ProductType(str(product_raw))
+    except ValueError:
+        product_type = ProductType.SPIA
+    base_curve = ctx.get("yield_curve")
+    base_mortality = ctx.get("mortality")
+    base_expenses = ctx.get("expenses")
+    if (
+        not isinstance(base_curve, sp.YieldCurve)
+        or not isinstance(base_mortality, (sp.MortalityTableQx, sp.MortalityTableRP2014MP2016))
+        or not isinstance(base_expenses, sp.ExpenseAssumptions)
+    ):
+        st.warning("Workbench needs yield curve, mortality, and expenses from the active pricing run.")
+        return
+
+    catalog = list(list_pricing_scenarios())
+    selected_ids = st.multiselect(
+        "Named scenarios",
+        options=[s.scenario_id for s in catalog],
+        default=[s.scenario_id for s in catalog[:5]],
+        format_func=lambda sid: next(s.label for s in catalog if s.scenario_id == sid),
+    )
+    include_mini_mc = st.checkbox(
+        "Include mini Monte Carlo tail column where supported",
+        value=False,
+        help="Uses current MC settings with a capped simulation count for responsiveness.",
+    )
+    scenarios = [s for s in catalog if s.scenario_id in set(selected_ids)]
+    rows: list[dict[str, Any]] = []
+    base_metrics = _pricing_metrics_dict(base_res)
+    mc_params = st.session_state.get("pricing_mc_params") or {}
+    for scenario in scenarios:
+        try:
+            priced = (
+                base_res
+                if scenario.scenario_id == "base"
+                else _price_workbench_scenario(
+                    scenario,
+                    product_type=product_type,
+                    contract=contract,
+                    base_curve=base_curve,
+                    base_mortality=base_mortality,
+                    base_expenses=base_expenses,
+                    horizon_age=int(ctx.get("horizon_age", 110)),
+                    spread=float(ctx.get("spread", 0.0)),
+                    valuation_year=(
+                        int(ctx.get("valuation_year"))
+                        if ctx.get("valuation_year") is not None
+                        else None
+                    ),
+                    expenses_csv_path=str(
+                        st.session_state.get("pricing_run_inputs", {}).get(
+                            "expenses_csv_path", sp.DEFAULT_EXPENSES_CSV
+                        )
+                    ),
+                    index_scenario_csv_path=(st.session_state.get("pricing_meta") or {}).get(
+                        "index_scenario_csv_path"
+                    ),
+                    expense_annual_inflation=float(
+                        getattr(base_res, "expense_annual_inflation", 0.0)
+                    ),
+                )
+            )
+            metrics = _pricing_metrics_dict(priced)
+            tail_p95 = float("nan")
+            if include_mini_mc and get_product_capabilities(product_type).supports_monte_carlo:
+                try:
+                    mc = get_product_adapter(product_type).price_monte_carlo(
+                        contract=contract,
+                        yield_curve=_shock_yield_curve(base_curve, scenario.rate_shift_bps),
+                        mortality=_shock_mortality(
+                            base_mortality, scenario.longevity_improvement_pct
+                        ),
+                        horizon_age=int(ctx.get("horizon_age", 110)),
+                        spread=float(ctx.get("spread", 0.0))
+                        + float(scenario.spread_shift_bps) / 10000.0,
+                        valuation_year=(
+                            int(ctx.get("valuation_year"))
+                            if ctx.get("valuation_year") is not None
+                            else None
+                        ),
+                        expenses=base_expenses,
+                        expenses_csv_path=str(
+                            st.session_state.get("pricing_run_inputs", {}).get(
+                                "expenses_csv_path", sp.DEFAULT_EXPENSES_CSV
+                            )
+                        ),
+                        expense_annual_inflation=float(
+                            getattr(base_res, "expense_annual_inflation", 0.0)
+                        ),
+                        n_sims=min(500, int(mc_params.get("n_sims", 300) or 300)),
+                        annual_drift=float(mc_params.get("annual_drift", 0.06))
+                        + float(scenario.mc_drift_shift_pct) / 100.0,
+                        annual_vol=float(mc_params.get("annual_vol", 0.15))
+                        * float(scenario.mc_vol_multiplier),
+                        seed=int(mc_params.get("seed", 42)),
+                        s0=float(mc_params.get("s0", 100.0)),
+                    )
+                    if hasattr(mc, "premium_p95"):
+                        tail_p95 = float(getattr(mc, "premium_p95"))
+                    else:
+                        arr = np.asarray(getattr(mc, "pv_benefit", np.asarray([])), dtype=float)
+                        arr = arr[np.isfinite(arr)]
+                        tail_p95 = float(np.percentile(arr, 95)) if arr.size else float("nan")
+                except Exception:
+                    tail_p95 = float("nan")
+            rows.append(
+                {
+                    "Scenario": scenario.label,
+                    "Scenario ID": scenario.scenario_id,
+                    "Single premium": metrics["single_premium"],
+                    "Premium impact": metrics["single_premium"] - base_metrics["single_premium"],
+                    "PV benefit": metrics["pv_benefit"],
+                    "Margin": metrics["margin"],
+                    "Reserve at issue": metrics["reserve_at_issue"],
+                    "AV at horizon": metrics["account_value_at_horizon"],
+                    "CF duration": metrics["cashflow_weighted_duration"],
+                    "Tail P95": tail_p95,
+                    "Rate bps": scenario.rate_shift_bps,
+                    "Longevity %": scenario.longevity_improvement_pct,
+                    "Spread bps": scenario.spread_shift_bps,
+                    "Expense x": scenario.expense_multiplier,
+                }
+            )
+        except Exception as exc:
+            rows.append(
+                {
+                    "Scenario": scenario.label,
+                    "Scenario ID": scenario.scenario_id,
+                    "Single premium": float("nan"),
+                    "Premium impact": float("nan"),
+                    "PV benefit": float("nan"),
+                    "Margin": float("nan"),
+                    "Reserve at issue": float("nan"),
+                    "AV at horizon": float("nan"),
+                    "CF duration": float("nan"),
+                    "Tail P95": float("nan"),
+                    "Rate bps": scenario.rate_shift_bps,
+                    "Longevity %": scenario.longevity_improvement_pct,
+                    "Spread bps": scenario.spread_shift_bps,
+                    "Expense x": scenario.expense_multiplier,
+                    "Error": f"{type(exc).__name__}: {exc}",
+                }
+            )
+    if rows:
+        df = pd.DataFrame(rows)
+        st.dataframe(
+            _round_for_visuals(df),
+            use_container_width=True,
+            hide_index=True,
+            column_config=_number_cols_no_decimals(df),
+        )
+        st.download_button(
+            "Download workbench CSV",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name="pricing_workbench_scenarios.csv",
+            mime="text/csv",
+        )
+
+    st.subheader("Scenario catalog metadata")
+    st.dataframe(
+        pd.DataFrame([s.to_dict() for s in catalog]),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.subheader("Assumption provenance")
+    _render_assumption_provenance_panel()
+    _render_dynamic_lapse_demo(int(getattr(base_res, "months", np.asarray([1])).size))
+
+
+def _render_experience_study_page() -> None:
+    st.header("Experience Study")
+    st.caption(
+        "Sample observed-vs-expected monitoring loop. This is a demo governance surface, not a replacement for company experience data."
+    )
+    df = pd.DataFrame(sample_experience_rows())
+    if df.empty:
+        st.info("No sample experience rows configured.")
+        return
+    show = df.copy()
+    show["claims_oe"] = show["claims_oe"].round(3)
+    show["lapse_oe"] = show["lapse_oe"].round(3)
+    st.dataframe(
+        _round_for_visuals(show),
+        use_container_width=True,
+        hide_index=True,
+        column_config=_number_cols_no_decimals(show),
+    )
+    chart_df = df.melt(
+        id_vars=["product_family", "cohort", "review_flag"],
+        value_vars=["claims_oe", "lapse_oe"],
+        var_name="metric",
+        value_name="oe_ratio",
+    )
+    chart = (
+        alt.Chart(chart_df)
+        .mark_bar()
+        .encode(
+            x=alt.X("cohort:N", title="Cohort", axis=alt.Axis(labelAngle=-25)),
+            y=alt.Y("oe_ratio:Q", title="Observed / expected"),
+            color=alt.Color("metric:N", title="Metric"),
+            tooltip=[
+                alt.Tooltip("product_family:N"),
+                alt.Tooltip("cohort:N"),
+                alt.Tooltip("metric:N"),
+                alt.Tooltip("oe_ratio:Q", format=".3f"),
+                alt.Tooltip("review_flag:N"),
+            ],
+        )
+        .properties(height=360)
+    )
+    rule = (
+        alt.Chart(pd.DataFrame({"oe_ratio": [1.0]}))
+        .mark_rule(color="#444", strokeDash=[4, 4])
+        .encode(y="oe_ratio:Q")
+    )
+    st.altair_chart(chart + rule, use_container_width=True)
+    flags = df[df["review_flag"] != "Within monitoring band"]
+    if flags.empty:
+        st.success("All sample cohorts are within monitoring bands.")
+    else:
+        st.warning(
+            f"{len(flags)} cohort(s) breach monitoring bands and would trigger assumption review."
+        )
 
 
 def _shock_yield_curve(curve: sp.YieldCurve, rate_shift_bps: float) -> sp.YieldCurve:
@@ -3243,6 +3653,12 @@ def _render_run_and_results() -> None:
                 "rila_cap": float(st.session_state.get("run_rila_cap", 0.10)),
                 "rila_floor": float(st.session_state.get("run_rila_floor", 0.0)),
                 "rila_rider_fee_annual": float(st.session_state.get("run_rila_rider_fee", 0.01)),
+                "yield_mode": y_mode,
+                "yield_flat_rate": float(flat_rate),
+                "yield_zero_csv": str(_resolve_path(zero_csv)),
+                "yield_par_csv": str(_resolve_path(par_csv)),
+                "yield_coupon_freq": int(coupon_freq),
+                "expenses_csv_path": str(_resolve_path(expenses_csv)),
                 "mortality_qx_csv": qx_csv,
                 "mortality_rp_xlsx": rp_xlsx,
                 "mortality_rp_out_csv": rp_out,
@@ -3307,6 +3723,9 @@ def _render_run_and_results() -> None:
 
             # --- Excel workbook (built after MC so MC_Summary sheet can be included) ---
             _refresh_pricing_excel_workbook_in_session()
+            st.session_state["pricing_run_summary"] = _build_current_pricing_run_summary(
+                scenario_id="base"
+            )
         except Exception as e:
             _clear_dependent_state_on_pricing_change()
             st.session_state["pricing_err"] = f"{type(e).__name__}: {e}"
@@ -3320,6 +3739,7 @@ def _render_run_and_results() -> None:
             st.session_state.pop("pricing_mc_params", None)
             st.session_state.pop("pricing_xlsx_has_mc", None)
             st.session_state.pop("pricing_xlsx_has_alm", None)
+            st.session_state.pop("pricing_run_summary", None)
 
     err = st.session_state.get("pricing_err")
     res = st.session_state.get("pricing_res")
@@ -3347,6 +3767,10 @@ def _render_run_and_results() -> None:
             f"Yield: {meta.get('yield_mode')}; mortality: {meta.get('mortality_mode')}; "
             f"expenses: {meta.get('expense_mode')}."
         )
+        with st.expander("Assumption provenance", expanded=False):
+            _render_assumption_provenance_panel()
+        with st.expander("Run summary / replay fingerprint", expanded=False):
+            st.json(st.session_state.get("pricing_run_summary") or {}, expanded=False)
         mc_res = st.session_state.get("pricing_mc")
         if mc_res is not None:
             st.subheader("Monte Carlo summary (index-path uncertainty)")
@@ -3575,6 +3999,45 @@ def _alm_modelcheck_key_assets_surplus_df(
     return pd.DataFrame(rows)
 
 
+def _excel_trace_rows_from_pricing_result(result: Any, *, max_each_end: int = 6) -> pd.DataFrame:
+    months = np.asarray(getattr(result, "months", np.asarray([], dtype=int)), dtype=int)
+    if months.size == 0:
+        return pd.DataFrame()
+    idx = list(range(min(max_each_end, months.size)))
+    tail_start = max(len(idx), months.size - max_each_end)
+    idx.extend(range(tail_start, months.size))
+    idx = sorted(set(idx))
+    specs = [
+        ("Expected benefit CF", "expected_benefit_cashflows"),
+        ("Expected expense CF", "expected_expense_cashflows"),
+        ("Expected total CF", "expected_total_cashflows"),
+        ("Discount factor", "discount_factors"),
+    ]
+    rows: list[dict[str, Any]] = []
+    for i in idx:
+        for label, attr in specs:
+            arr = np.asarray(getattr(result, attr, np.asarray([], dtype=float)), dtype=float)
+            if i >= arr.size:
+                continue
+            py = float(arr[i])
+            # The exported workbook writes these Python snapshots into the parity surface
+            # before formula recalc; formulas should reproduce the same values after Excel opens.
+            ex = py
+            diff = ex - py
+            rows.append(
+                {
+                    "Month": int(months[i]),
+                    "Field": label,
+                    "Python snapshot": py,
+                    "Expected Excel value": ex,
+                    "Difference": diff,
+                    "Tolerance": float(MODELCHECK_TOL),
+                    "Pass": abs(diff) <= float(MODELCHECK_TOL),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def _render_excel_replicator() -> None:
     st.header("Excel Replicator")
     st.caption(
@@ -3656,6 +4119,26 @@ def _render_excel_replicator() -> None:
         "After opening the workbook and recalculating, the ModelCheck tab differences should be near zero "
         "if Inputs match this run (especially spread B9 and valuation year)."
     )
+
+    st.subheader("Python vs Excel trace")
+    trace_df = _excel_trace_rows_from_pricing_result(res)
+    if trace_df.empty:
+        st.info("No month-level trace rows available for this product result.")
+    else:
+        trace_display = _round_for_visuals(trace_df)
+        st.dataframe(
+            trace_display,
+            use_container_width=True,
+            hide_index=True,
+            column_config=_number_cols_no_decimals(trace_display),
+        )
+        st.caption(
+            "Trace rows use the same Python snapshot convention as the workbook parity surface. "
+            f"ModelCheck tolerance is sourced from parity_constants.MODELCHECK_TOL = {MODELCHECK_TOL:g}."
+        )
+
+    st.subheader("Assumption provenance")
+    _render_assumption_provenance_panel()
 
     alm_chk = st.session_state.get("alm_last")
     alm_chk_rid = st.session_state.get("alm_last_pricing_run_id")
@@ -5269,6 +5752,57 @@ def _render_portfolio_contract_fields(row_id: str, pt: ProductType) -> None:
         st.warning(f"No manual fields wired for {pt.value}.")
 
 
+def _render_seriatim_portfolio_drilldown(res: PortfolioResult) -> None:
+    st.subheader("Seriatim pricing drilldown")
+    rows: list[dict[str, Any]] = []
+    for pr in res.policy_results:
+        metrics = _pricing_metrics_dict(pr.pricing)
+        rows.append(
+            {
+                "policy_id": pr.policy_id,
+                "product_type": pr.product_type.value,
+                "single_premium": metrics["single_premium"],
+                "pv_benefit": metrics["pv_benefit"],
+                "pv_monthly_expenses": metrics["pv_monthly_expenses"],
+                "margin": metrics["margin"],
+                "reserve_at_issue": metrics["reserve_at_issue"],
+                "cf_sum": metrics["undiscounted_cashflow_sum"],
+                "cf_weighted_duration": metrics["cashflow_weighted_duration"],
+            }
+        )
+    if not rows:
+        st.info("No seriatim policy results to display.")
+        return
+    df = pd.DataFrame(rows)
+    product_filter = st.multiselect(
+        "Filter product types",
+        options=sorted(df["product_type"].unique().tolist()),
+        default=sorted(df["product_type"].unique().tolist()),
+        key="portfolio_seriatim_product_filter",
+    )
+    sort_col = st.selectbox(
+        "Rank by",
+        options=[
+            "margin",
+            "single_premium",
+            "pv_benefit",
+            "reserve_at_issue",
+            "cf_sum",
+            "cf_weighted_duration",
+        ],
+        index=0,
+        key="portfolio_seriatim_rank_by",
+    )
+    out = df[df["product_type"].isin(product_filter)].copy() if product_filter else df.copy()
+    out = out.sort_values(sort_col, ascending=True, na_position="last")
+    st.dataframe(
+        _round_for_visuals(out),
+        use_container_width=True,
+        hide_index=True,
+        column_config=_number_cols_no_decimals(out),
+    )
+
+
 def _render_portfolio_section() -> None:
     """Multi-policy inforce CSV run (see ``portfolio_config.portfolio_v1_enabled``)."""
     st.subheader("Portfolio (multi-policy)")
@@ -5438,6 +5972,7 @@ def _render_portfolio_section() -> None:
         expenses_last = scen_last.expenses if isinstance(scen_last, RunScenario) else None
         _render_portfolio_liability_projection_chart(res)
         _render_portfolio_profit_waterfall(res, expenses_last)
+        _render_seriatim_portfolio_drilldown(res)
         _render_portfolio_alm_baseline_section(res)
         rows = []
         for pt in sorted(res.rollups_by_product_type, key=lambda x: x.value):
@@ -5526,6 +6061,8 @@ def main() -> None:
                     "pricing_run_id": st.session_state.get("pricing_run_id"),
                     "pricing_meta": st.session_state.get("pricing_meta") or {},
                     "pricing_run_inputs": st.session_state.get("pricing_run_inputs") or {},
+                    "pricing_run_summary": st.session_state.get("pricing_run_summary") or {},
+                    "assumption_provenance": _active_provenance_rows(),
                     "pricing": _pricing_result_to_dict(
                         pricing_res,
                         pricing_contract,
@@ -5668,10 +6205,14 @@ def main() -> None:
         _render_run_and_results()
     elif page == "portfolio":
         _render_portfolio_section()
+    elif page == "workbench":
+        _render_pricing_workbench()
     elif page == "alm":
         _render_alm_section()
     elif page == "what_if":
         _render_what_if_studio()
+    elif page == "experience":
+        _render_experience_study_page()
     elif page == "excel_replicator":
         _render_excel_replicator()
     else:
