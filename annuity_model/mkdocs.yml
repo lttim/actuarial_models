@@ -8,6 +8,13 @@ edit_uri: edit/main/annuity_model/
 docs_dir: docs
 site_dir: site
 
+validation:
+  nav:
+    omitted_files: ignore
+  links:
+    not_found: ignore
+    unrecognized_links: ignore
+
 theme:
   name: material
   features:
