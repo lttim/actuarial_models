@@ -117,7 +117,7 @@ portfolio-acceptance:
     @cd annuity_model && python -c 'import json, pathlib; root = pathlib.Path("tests/data/inforce/example_v1/expected_summary.json"); got = pathlib.Path(".smoke/portfolio_acceptance/portfolio_summary.json"); assert json.loads(root.read_text()) == json.loads(got.read_text()), "portfolio_summary.json drift"'
     @echo "[ring7 7/8] Gate 5 deterministic evidence (full scope)"
     @just actuary-review-full
-    @echo "[ring7 8/8] Manual: open .smoke/portfolio_acceptance/portfolio.xlsx in Excel or LibreOffice and confirm ModelCheck is 0.00 after recalc (AGENTS.md)."
+    @echo "[ring7 8/8] Manual: inspect .smoke/portfolio_acceptance/portfolio.xlsx ModelCheck links and validator output (AGENTS.md)."
     @echo "RING 7 + GATE 5 (deterministic): complete. Narrative SME verdict: see .cursor/actuary-reviews/iter-1-full-ring7-gate5.md"
 
 # Generate the Actuary SME evidence pack for an incremental review (the

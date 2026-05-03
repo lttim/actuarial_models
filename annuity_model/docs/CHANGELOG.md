@@ -158,7 +158,7 @@ End-to-end deliverables:
   Total runtime ~13 s on a 2024-era laptop. Module-level skip applies
   only when ``streamlit.testing.v1`` is unimportable (streamlit < 1.28),
   which is impossible under the pinned ``requirements.lock``.
-- **Per-product "Excel recalc matches Python" gate
+- **Per-product Excel workbook contract gate
   (``tests/parity/test_excel_recalc_per_product.py``, 7 tests).**
   Two complementary layers, both parametrized over every implemented
   product so a new product cannot ship without engaging both:
@@ -173,15 +173,11 @@ End-to-end deliverables:
      it catches the bug class where a builder refactor writes
      stale/rounded numbers into the workbook column the user actually
      reads in Excel.
-  2. ``test_libreoffice_recalc_matches_engine_<product>`` --
-     LibreOffice-headless recalc, parametrized per product (the
-     pre-existing ``test_runtime_excel_recalc.py`` only covered
-     SPIA). Runs in CI (parity-gate workflow installs
-     ``libreoffice-calc``) and on developer laptops with ``soffice``
-     on PATH; skips with a clear install hint otherwise. This is the
-     strongest gate -- it actually invokes the spreadsheet engine
-     end users open these workbooks in, catching builder bugs that
-     no static check can see (e.g. an off-by-one SUMPRODUCT range).
+  2. ``test_modelcheck_formula_contract_<product>`` --
+     parametrized per product and always running. It asserts
+     ModelCheck formula cells link to canonical validated liability
+     summary rows, catching stale or product-inappropriate formula
+     wiring without launching a desktop spreadsheet process.
 
   A coverage invariant
   (``test_every_implemented_product_has_a_recalc_case``) ensures the
@@ -541,11 +537,8 @@ End-to-end deliverables:
   expansion will come with the `src/` layout migration in Wave 3.3.
 
 - **Quarterly recurring check** for the parked runtime Excel recalc gate.
-  `annuity_model/docs/runbooks/runtime_excel_recalc_gate.md` now carries
-  a "Recurring quarterly check" section with three concrete `pip install
-  --dry-run` probes (xlcalculator update, yearfrac>=2 unblocked,
-  numpy>=2 + formulas/pycel) and a dated audit trail. Next review due
-  end of 2026-Q2.
+  This has since been superseded by always-on workbook formula-link checks
+  and static validation, avoiding desktop spreadsheet subprocess automation.
 
 ### Deferred
 - **Wave 4 (decompose `pricing_ui.py` into `ui/pages/*`)** is carried
@@ -757,7 +750,7 @@ End-to-end deliverables:
      resolves them, and on out-of-tree references (`../README.md`,
      `../AGENTS.md`). Stripped the duplicate prefix; switched out-of-tree
      links to absolute GitHub URLs (parity_test_checklist, index page,
-     and the new runtime_excel_recalc_gate runbook).
+     and the workbook inspection runbook).
   3. **`pre-commit` job** also failed mypy because the original strict
      override list (`pricing_projection`, `term_projection`,
      `rila_projection`, `alm_excel_ladder`, `excel_workbook_validator`,
@@ -789,10 +782,8 @@ End-to-end deliverables:
   `ci.yml` and `docs.yml` failed at the install step on first push. Locally
   the conflict was masked because the `.venv` predated the `xlcalculator`
   addition. Resolution: parked `xlcalculator` (commented out in
-  `requirements-dev.txt`); the corresponding parity test
-  `tests/parity/test_runtime_excel_recalc.py` already self-skips via
-  `pytest.importorskip`. See
-  `docs/runbooks/runtime_excel_recalc_gate.md` for the restore plan.
+  `requirements-dev.txt`); later hardening replaced this dependency path
+  with static workbook validation and ModelCheck formula-link checks.
 - `.github/workflows/docs.yml` now installs from `requirements.lock` instead
   of the loose `requirements.txt + requirements-dev.txt`, so docs builds are
   reproducible and immune to upstream transitive-dep drift (e.g. the

@@ -562,8 +562,8 @@ This phase is the **end-to-end UI smoke and full regression**:
 3. **`scripts/deep_smoke.py`** exercises all 10 products + the 4 ALM-enabled
    variants we want to keep ahead of regression (SPIA + RILA + UL + IUL).
 4. **`tests/parity/test_excel_recalc_per_product.py`** runs both layers
-   (always-on Python literal check + LibreOffice headless recalc) for all 10
-   products. CI parity-gate workflow installs LibreOffice so layer 2 runs.
+   (always-on Python literal check + ModelCheck formula-link contract) for
+   all 10 products.
 5. **Mypy strict glob test** (`tests/test_mypy_strict_glob.py`) confirms
    `products.<new>.engine`, `.excel`, `.schema`, `.ui` are all picked up.
 6. **Mutmut PR gate** runs against all touched parity-critical files; zero
@@ -619,7 +619,7 @@ per product.
 |-------------|---------------------------|---------|
 | Parity (always-on) | `tests/parity/test_<P>_parity.py` | Per-month engine invariants + ModelCheck reconciliation within `LIFE_MODELCHECK_TOL` / `ANNUITY_ACCUM_MODELCHECK_TOL` |
 | Parity (golden) | `tests/parity/golden/<P>.json` | Byte-exact ModelCheck snapshot; updates only via `UPDATE_GOLDEN_MODELCHECK=1` |
-| Parity (recalc) | one entry in `_CASE_BUILDERS` | Always-on cached check + LibreOffice recalc |
+| Parity (workbook) | one entry in `_CASE_BUILDERS` | Always-on cached check + ModelCheck formula-link contract |
 | Regression matrix | one fixture in `_FIXTURE_BUILDERS` | Surface coverage cube |
 | Unit (engine) | `tests/test_<P>_projection.py` | Engine-level branch coverage |
 | Unit (Excel) | none new — covered by `tests/test_excel_export_validation.py` parametrized over `implemented_product_types()` | |
@@ -762,7 +762,7 @@ constraints on every builder:
    `excel_workbook_validator.FUNCTION_ARITIES` in the same commit.
 5. **ModelCheck pattern reuses `write_model_check_sheet`** — no
    per-product ModelCheck implementation.
-6. **Per-product LibreOffice recalc case** in
+6. **Per-product workbook contract case** in
    `tests/parity/test_excel_recalc_per_product.py::_CASE_BUILDERS` — the
    gate `test_every_implemented_product_has_a_recalc_case` enforces
    presence.
@@ -802,7 +802,7 @@ helper is unchanged.
 | `pricing_ui.py` becomes unreadable after +500 LOC | Medium | Low | Hard-cap per-product blocks (~70 LOC each); enforce registry-only path for any non-widget per-product logic. |
 | Lapse framework misapplied to existing products silently | Low | High | Default `lapse=None` everywhere; existing engines never call combined survival path; explicit unit test `test_lapse_default_is_no_op_for_<P>`. |
 | UL/IUL/VUL implicit single-premium equation infeasibility (à la RILA's `RILAPricingInfeasibleError`) | Medium | Medium | Reuse the RILA pattern: explicit `<P>PricingInfeasibleError` for the AV-can't-cover-COI case. Tests cover the boundary. |
-| LibreOffice recalc differences between platforms | Medium | Medium | Existing CI workflow installs a pinned LibreOffice; new products use the same patterns. Pre-existing runbook `runtime_excel_recalc_gate.md` applies. |
+| Desktop spreadsheet automation differences between platforms | Medium | Medium | Automated gates avoid desktop spreadsheet subprocesses; new products use static validation, Python snapshots, and ModelCheck formula-link checks. |
 | Property tests find a real bug late | Medium | Low | Hypothesis is fast (~25 examples per case); run on every internal phase. |
 | Mutmut surviving mutants in new modules | Medium | Medium | Run `mutmut_pr_gate.py` before each phase commit; address survivors by adding tests. `default = 0` enforces. |
 | Static lapse table doesn't cover dynamic-lapse use cases | Low | Low | Documented as v1 limitation in `docs/lapse_framework.md`; `LapseAssumption` extensible to dynamic in v2 without breaking v1 callers. |
@@ -859,8 +859,8 @@ phase boundaries are the seams a reviewer should use:
 
 8. **Last: rebuild the workbook ZIP for one product end-to-end** with
    `streamlit run pricing_ui.py`, click through the run, download the
-   `.xlsx`, open in real Excel (not just LibreOffice), and confirm
-   `ModelCheck` shows 0.00 difference. The runbook
+   `.xlsx`, inspect the `ModelCheck` formulas and confirm they link to the
+   expected validated liability summary rows. The runbook
    `docs/runbooks/regenerate_excel_cache.md` walks through this.
 
 ---
@@ -903,7 +903,7 @@ Phase 7: VUL        — same template (UL + sub-account); Step P uses §13.3 VUL
 Phase 8: Comprehensive regression
   ├─ AppTest full workflow walks all 10 products
   ├─ deep_smoke walks all 10 products
-  ├─ LibreOffice recalc walks all 10 products
+  ├─ ModelCheck formula-link contract walks all 10 products
   ├─ Mypy strict glob covers all new shims
   ├─ Mutmut PR gate green
   ├─ Hypothesis property gates green

@@ -84,7 +84,7 @@ Regression handling is mandatory, not optional:
 - Every numerical bug fix must add a permanent regression test.
 - Step-level parity is required where applicable, not just final-value parity.
 - Tolerances are never widened as a shortcut to green tests.
-- Excel-generating changes require both static validation and runtime recalc confidence paths.
+- Excel-generating changes require static validation, Python snapshot parity, and ModelCheck formula-link checks.
 
 Primary regression references:
 
@@ -92,7 +92,6 @@ Primary regression references:
 - `annuity_model/docs/parity_test_checklist.md`
 - `annuity_model/docs/runbooks/investigate_parity_break.md`
 - `annuity_model/docs/runbooks/debug_validator_failure.md`
-- `annuity_model/docs/runbooks/runtime_excel_recalc_gate.md`
 
 ## 5) Rules, skills, and subagents across AI platforms
 

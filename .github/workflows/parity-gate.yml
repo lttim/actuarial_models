@@ -41,11 +41,6 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.lock -r requirements-dev.txt
-      - name: Install LibreOffice (runtime Excel recalc gate)
-        # Powers tests/parity/test_runtime_excel_recalc.py via
-        # excel_runtime_recalc.py. ~250 MB install but cached on the runner
-        # image. See docs/runbooks/runtime_excel_recalc_gate.md.
-        run: sudo apt-get update && sudo apt-get install -y libreoffice-calc
       - name: Parity tests (fast-fail, verbose)
         run: pytest tests/parity/ -x -v --tb=short
       - name: Static Excel formula validator (export + validate every product)

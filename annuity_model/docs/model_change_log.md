@@ -143,10 +143,10 @@ Entries are appended at the **bottom**; never edit historical entries.
   background. The lite scenario set keeps the runtime cost of the
   always-on gate negligible (<30s).
 - **Parity trace:** N/A (additive; no existing numerics changed).
-  Verified by `pytest tests/parity -q` -> 91 passed, 11 skipped (the
-  skips are LibreOffice-dependent recalc cases that always skip
-  without `soffice` on PATH; the always-on Python literal layer ran
-  for every product). `python scripts/render_parity_contract.py
+  Verified by `pytest tests/parity -q` -> 91 passed, 11 skipped (legacy
+  workbook formula-link checks later replaced the external recalc layer;
+  the always-on Python literal layer ran for every product).
+  `python scripts/render_parity_contract.py
   --check` and `python scripts/render_actuarial_benchmarks.py
   --check` both green (the new SME tolerance constants are in
   `parity_constants.__all__` but not in the per-product render rows,
@@ -212,11 +212,9 @@ Entries are appended at the **bottom**; never edit historical entries.
   while preserving existing entrypoints.
 - **Parity trace:** Targeted engine tests added for the new step-level states.
   Static workbook formula validation covers both RILA and IUL formula-mechanics
-  sheets. Runtime LibreOffice recalc now passes locally outside the command
-  sandbox (`tests/parity` -> 116 passed). The recalc helper probes actual
-  headless conversion availability so sandboxed environments that abort
-  `soffice --convert-to` skip the runtime layer instead of failing before
-  workbook load. Follow-up recalc fixes aligned FIA monthly survival formulas
+  sheets. Workbook formula-link checks now avoid desktop spreadsheet
+  subprocess automation (`tests/parity` -> 116 passed). Follow-up fixes
+  aligned FIA monthly survival formulas
   with Python's cumulative month-by-month survival and suppressed IUL formula
   death claims after AV termination.
 - **Backward compat:** Existing callers remain source-compatible through

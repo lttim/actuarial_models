@@ -93,7 +93,6 @@ nav:
       - Debug validator failure: runbooks/debug_validator_failure.md
       - Regenerate Excel cache: runbooks/regenerate_excel_cache.md
       - Launcher double-click: runbooks/launcher_double_click.md
-      - Runtime Excel recalc gate (parked): runbooks/runtime_excel_recalc_gate.md
       - Release: runbooks/release.md
   - Governance:
       - CHANGELOG: CHANGELOG.md

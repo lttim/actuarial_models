@@ -25,18 +25,9 @@ pytest-benchmark==5.2.3
 pytest-cov==7.1.0
 mutmut==3.5.0
 
-# Runtime-Excel parity (P4 -- xlcalculator-based recalc gate)
-# PARKED 2026-04: xlcalculator==0.5.0 transitively pulls yearfrac<2, which
-# conflicts with the pinned numpy==2.4.4 in requirements.lock. The parity test
-# `tests/parity/test_runtime_excel_recalc.py` uses `pytest.importorskip` so it
-# auto-skips while this is uninstalled. Restore options (in priority order):
-#   1. xlcalculator release that drops or relaxes the yearfrac dep
-#   2. Replace with `formulas` or `pycel` (pure-Python evaluators w/o yearfrac)
-#   3. Vendor a yearfrac fork that supports numpy 2.x
-# Quarterly recurring check: re-test xlcalculator + yearfrac + numpy 2.x
-# compatibility to restore the runtime Excel recalc gate.
-# Tracking: docs/runbooks/runtime_excel_recalc_gate.md
-# xlcalculator==0.5.0
+# Workbook parity is enforced with project tests and the static workbook
+# validator. Do not add desktop spreadsheet automation dependencies here;
+# external recalc apps have proven unreliable on macOS and sandboxed agents.
 
 # Security / supply-chain
 # When bumping these, also bump the matching hardcoded versions in

@@ -144,9 +144,8 @@ This is what the parity gates exist for.
 2. Mirror the change in the Excel formula generator (`alm_excel_ladder.py`
    for SPIA/Term, the relevant `build_*_excel_workbook.py` for RILA, etc.).
 3. Run the four canonical gates (§3). Pay particular attention to gate 1
-   (parity) and the Excel runtime-recalc gate -- a common failure mode is
-   a formula that *looks* right to openpyxl but evaluates differently
-   when Excel/LibreOffice opens the workbook.
+   (parity), the static workbook validator, and ModelCheck formula-link
+   checks.
 4. If gate 1 fails, follow [`docs/runbooks/investigate_parity_break.md`](runbooks/investigate_parity_break.md).
    If the validator fails, follow
    [`docs/runbooks/debug_validator_failure.md`](runbooks/debug_validator_failure.md).
@@ -360,8 +359,7 @@ one that matches the failure mode:
 |---|---|
 | Parity test went from green to red | [`docs/runbooks/investigate_parity_break.md`](runbooks/investigate_parity_break.md) |
 | `excel_workbook_validator` rejected the workbook | [`docs/runbooks/debug_validator_failure.md`](runbooks/debug_validator_failure.md) |
-| `ModelCheck` sheet shows nonzero after Excel recalc | [`docs/runbooks/regenerate_excel_cache.md`](runbooks/regenerate_excel_cache.md) |
-| LibreOffice headless recalc gate is failing in CI | [`docs/runbooks/runtime_excel_recalc_gate.md`](runbooks/runtime_excel_recalc_gate.md) |
+| `ModelCheck` links or workbook validation look wrong | [`docs/runbooks/regenerate_excel_cache.md`](runbooks/regenerate_excel_cache.md) |
 | Release / version bump | [`docs/runbooks/release.md`](runbooks/release.md) |
 | Streamlit launcher won't double-click | [`docs/runbooks/launcher_double_click.md`](runbooks/launcher_double_click.md) |
 

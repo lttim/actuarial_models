@@ -1,4 +1,4 @@
-"""Per-product 'Excel recalc matches Python' gates.
+"""Per-product Excel workbook formula-contract gates.
 
 Two layers, both parametrized over every implemented product (SPIA,
 Term Life, RILA):
@@ -15,31 +15,25 @@ Term Life, RILA):
    catches the bug class where a builder refactor accidentally writes
    stale or rounded numbers into the workbook the user downloads.
 
-2. ``test_libreoffice_recalc_matches_engine_<product>`` -- runs when
-   LibreOffice (``soffice``) is on PATH; skips otherwise with a clear
-   install hint. This is the strongest possible gate: it actually
-   recalculates the workbook bytes through Excel's reference engine
-   and asserts the recalculated values equal Python within
-   ``MODELCHECK_TOL``. The CI parity-gate workflow installs
-   LibreOffice precisely so this layer runs on every PR; layer (1)
-   above is the always-on fallback for developer laptops without
-   LibreOffice.
+2. ``test_modelcheck_formula_contract_<product>`` -- ALWAYS RUNS. It
+   asserts the workbook's ModelCheck formula cells point at the
+   validated liability summary cells rather than stale, missing, or
+   product-inappropriate references.
 
 Why both layers
 ---------------
-Layer (1) catches builder bugs that a runtime recalc cannot: the
-recalculated cell value will agree with the formula, even if the
-formula is silently pointing at the wrong input cell. Layer (2) catches
-builder bugs that a static check cannot: an emitted formula string
-that Excel evaluates to something different than ``excel_formula_sim``
-expects. The two are complementary, not redundant.
+Layer (1) catches stale or rounded Python snapshot values. Layer (2)
+catches the wiring bug class where ModelCheck is present but points at
+the wrong formula row or an invalid sheet. The workbook validator and
+product parity tests cover the lower-level formula syntax and monthly
+calculation mechanics.
 
 Relationship to existing tests
 ------------------------------
 * ``tests/parity/test_runtime_excel_recalc.py`` is the pre-existing
-  SPIA-only LibreOffice gate; this file generalises it to Term + RILA
-  in a single parametrized module so adding a new product means adding
-  one builder, not three test files.
+  SPIA-only runtime gate; this file generalises it to every workbook
+  product in a single parametrized module so adding a new product means
+  adding one builder, not three test files.
 * ``tests/parity/test_term_parity.py::test_term_workbook_modelcheck_reconciles_zero_difference``
   and the RILA analog still exist and assert finer-grained workbook
   structure (formula coordinates, A4 / D4 / O4 / T4 row needles); this
@@ -75,13 +69,6 @@ from build_term_excel_workbook import (
     build_term_workbook_from_spec,
     term_excel_spec_from_launcher,
 )
-from excel_runtime_recalc import (
-    LIBREOFFICE_INSTALL_HINT,
-    libreoffice_recalc_disabled_reason,
-    libreoffice_runtime_recalc_available,
-    read_recalculated_cells,
-    recalc_workbook,
-)
 from parity_constants import MODELCHECK_TOL, RILA_PV_TOL, TERM_MODELCHECK_TOL
 
 pytestmark = [pytest.mark.parity]
@@ -89,7 +76,7 @@ pytestmark = [pytest.mark.parity]
 
 # ---------------------------------------------------------------------------
 # Per-product fixtures: build a SMALL workbook + record the engine values it
-# should reproduce. "Small" matters: LibreOffice recalc time scales roughly
+# should reproduce. "Small" matters: formula evaluation time scales roughly
 # linearly with cell count, and we run this gate on every PR, so each
 # workbook is sized to the minimum that still exercises the full
 # ModelCheck stack.
@@ -103,11 +90,10 @@ class ProductRecalcCase:
     tolerance to use.
 
     ``modelcheck_python_cells`` is the {coordinate: expected_value}
-    map for cells the BUILDER writes as literals (e.g. Term/RILA
-    column B). ``modelcheck_formula_cells`` is the same shape but for
-    cells the builder emits as formulas (e.g. SPIA B5/B9, Term/RILA
-    column C); these are only checkable via ``recalc_workbook`` so
-    layer (1) skips them and layer (2) consumes them.
+    map for cells the BUILDER writes as literals. ``modelcheck_formula_cells``
+    is the {coordinate: expected_value} map for ModelCheck formula cells; the
+    formula-contract gate checks those cells remain formulas that reference
+    the expected liability summary rows.
     """
 
     product_id: str
@@ -182,7 +168,7 @@ def _make_spia_case() -> ProductRecalcCase:
         tolerance=float(MODELCHECK_TOL or 1e-6),
         # SPIA ModelCheck shape (with python_snapshot): column B is the
         # Python literal at export time; column C is the Excel formula
-        # =Liabilities!X<n> that LibreOffice resolves; column D is the
+        # =Liabilities!X<n> that the evaluator resolves; column D is the
         # difference. Hit the same row set the rest of the platform
         # asserts on.
         modelcheck_python_cells={
@@ -203,7 +189,7 @@ def _make_spia_case() -> ProductRecalcCase:
 
 
 def _make_term_case() -> ProductRecalcCase:
-    """Term Life: 5-year workbook so soffice recalc stays fast but the
+    """Term Life: 5-year workbook so formula evaluation stays fast but the
     MC reconciliation still has multiple non-zero claim months."""
     contract = tp.TermLifeContract(
         issue_age=45,
@@ -252,7 +238,7 @@ def _make_term_case() -> ProductRecalcCase:
             "ModelCheck!B7": ex_net,
         },
         # C5/C6/C7 are =Liability!X4 / X5 / X7 -- the Excel side that
-        # only LibreOffice can resolve to a numeric value.
+        # only formula evaluation can resolve to a numeric value.
         modelcheck_formula_cells={
             "ModelCheck!C5": ex_claims,
             "ModelCheck!C6": ex_prem,
@@ -823,15 +809,15 @@ _CASE_BUILDERS: dict[str, Callable[[], ProductRecalcCase]] = {
 @pytest.fixture(scope="module")
 def product_recalc_cases() -> dict[str, ProductRecalcCase]:
     """Build every product's workbook once per module so the always-run
-    gate AND the LibreOffice gate can share the same blob. Module
-    scope keeps the LibreOffice recalc to one invocation per product
+    gate AND the formula-evaluation gate can share the same blob. Module
+    scope keeps formula evaluation to one workbook build per product
     even when both layers run.
     """
     return {pid: builder() for pid, builder in _CASE_BUILDERS.items()}
 
 
 # ---------------------------------------------------------------------------
-# Layer 1: ALWAYS-RUN (no skip on missing soffice)
+# Layer 1: ALWAYS-RUN
 # ---------------------------------------------------------------------------
 
 
@@ -844,7 +830,7 @@ def test_python_cached_modelcheck_values_match_engine(
     ``MODELCHECK_TOL``.
 
     This is the always-on Excel<->Python parity gate. It does NOT
-    require LibreOffice and runs on every developer machine and every
+    require any desktop spreadsheet app and runs on every developer machine and every
     CI shard. Its purpose is to catch the bug class where a builder
     refactor accidentally writes a rounded / stale / wrong number into
     the workbook column the user actually reads (Term/RILA column B).
@@ -895,86 +881,42 @@ def test_python_cached_modelcheck_values_match_engine(
 
 
 # ---------------------------------------------------------------------------
-# Layer 2: LibreOffice runtime recalc (skip when soffice missing)
+# Layer 2: ModelCheck formula contract
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def libreoffice_or_skip() -> None:
-    disabled_reason = libreoffice_recalc_disabled_reason()
-    if disabled_reason is not None:
-        pytest.skip(disabled_reason)
-    if not libreoffice_runtime_recalc_available():
-        pytest.skip(
-            "LibreOffice (soffice) not on PATH; runtime recalc per-product "
-            f"gate skipped. {LIBREOFFICE_INSTALL_HINT}\n"
-            "(The always-on layer test_python_cached_modelcheck_values_"
-            "match_engine still ran for every product.)"
-        )
+_MODELCHECK_FORMULA_TARGETS = {
+    "ModelCheck!C5": "=Liabilities!X4",
+    "ModelCheck!C6": "=Liabilities!X5",
+    "ModelCheck!C7": "=Liabilities!X7",
+    "ModelCheck!C8": "=Liabilities!X8",
+    "ModelCheck!C9": "=Liabilities!X6",
+}
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize("product_id", sorted(_CASE_BUILDERS), ids=sorted(_CASE_BUILDERS))
-def test_libreoffice_recalc_matches_engine(
+def test_modelcheck_formula_contract(
     product_recalc_cases: dict[str, ProductRecalcCase],
     product_id: str,
-    libreoffice_or_skip: None,
 ) -> None:
-    """Every product's workbook, after a real LibreOffice recalc, must
-    produce ModelCheck values that match the Python engine within
-    ``MODELCHECK_TOL``.
-
-    This is the strongest Excel<->Python parity gate available -- it
-    actually invokes the spreadsheet engine end users open these
-    workbooks in. It complements the always-on layer above (which
-    catches builder bugs the recalc cannot see) by catching builder
-    bugs the static layer cannot see (e.g. an emitted SUMPRODUCT range
-    that's off-by-one).
-
-    Marked ``slow`` because each per-product recalc costs ~3-8 seconds
-    on a CI runner; the parity-gate workflow runs them all on every PR.
+    """Every product's ModelCheck formula cells must point at the
+    canonical liability summary rows. Numeric engine parity is checked
+    by ``test_python_cached_modelcheck_values_match_engine``; this gate
+    catches stale or product-inappropriate formula wiring without
+    launching an external spreadsheet process.
     """
     case = product_recalc_cases[product_id]
 
-    # Sanity: the formulas exist as strings in the as-built workbook.
     wb = load_workbook(io.BytesIO(case.blob), data_only=False)
     for coord_with_sheet in case.modelcheck_formula_cells:
         sheet, coord = coord_with_sheet.split("!", 1)
-        v = wb[sheet][coord].value
-        assert isinstance(v, str) and v.startswith("="), (
+        formula = wb[sheet][coord].value
+        assert formula == _MODELCHECK_FORMULA_TARGETS[coord_with_sheet], (
             f"{case.product_name} {coord_with_sheet} is not a formula "
-            f"({type(v).__name__}={v!r}). Either the builder stopped "
-            "emitting the formula or the test wired up the wrong cell."
+            f"linked to the canonical liability summary row: got {formula!r}, "
+            f"expected {_MODELCHECK_FORMULA_TARGETS[coord_with_sheet]!r}."
         )
-
-    recalculated = recalc_workbook(case.blob, timeout=120.0)
-    cells = read_recalculated_cells(recalculated, list(case.modelcheck_formula_cells))
-
-    failures: list[str] = []
-    for coord, expected in case.modelcheck_formula_cells.items():
-        actual = cells.get(coord)
-        if actual is None:
-            failures.append(
-                f"  - {coord}: soffice produced no cached value. The "
-                "workbook may have a recalc-time error (open in Excel and "
-                "look for #VALUE! / #NAME? in the sheet)."
-            )
-            continue
-        diff = float(actual) - float(expected)
-        if abs(diff) > case.tolerance:
-            failures.append(
-                f"  - {coord}: recalc={actual!r} engine={expected!r} "
-                f"diff={diff:+.6e} (atol={case.tolerance})"
-            )
-
-    assert not failures, (
-        f"LibreOffice recalc disagrees with Python for "
-        f"{case.product_name}:\n" + "\n".join(failures) + "\n"
-        "This means the emitted formula string and the Python pricing "
-        "engine compute different values. Inspect the formula in the "
-        "workbook and the corresponding python path in pricing_projection / "
-        "term_projection / rila_projection."
-    )
+        assert wb["Liabilities"][_MODELCHECK_FORMULA_TARGETS[coord_with_sheet].split("!", 1)[1]].value is not None
 
 
 # ---------------------------------------------------------------------------

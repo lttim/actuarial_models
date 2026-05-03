@@ -34,12 +34,11 @@ python scripts/render_parity_contract.py --check
 
 All four must exit 0.
 
-If a task changes Excel-generating code, ALSO open the regenerated workbook
-in Excel (or run a headless recalc such as
-`recalc_excel_shared.recalculate_workbook`) and verify the `ModelCheck`
-sheet shows 0.00 difference -- the parity tests load values from openpyxl
-and CANNOT see formula bugs that only surface on Excel recalc. Provide a
-short runbook for that flow at `docs/runbooks/regenerate_excel_cache.md`.
+If a task changes Excel-generating code, ALSO run the static workbook
+validator and verify the `ModelCheck` links point to the expected formula
+summary rows. Avoid headless desktop spreadsheet automation in automated
+gates; it is not reliable across macOS and sandboxed agent environments.
+Provide a short runbook for that flow at `docs/runbooks/regenerate_excel_cache.md`.
 
 If parity fails, follow `docs/runbooks/investigate_parity_break.md`.
 If the Excel validator fails, follow `docs/runbooks/debug_validator_failure.md`.

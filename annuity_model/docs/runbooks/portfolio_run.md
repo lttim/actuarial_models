@@ -71,8 +71,8 @@ This runs **Ring 7** in order: `just preflight`, `pytest tests/parity/portfolio`
 `render_parity_contract.py --check`, CLI `portfolio-run` vs
 `tests/data/inforce/example_v1/expected_summary.json`, then **`just
 actuary-review-full`** (Gate 5 deterministic evidence). The recipe ends with a
-reminder to open the emitted `portfolio.xlsx` in Excel or LibreOffice and
-confirm **ModelCheck** is zero after recalc (AGENTS.md).
+reminder to inspect the emitted `portfolio.xlsx` **ModelCheck** links and
+validator output (AGENTS.md).
 
 CI: workflow **`portfolio-acceptance`** (job display name **portfolio
 acceptance (ring 7)**) is listed in `.github/branch-protection.json` as a
@@ -91,6 +91,5 @@ close-out:
   (`pytest`, `tests/parity/portfolio`, `tests/integration`, strict workbook
   validation on builder bytes, CLI JSON golden). Portfolio aggregation
   invariants (`PORTFOLIO_ROLLUP_TOL`) and `ModelCheck` **formula** wiring are
-  covered in tests; **full Excel/LibreOffice recalc** of `portfolio.xlsx` is
-  still a human spot-check per AGENTS.md because formula bugs can hide behind
-  cached values in headless checks.
+  covered in tests; generated workbooks should also be inspected with the
+  static validator and ModelCheck formula-link checks per AGENTS.md.

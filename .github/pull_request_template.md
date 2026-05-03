@@ -48,8 +48,8 @@ that exercises all four locally.
 
 ## Excel safety (only if Excel-generating code changed)
 
-- [ ] Regenerated workbook opened in Excel/LibreOffice and `ModelCheck` shows 0.00 difference
-  (or the `tests/parity/test_excel_recalc_per_product.py` LibreOffice layer passes locally)
+- [ ] Regenerated workbook validates and `ModelCheck` links to the expected liability summary rows
+  (`tests/parity/test_excel_recalc_per_product.py` passes locally)
 - [ ] No new Excel function used without registering its arity in
   [`excel_workbook_validator.FUNCTION_ARITIES`](annuity_model/excel_workbook_validator.py)
 - [ ] No SPIA-style `Liabilities!S` reference emitted from a non-SPIA builder

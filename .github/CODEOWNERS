@@ -57,7 +57,6 @@
 # clear signal to reviewers that these paths are load-bearing.
 /annuity_model/liability_layouts.py             @lttim
 /annuity_model/liability_dispatch.py            @lttim
-/annuity_model/excel_runtime_recalc.py          @lttim
 /annuity_model/data_registry.py                 @lttim
 /annuity_model/pricing_ui.py                    @lttim
 /annuity_model/streamlit_app.py                 @lttim

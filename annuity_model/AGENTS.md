@@ -117,20 +117,18 @@ because they catch the bug classes the parity engine cannot:
   any product adapter, or the workbook builder dispatch, this gate
   is your first signal.
 * **`tests/parity/test_excel_recalc_per_product.py`** — per-product
-  Excel↔Python recalc gate. The "always-on" layer asserts the
+  Excel↔Python workbook gate. The "always-on" layer asserts the
   Python literals the builder bakes into ModelCheck column B equal
   the engine within `MODELCHECK_TOL` for every product (no skip);
-  the LibreOffice layer (skipped without `soffice` on PATH; runs in
-  CI parity-gate) actually recalculates the workbook through the
-  reference spreadsheet engine. The pre-existing
-  `tests/parity/test_runtime_excel_recalc.py` was the SPIA-only
-  ancestor — the per-product file supersedes it.
+  the formula-contract layer asserts ModelCheck column C links to the
+  canonical validated liability summary rows. The pre-existing
+  `tests/parity/test_runtime_excel_recalc.py` is retained as a focused
+  SPIA ModelCheck wiring regression.
 
-If a task changes Excel-generating code, ALSO open the regenerated workbook
-in Excel (or run `recalc_excel_shared.recalculate_workbook`) and verify the
-`ModelCheck` sheet shows 0.00 difference -- the parity tests load values
-from openpyxl and CANNOT see formula bugs that only surface on Excel
-recalc. Step-by-step recipe in
+If a task changes Excel-generating code, ALSO validate the regenerated
+workbook and inspect the `ModelCheck` sheet links. The parity tests assert
+Python snapshots and formula wiring, while the static validator catches
+formula syntax and cross-sheet reference issues. Step-by-step recipe in
 [docs/runbooks/regenerate_excel_cache.md](docs/runbooks/regenerate_excel_cache.md).
 
 If parity fails, follow

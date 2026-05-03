@@ -23,9 +23,8 @@ for the **portfolio** surface.
 - **ModelCheck** -- (1) ``SUM(LiabilityAggregate!type_cols) -
   LiabilityAggregate!total_cf`` must be zero after recalc; (2) per-month
   ``excel_total_cf - python_total_cf`` (columns D/E) must be zero after recalc
-  when the workbook is consistent. Parity tests assert formula wiring;
-  LibreOffice/Excel manual spot-check remains the final eyeball gate per
-  `AGENTS.md`.
+  when the workbook is consistent. Parity tests assert formula wiring and
+  Python snapshot agreement per `AGENTS.md`.
 
 ## Goldens
 

@@ -12,10 +12,15 @@ import test_dashboard as td
 
 def test_discover_tests_metadata_non_empty() -> None:
     rows = td.discover_tests_metadata()
-    assert rows, "expected tests/test_pricing_projection.py to define tests"
-    names = {r["name"] for r in rows}
-    assert "test_yield_curve_from_flat_rate_discount_factors" in names
+    assert len(rows) > 500, "expected dashboard discovery to reflect the full pytest suite"
+    nodeids = {r["nodeid"] for r in rows}
+    assert "tests/test_pricing_projection.py::test_yield_curve_from_flat_rate_discount_factors" in nodeids
+    assert any(
+        n.startswith("tests/test_regression_matrix.py::test_regression_matrix_cell[")
+        for n in nodeids
+    )
     for r in rows:
+        assert r["nodeid"]
         assert r["section"]
         assert "description" in r
 
@@ -35,10 +40,10 @@ def test_parse_junit_results_parametrize_aggregation(
         <?xml version="1.0" encoding="utf-8"?>
         <testsuites>
           <testsuite name="ts" tests="2" failures="1" errors="0" skipped="0">
-            <testcase classname="c" name="test_foo[a]" time="0.1">
+            <testcase classname="tests.test_example" name="test_foo[a]" time="0.1">
               <failure message="bad">trace</failure>
             </testcase>
-            <testcase classname="c" name="test_foo[b]" time="0.2"/>
+            <testcase classname="tests.test_example" name="test_foo[b]" time="0.2"/>
           </testsuite>
         </testsuites>
         """
@@ -48,8 +53,9 @@ def test_parse_junit_results_parametrize_aggregation(
     monkeypatch.setattr(td, "JUNIT_PATH", path)
     out = td.parse_junit_results()
 
-    assert out["test_foo"]["status"] == "failed"
-    assert "bad" in out["test_foo"]["message"]
+    assert out["tests/test_example.py::test_foo[a]"]["status"] == "failed"
+    assert out["tests/test_example.py::test_foo[b]"]["status"] == "passed"
+    assert "bad" in out["tests/test_example.py::test_foo[a]"]["message"]
 
 
 def test_run_pytest_junit_returns_code_two_without_interpreter(

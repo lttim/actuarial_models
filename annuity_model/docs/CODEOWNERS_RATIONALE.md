@@ -35,7 +35,6 @@ explicitly so reviewers see them flagged as parity/UI critical:
 |-----------------------------------------------|---------------------------------------------------------------------------|
 | `liability_layouts.py`                        | Single source of truth for liability column letters per product. RILA `M` vs SPIA/Term `S` lives here; a typo breaks every workbook. |
 | `liability_dispatch.py`                       | Pricing-result -> LiabilityPath converter registry. Renaming a result class without updating the registered key silently breaks ALM. |
-| `excel_runtime_recalc.py`                     | LibreOffice headless wrapper that drives the runtime Excel recalc gate.   |
 | `data_registry.py`                            | Versioned data + sha256 lock for mortality/yield CSVs. A silent dataset bump invalidates parity. |
 | `pricing_ui.py`                               | Monolithic Streamlit UI. Bug class includes silently dropping widget values into hard-coded contract fields (see Term wiring fix). |
 | `streamlit_app.py`                            | App entry point; reroutes / launcher logic.                               |
