@@ -27,6 +27,10 @@ import iul_projection as iul
 import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
+from build_iul_excel_workbook import (
+    build_iul_workbook_from_spec,
+    iul_excel_spec_from_launcher,
+)
 from build_pricing_excel_workbook import (
     ExcelPythonSnapshot,
     alm_excel_snapshot_from_result,
@@ -36,10 +40,6 @@ from build_pricing_excel_workbook import (
 from build_rila_excel_workbook import (
     build_rila_workbook_from_spec,
     rila_excel_spec_from_launcher,
-)
-from build_iul_excel_workbook import (
-    build_iul_workbook_from_spec,
-    iul_excel_spec_from_launcher,
 )
 from build_term_excel_workbook import (
     build_term_workbook_from_spec,
@@ -396,8 +396,8 @@ def test_strict_mode_flags_unknown_excel_function():
     ws["B1"] = "=AVERGE(A1:A3)"
 
     issues_lax = validate_workbook(wb, strict=False)
-    assert issues_lax == [], (
-        "non-strict mode must remain quiet on unknown functions; got: " + repr(issues_lax)
+    assert issues_lax == [], "non-strict mode must remain quiet on unknown functions; got: " + repr(
+        issues_lax
     )
     issues_strict = validate_workbook(wb, strict=True)
     assert any("AVERGE" in i.message for i in issues_strict), (

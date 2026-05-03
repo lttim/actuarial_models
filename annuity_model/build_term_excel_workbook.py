@@ -4,12 +4,13 @@ import math
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font
+from openpyxl.worksheet.worksheet import Worksheet
 
 import pricing_projection as sp
 import term_projection as tp
@@ -175,7 +176,7 @@ def build_term_workbook_from_spec(
     )
 
     wb = Workbook()
-    ws_in = wb.active
+    ws_in = cast(Worksheet, wb.active)
     ws_in.title = SHEET_INPUTS
     rows = [
         ("Issue age", spec.contract.issue_age),

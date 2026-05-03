@@ -136,10 +136,13 @@ def price_fia_single_premium(
         raise ValueError("single_premium must be > 0.")
 
     dt = 1.0 / 12.0
-    n_months = max(1, min(
-        int(round((horizon_age - contract.issue_age) / dt)),
-        int(contract.horizon_years * 12),
-    ))
+    n_months = max(
+        1,
+        min(
+            int(round((horizon_age - contract.issue_age) / dt)),
+            int(contract.horizon_years * 12),
+        ),
+    )
 
     months = np.arange(1, n_months + 1, dtype=int)
     times_years = months * dt
@@ -190,14 +193,13 @@ def price_fia_single_premium(
         mortality_q_m = np.clip(1.0 - mort_step, 0.0, 1.0)
         lapse_q_m = lapse.monthly_decrements(n_months)
         survival_combined = combined_monthly_survival(
-            mortality_monthly_q=mortality_q_m, lapse_monthly_q=lapse_q_m,
+            mortality_monthly_q=mortality_q_m,
+            lapse_monthly_q=lapse_q_m,
         )
         survival_combined_start = np.empty_like(survival_combined)
         survival_combined_start[0] = 1.0
         survival_combined_start[1:] = survival_combined[:-1]
-        death_prob_month = np.clip(
-            survival_combined_start * mortality_q_m, 0.0, 1.0
-        )
+        death_prob_month = np.clip(survival_combined_start * mortality_q_m, 0.0, 1.0)
         lapse_prob_month = np.clip(
             survival_combined_start * (1.0 - mortality_q_m) * lapse_q_m, 0.0, 1.0
         )
@@ -316,23 +318,36 @@ def price_fia_single_premium_monte_carlo(
     s0: float = 100.0,
 ) -> FIAMonteCarloResult:
     dt = 1.0 / 12.0
-    n_months = max(1, min(
-        int(round((horizon_age - contract.issue_age) / dt)),
-        int(contract.horizon_years * 12),
-    ))
+    n_months = max(
+        1,
+        min(
+            int(round((horizon_age - contract.issue_age) / dt)),
+            int(contract.horizon_years * 12),
+        ),
+    )
     idx_paths = sp.simulate_index_levels_gbm(
-        n_sims=n_sims, n_months=n_months, s0=s0,
-        annual_drift=annual_drift, annual_vol=annual_vol, seed=seed,
+        n_sims=n_sims,
+        n_months=n_months,
+        s0=s0,
+        annual_drift=annual_drift,
+        annual_vol=annual_vol,
+        seed=seed,
     )
     pvb = np.full(int(n_sims), np.nan, dtype=float)
     for i in range(int(n_sims)):
         path = idx_paths[i, :]
         levels_payment = path[1:].astype(float)
         res = price_fia_single_premium(
-            contract=contract, yield_curve=yield_curve, mortality=mortality,
-            horizon_age=horizon_age, spread=spread, valuation_year=valuation_year,
-            expenses=expenses, expenses_csv_path=expenses_csv_path,
-            index_s0=float(path[0]), index_levels_payment=levels_payment,
+            contract=contract,
+            yield_curve=yield_curve,
+            mortality=mortality,
+            horizon_age=horizon_age,
+            spread=spread,
+            valuation_year=valuation_year,
+            expenses=expenses,
+            expenses_csv_path=expenses_csv_path,
+            index_s0=float(path[0]),
+            index_levels_payment=levels_payment,
             expense_annual_inflation=expense_annual_inflation,
         )
         pvb[i] = float(res.pv_benefit)
@@ -353,6 +368,4 @@ def liability_path_from_fia_projection(pricing: FIAProjectionResult) -> sp.Liabi
 
 from liability_dispatch import register_liability_path_converter  # noqa: E402
 
-register_liability_path_converter(
-    "FIAProjectionResult", liability_path_from_fia_projection
-)
+register_liability_path_converter("FIAProjectionResult", liability_path_from_fia_projection)

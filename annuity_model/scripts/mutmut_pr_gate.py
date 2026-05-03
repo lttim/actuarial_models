@@ -114,16 +114,14 @@ def _load_thresholds(path: Path = THRESHOLDS_PATH) -> tuple[int, dict[str, int]]
     default = section.get("default", 0)
     if not isinstance(default, int) or default < 0:
         print(
-            f"[mutmut-gate] thresholds.default must be a non-negative int, "
-            f"got {default!r}",
+            f"[mutmut-gate] thresholds.default must be a non-negative int, got {default!r}",
             file=sys.stderr,
         )
         sys.exit(2)
     per_file_raw = section.get("per_file", {})
     if not isinstance(per_file_raw, dict):
         print(
-            f"[mutmut-gate] thresholds.per_file must be a table, got "
-            f"{type(per_file_raw).__name__}",
+            f"[mutmut-gate] thresholds.per_file must be a table, got {type(per_file_raw).__name__}",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -131,8 +129,7 @@ def _load_thresholds(path: Path = THRESHOLDS_PATH) -> tuple[int, dict[str, int]]
     for k, v in per_file_raw.items():
         if not isinstance(v, int) or v < 0:
             print(
-                f"[mutmut-gate] threshold for {k!r} must be a non-negative "
-                f"int, got {v!r}",
+                f"[mutmut-gate] threshold for {k!r} must be a non-negative int, got {v!r}",
                 file=sys.stderr,
             )
             sys.exit(2)
@@ -188,8 +185,7 @@ def _run_mutmut() -> None:
     # exit code here.
     if proc.returncode not in (0, 1, 2):
         print(
-            f"[mutmut-gate] `mutmut run` exited with unexpected code "
-            f"{proc.returncode}; aborting",
+            f"[mutmut-gate] `mutmut run` exited with unexpected code {proc.returncode}; aborting",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -288,8 +284,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     print(
-        f"[mutmut-gate] gating {len(target_files)} touched parity-critical "
-        f"file(s): {target_files}"
+        f"[mutmut-gate] gating {len(target_files)} touched parity-critical file(s): {target_files}"
     )
 
     if not args.skip_run:
@@ -299,9 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             _restore_setup_cfg(backup)
 
-    rows = _collect_per_file(
-        target_files, default, per_file, mutants_dir=args.mutants_dir
-    )
+    rows = _collect_per_file(target_files, default, per_file, mutants_dir=args.mutants_dir)
 
     print("[mutmut-gate] per-file survivor counts:")
     for r in rows:

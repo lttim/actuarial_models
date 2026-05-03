@@ -25,7 +25,7 @@ is ~250 MB via apt, and recalculating a SPIA workbook takes <5 seconds.
 API
 ---
 ``ensure_libreoffice_available()`` returns the resolved soffice executable
-or raises ``LibreOfficeNotAvailable`` with a clear install hint. Tests use
+or raises ``LibreOfficeNotAvailableError`` with a clear install hint. Tests use
 ``libreoffice_available()`` to decide whether to skip.
 
 ``recalc_workbook(blob, *, timeout=60.0)`` writes the bytes to a temp
@@ -54,7 +54,9 @@ from openpyxl import Workbook, load_workbook
 __all__ = [
     "LIBREOFFICE_INSTALL_HINT",
     "LibreOfficeNotAvailable",
+    "LibreOfficeNotAvailableError",
     "RecalcTimeout",
+    "RecalcTimeoutError",
     "ensure_libreoffice_available",
     "libreoffice_available",
     "read_recalculated_cells",
@@ -75,12 +77,16 @@ LIBREOFFICE_INSTALL_HINT = (
 )
 
 
-class LibreOfficeNotAvailable(RuntimeError):
+class LibreOfficeNotAvailableError(RuntimeError):
     """Raised when LibreOffice is needed but not installed / not on PATH."""
 
 
-class RecalcTimeout(RuntimeError):
+class RecalcTimeoutError(RuntimeError):
     """Raised when soffice does not finish recalculation within the deadline."""
+
+
+LibreOfficeNotAvailable = LibreOfficeNotAvailableError
+RecalcTimeout = RecalcTimeoutError
 
 
 def _candidate_paths() -> Iterable[str]:

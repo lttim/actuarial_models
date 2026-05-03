@@ -33,9 +33,7 @@ def _collect_flagged_artifacts() -> list[str]:
     flagged: list[str] = []
     for artifact in REGISTRY:
         if _looks_non_production_source(artifact.source):
-            flagged.append(
-                f"{artifact.name} ({artifact.kind}/{artifact.version})"
-            )
+            flagged.append(f"{artifact.name} ({artifact.kind}/{artifact.version})")
     return flagged
 
 
@@ -60,9 +58,7 @@ def main() -> int:
 
     waiver_path = Path(args.waiver_file)
     if waiver_path.exists():
-        print(
-            "PASS (with waiver): placeholder assumptions detected and waiver file exists:"
-        )
+        print("PASS (with waiver): placeholder assumptions detected and waiver file exists:")
         for row in flagged:
             print(f"  - {row}")
         print(f"Waiver: {waiver_path}")
@@ -74,10 +70,7 @@ def main() -> int:
     print("")
     print("To proceed, either:")
     print("  1) Replace placeholder assumptions with approved production artifacts, or")
-    print(
-        f"  2) Provide waiver evidence at {waiver_path} "
-        "(see docs/assumption_governance.md)."
-    )
+    print(f"  2) Provide waiver evidence at {waiver_path} (see docs/assumption_governance.md).")
     return 1
 
 

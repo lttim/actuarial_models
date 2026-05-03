@@ -6,9 +6,7 @@ Phase 0/1/.../7 of ``docs/seven_product_rollout_plan.md``.
 
 from __future__ import annotations
 
-from product_registry import ProductType, product_label
-
-from products import ProductDefinition, register_product
+from build_iul_excel_workbook import IULExcelBuildSpec
 from iul_projection import (
     IULContract,
     IULProjectionResult,
@@ -16,11 +14,10 @@ from iul_projection import (
     price_iul_single_premium,
     price_iul_single_premium_monte_carlo,
 )
-from build_iul_excel_workbook import IULExcelBuildSpec
-
 from product_excel import _BUILDER_REGISTRY
+from product_registry import ProductType, product_label
+from products import ProductDefinition, register_product
 from products.indexed_ul.ui import INDEXED_UL_ADAPTER, indexed_ul_metric_formatter
-
 
 DEFINITION = register_product(
     ProductDefinition(
@@ -45,5 +42,6 @@ __all__ = [
     "INDEXED_UL_ADAPTER",
     "liability_path_from_iul_projection",
     "price_iul_single_premium",
+    "price_iul_single_premium_monte_carlo",
     "indexed_ul_metric_formatter",
 ]

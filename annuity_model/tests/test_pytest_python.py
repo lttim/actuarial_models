@@ -33,7 +33,9 @@ def test_select_pytest_interpreter_uses_sys_executable_without_venv(tmp_path: Pa
         assert err is not None
 
 
-def test_select_pytest_interpreter_prefers_project_venv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_select_pytest_interpreter_prefers_project_venv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """When a project venv interpreter exists and meets the floor, it is chosen over ``sys.executable``."""
 
     if sys.version_info[:2] < (pp.MIN_PYTHON_MAJOR, pp.MIN_PYTHON_MINOR):

@@ -19,8 +19,13 @@ pytestmark = [pytest.mark.parity, pytest.mark.product_fia]
 
 def _baseline_contract() -> fp.FIAContract:
     return fp.FIAContract(
-        issue_age=60, sex="male", single_premium=100_000.0,
-        participation=0.8, cap=0.07, floor=0.0, horizon_years=10,
+        issue_age=60,
+        sex="male",
+        single_premium=100_000.0,
+        participation=0.8,
+        cap=0.07,
+        floor=0.0,
+        horizon_years=10,
     )
 
 
@@ -42,9 +47,13 @@ def _price(contract=None, levels=None, yc=None):
         rng = np.random.default_rng(42)
         levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.02, size=n_months))
     return fp.price_fia_single_premium(
-        contract=contract, yield_curve=yc or _yc(), mortality=_mort(),
-        horizon_age=70, expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        index_s0=100.0, index_levels_payment=levels,
+        contract=contract,
+        yield_curve=yc or _yc(),
+        mortality=_mort(),
+        horizon_age=70,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        index_s0=100.0,
+        index_levels_payment=levels,
     )
 
 
@@ -61,8 +70,13 @@ def test_fia_actuarial_sanity_signs():
 def test_fia_av_floor_zero_means_av_non_decreasing_at_anniversaries():
     """With floor=0 and rider_fee=0, AV at end of segment >= AV at start."""
     contract = fp.FIAContract(
-        issue_age=60, sex="male", single_premium=100_000.0,
-        participation=0.8, cap=0.07, floor=0.0, horizon_years=10,
+        issue_age=60,
+        sex="male",
+        single_premium=100_000.0,
+        participation=0.8,
+        cap=0.07,
+        floor=0.0,
+        horizon_years=10,
         rider_fee_annual=0.0,
     )
     res = _price(contract=contract)
@@ -70,8 +84,8 @@ def test_fia_av_floor_zero_means_av_non_decreasing_at_anniversaries():
     # End of each segment year (months 12, 24, ..., 120) >= prior segment's end.
     for y in range(2, 11):
         assert av[y * 12 - 1] >= av[(y - 1) * 12 - 1] - 1e-9, (
-            f"FIA AV at end of year {y} ({av[y*12-1]:.2f}) is less than year "
-            f"{y-1} ({av[(y-1)*12-1]:.2f}). Floor=0 should prevent decrease."
+            f"FIA AV at end of year {y} ({av[y * 12 - 1]:.2f}) is less than year "
+            f"{y - 1} ({av[(y - 1) * 12 - 1]:.2f}). Floor=0 should prevent decrease."
         )
 
 
@@ -87,8 +101,13 @@ def test_fia_av_at_horizon_within_band():
 def test_fia_collapses_when_cap_equals_floor_zero():
     """Section 13.5: floor = cap = 0 means no growth -> AV stays at premium."""
     contract = fp.FIAContract(
-        issue_age=60, sex="male", single_premium=100_000.0,
-        participation=0.8, cap=0.0, floor=0.0, horizon_years=10,
+        issue_age=60,
+        sex="male",
+        single_premium=100_000.0,
+        participation=0.8,
+        cap=0.0,
+        floor=0.0,
+        horizon_years=10,
         rider_fee_annual=0.0,
     )
     res = _price(contract=contract)
@@ -102,8 +121,13 @@ def test_fia_cap_increase_increases_av():
     """Section 13.4: higher cap should increase expected AV (with non-negative index)."""
     base_contract = _baseline_contract()
     high_cap_contract = fp.FIAContract(
-        issue_age=60, sex="male", single_premium=100_000.0,
-        participation=0.8, cap=0.12, floor=0.0, horizon_years=10,
+        issue_age=60,
+        sex="male",
+        single_premium=100_000.0,
+        participation=0.8,
+        cap=0.12,
+        floor=0.0,
+        horizon_years=10,
     )
     rng = np.random.default_rng(42)
     n = 120
@@ -111,8 +135,5 @@ def test_fia_cap_increase_increases_av():
     base = _price(contract=base_contract, levels=levels)
     shocked = _price(contract=high_cap_contract, levels=levels)
     assert (
-        shocked.account_value_end_month[-1]
-        > base.account_value_end_month[-1] + FIA_SENSITIVITY_EPS
-    ), (
-        "Higher cap should increase AV when index has positive cumulative return."
-    )
+        shocked.account_value_end_month[-1] > base.account_value_end_month[-1] + FIA_SENSITIVITY_EPS
+    ), "Higher cap should increase AV when index has positive cumulative return."

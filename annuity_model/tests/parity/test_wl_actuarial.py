@@ -19,7 +19,10 @@ pytestmark = [pytest.mark.parity, pytest.mark.product_wl]
 
 def _baseline_contract() -> wl.WLContract:
     return wl.WLContract(
-        issue_age=45, sex="male", smoker_class="nonsmoker", face_amount=250_000.0,
+        issue_age=45,
+        sex="male",
+        smoker_class="nonsmoker",
+        face_amount=250_000.0,
     )
 
 
@@ -88,7 +91,10 @@ def test_wl_face_increase_raises_sp_proportionally():
     """SP is linear in face; doubling face should roughly double SP."""
     base = _price()
     high_face = wl.WLContract(
-        issue_age=45, sex="male", smoker_class="nonsmoker", face_amount=500_000.0,
+        issue_age=45,
+        sex="male",
+        smoker_class="nonsmoker",
+        face_amount=500_000.0,
     )
     res_high = _price(contract=high_face)
     ratio = res_high.single_premium / base.single_premium
@@ -101,7 +107,10 @@ def test_wl_higher_age_raises_sp():
     """Issuing later means more death-claim risk per face dollar."""
     base = _price()
     older = wl.WLContract(
-        issue_age=70, sex="male", smoker_class="nonsmoker", face_amount=250_000.0,
+        issue_age=70,
+        sex="male",
+        smoker_class="nonsmoker",
+        face_amount=250_000.0,
     )
     res_older = _price(contract=older)
     assert res_older.single_premium > base.single_premium + WL_SENSITIVITY_EPS, (

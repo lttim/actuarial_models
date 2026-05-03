@@ -4,12 +4,13 @@ import math
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font
+from openpyxl.worksheet.worksheet import Worksheet
 
 import pricing_projection as sp
 import rila_projection as rp
@@ -199,7 +200,7 @@ def build_rila_workbook_from_spec(
     )
 
     wb = Workbook()
-    ws_in = wb.active
+    ws_in = cast(Worksheet, wb.active)
     ws_in.title = SHEET_INPUTS
     rows = [
         ("Issue age", spec.contract.issue_age),
@@ -285,9 +286,7 @@ def build_rila_workbook_from_spec(
     ws_sched["H5"] = int(spec.contract.glwb.income_start_month)
     ws_sched["G6"] = "glwb_withdrawal_monthly"
     ws_sched["H6"] = (
-        float(spec.contract.glwb.withdrawal_rate) / 12.0
-        if spec.contract.glwb.enabled
-        else 0.0
+        float(spec.contract.glwb.withdrawal_rate) / 12.0 if spec.contract.glwb.enabled else 0.0
     )
     ws_sched["G7"] = "glwb_ratchet"
     ws_sched["H7"] = bool(spec.contract.glwb.ratchet)
@@ -447,11 +446,9 @@ def build_rila_workbook_from_spec(
             f = f"{SHEET_SEGMENTS}!$E${row}"
             b = f"{SHEET_SEGMENTS}!$F${row}"
             terms.append(
-                (
-                    f"{w}*IF({design}=\"buffer\","
-                    f"IF({raw_cell}>=0,MIN({c},{p}*{raw_cell}),MIN(0,{raw_cell}+{b})),"
-                    f"MAX({f},MIN({c},{p}*{raw_cell})))"
-                )
+                f'{w}*IF({design}="buffer",'
+                f"IF({raw_cell}>=0,MIN({c},{p}*{raw_cell}),MIN(0,{raw_cell}+{b})),"
+                f"MAX({f},MIN({c},{p}*{raw_cell})))"
             )
         return "+".join(terms) if terms else "0"
 
@@ -547,7 +544,7 @@ def build_rila_workbook_from_spec(
             column=32,
             value=(
                 f'=IF({a}="",0,IF(AND({glwb_enabled_ref},{a}>={glwb_start_ref}),'
-                f'MIN({av_after_credit},AE{r}*{glwb_withdrawal_ref}),0))'
+                f"MIN({av_after_credit},AE{r}*{glwb_withdrawal_ref}),0))"
             ),
         )
         ws_pr.cell(
@@ -560,7 +557,7 @@ def build_rila_workbook_from_spec(
             column=34,
             value=(
                 f'=IF({a}="",0,MAX(0,{av_after_credit}-AF{r}-AG{r})*{rider}/12'
-                f'+MAX(0,AE{r})*{glwb_fee_ref})'
+                f"+MAX(0,AE{r})*{glwb_fee_ref})"
             ),
         )
         ws_pr.cell(
@@ -570,13 +567,40 @@ def build_rila_workbook_from_spec(
         )
         ws_pr.cell(row=r, column=36, value=f'=IF({a}="",0,AI{r}*AB{r})')
         ws_pr.cell(row=r, column=37, value=f'=IF({a}="",0,MAX(0,AI{r}-AJ{r}))')
-        ws_pr.cell(row=r, column=38, value=f'=IF({a}="",0,IF({db_type_ref}="return_of_premium",MAX(AI{r},{prem}),AI{r}))')
+        ws_pr.cell(
+            row=r,
+            column=38,
+            value=f'=IF({a}="",0,IF({db_type_ref}="return_of_premium",MAX(AI{r},{prem}),AI{r}))',
+        )
         ws_pr.cell(row=r, column=39, value=f'=IF({a}="",0,AL{r}*F{r})')
         ws_pr.cell(row=r, column=40, value=f'=IF({a}="",0,(AF{r}+AG{r})*E{r})')
         ws_pr.cell(row=r, column=41, value=f'=IF({a}="",0,AM{r}+AN{r})')
         ws_pr.cell(row=r, column=42, value=f'=IF({a}="",0,AO{r}*O{r})')
 
-    money_cols = (7, 8, 9, 10, 11, 12, 13, 16, 17, 27, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42)
+    money_cols = (
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        16,
+        17,
+        27,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+    )
     for r in range(first, last_cap_row + 1):
         for c in money_cols:
             ws_pr.cell(row=r, column=c).number_format = "#,##0.00"

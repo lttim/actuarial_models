@@ -55,7 +55,6 @@ from build_pricing_excel_workbook import _write_model_check_sheet as write_model
 from excel_workbook_validator import validate_workbook, validate_workbook_or_raise
 from liability_layouts import LIABILITY_LAYOUTS, LiabilityLayout, liability_layout_for
 
-
 # ---------------------------------------------------------------------------
 # Declarative Inputs-sheet writer (P1, 2026-04).
 # ---------------------------------------------------------------------------

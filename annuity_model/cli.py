@@ -13,8 +13,8 @@ from inforce_io import load_policy_inputs_from_csv
 from portfolio import Portfolio
 from portfolio_config import portfolio_v1_enabled
 from portfolio_runner import run_portfolio
-from pricing_scenario_materialize import run_scenario_for_portfolio_policies
 from portfolio_summary import portfolio_result_to_summary_dict
+from pricing_scenario_materialize import run_scenario_for_portfolio_policies
 
 
 def _cmd_portfolio_run(args: argparse.Namespace) -> int:

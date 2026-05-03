@@ -13,7 +13,6 @@ Output workbooks land in annuity_model/.smoke/out/ (gitignored).
 
 from __future__ import annotations
 
-import os
 import sys
 import time
 from pathlib import Path
@@ -24,8 +23,6 @@ if str(REPO_ROOT) not in sys.path:
 
 import numpy as np
 from openpyxl import load_workbook
-
-from portfolio_config import portfolio_v1_enabled
 
 import fia_projection as fp
 import iul_projection as iul
@@ -80,6 +77,7 @@ from build_wl_excel_workbook import (
     wl_excel_spec_from_launcher,
 )
 from excel_workbook_validator import validate_workbook
+from portfolio_config import portfolio_v1_enabled
 
 OUT_DIR = REPO_ROOT / ".smoke" / "out"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -282,15 +280,24 @@ def _synth_mort() -> sp.MortalityTableQx:
 
 def build_myga() -> Path:
     contract = my.MYGAContract(
-        issue_age=60, sex="male", single_premium=100_000.0,
-        declared_rate_annual=0.045, guarantee_years=5,
+        issue_age=60,
+        sex="male",
+        single_premium=100_000.0,
+        declared_rate_annual=0.045,
+        guarantee_years=5,
     )
     spec = myga_excel_spec_from_launcher(
-        contract=contract, yield_curve=_flat_yc(0.045), mortality=_synth_mort(),
-        horizon_age=70, spread=0.0, valuation_year=2025,
+        contract=contract,
+        yield_curve=_flat_yc(0.045),
+        mortality=_synth_mort(),
+        horizon_age=70,
+        spread=0.0,
+        valuation_year=2025,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        yield_mode_label="flat", mortality_mode_label="qx",
-        expense_mode_label="manual", expense_annual_inflation=0.0,
+        yield_mode_label="flat",
+        mortality_mode_label="qx",
+        expense_mode_label="manual",
+        expense_annual_inflation=0.0,
     )
     out = OUT_DIR / "myga_smoke.xlsx"
     out.write_bytes(build_myga_workbook_from_spec(spec))
@@ -299,19 +306,31 @@ def build_myga() -> Path:
 
 def build_fia() -> Path:
     contract = fp.FIAContract(
-        issue_age=60, sex="male", single_premium=100_000.0,
-        participation=0.8, cap=0.07, floor=0.0, horizon_years=10,
+        issue_age=60,
+        sex="male",
+        single_premium=100_000.0,
+        participation=0.8,
+        cap=0.07,
+        floor=0.0,
+        horizon_years=10,
     )
     n_months = 120
     rng = np.random.default_rng(42)
     levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.02, size=n_months))
     spec = fia_excel_spec_from_launcher(
-        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
-        horizon_age=70, spread=0.0, valuation_year=2025,
+        contract=contract,
+        yield_curve=_flat_yc(),
+        mortality=_synth_mort(),
+        horizon_age=70,
+        spread=0.0,
+        valuation_year=2025,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        yield_mode_label="flat", mortality_mode_label="qx",
-        expense_mode_label="manual", expense_annual_inflation=0.0,
-        index_s0=100.0, index_levels_at_payment=levels,
+        yield_mode_label="flat",
+        mortality_mode_label="qx",
+        expense_mode_label="manual",
+        expense_annual_inflation=0.0,
+        index_s0=100.0,
+        index_levels_at_payment=levels,
     )
     out = OUT_DIR / "fia_smoke.xlsx"
     out.write_bytes(build_fia_workbook_from_spec(spec))
@@ -320,19 +339,29 @@ def build_fia() -> Path:
 
 def build_va() -> Path:
     contract = va.VAContract(
-        issue_age=55, sex="male", single_premium=100_000.0,
-        me_charge_annual=0.014, horizon_years=20,
+        issue_age=55,
+        sex="male",
+        single_premium=100_000.0,
+        me_charge_annual=0.014,
+        horizon_years=20,
     )
     n_months = 240
     rng = np.random.default_rng(42)
     levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
     spec = va_excel_spec_from_launcher(
-        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
-        horizon_age=75, spread=0.0, valuation_year=2025,
+        contract=contract,
+        yield_curve=_flat_yc(),
+        mortality=_synth_mort(),
+        horizon_age=75,
+        spread=0.0,
+        valuation_year=2025,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        yield_mode_label="flat", mortality_mode_label="qx",
-        expense_mode_label="manual", expense_annual_inflation=0.0,
-        index_s0=100.0, index_levels_at_payment=levels,
+        yield_mode_label="flat",
+        mortality_mode_label="qx",
+        expense_mode_label="manual",
+        expense_annual_inflation=0.0,
+        index_s0=100.0,
+        index_levels_at_payment=levels,
     )
     out = OUT_DIR / "va_smoke.xlsx"
     out.write_bytes(build_va_workbook_from_spec(spec))
@@ -341,14 +370,23 @@ def build_va() -> Path:
 
 def build_wl() -> Path:
     contract = wl.WLContract(
-        issue_age=45, sex="male", smoker_class="nonsmoker", face_amount=250_000.0,
+        issue_age=45,
+        sex="male",
+        smoker_class="nonsmoker",
+        face_amount=250_000.0,
     )
     spec = wl_excel_spec_from_launcher(
-        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
-        horizon_age=80, spread=0.0, valuation_year=2025,
+        contract=contract,
+        yield_curve=_flat_yc(),
+        mortality=_synth_mort(),
+        horizon_age=80,
+        spread=0.0,
+        valuation_year=2025,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        yield_mode_label="flat", mortality_mode_label="qx",
-        expense_mode_label="manual", expense_annual_inflation=0.0,
+        yield_mode_label="flat",
+        mortality_mode_label="qx",
+        expense_mode_label="manual",
+        expense_annual_inflation=0.0,
     )
     out = OUT_DIR / "wl_smoke.xlsx"
     out.write_bytes(build_wl_workbook_from_spec(spec))
@@ -357,14 +395,23 @@ def build_wl() -> Path:
 
 def build_ul() -> Path:
     contract = ul.ULContract(
-        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=25_000.0,
     )
     spec = ul_excel_spec_from_launcher(
-        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
-        horizon_age=80, spread=0.0, valuation_year=2025,
+        contract=contract,
+        yield_curve=_flat_yc(),
+        mortality=_synth_mort(),
+        horizon_age=80,
+        spread=0.0,
+        valuation_year=2025,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        yield_mode_label="flat", mortality_mode_label="qx",
-        expense_mode_label="manual", expense_annual_inflation=0.0,
+        yield_mode_label="flat",
+        mortality_mode_label="qx",
+        expense_mode_label="manual",
+        expense_annual_inflation=0.0,
     )
     out = OUT_DIR / "ul_smoke.xlsx"
     out.write_bytes(build_ul_workbook_from_spec(spec))
@@ -373,19 +420,31 @@ def build_ul() -> Path:
 
 def build_iul() -> Path:
     contract = iul.IULContract(
-        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
-        participation=1.0, cap=0.10, floor=0.0,
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=25_000.0,
+        participation=1.0,
+        cap=0.10,
+        floor=0.0,
     )
     n_months = (80 - 45) * 12
     rng = np.random.default_rng(42)
     levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
     spec = iul_excel_spec_from_launcher(
-        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
-        horizon_age=80, spread=0.0, valuation_year=2025,
+        contract=contract,
+        yield_curve=_flat_yc(),
+        mortality=_synth_mort(),
+        horizon_age=80,
+        spread=0.0,
+        valuation_year=2025,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        yield_mode_label="flat", mortality_mode_label="qx",
-        expense_mode_label="manual", expense_annual_inflation=0.0,
-        index_s0=100.0, index_levels_at_payment=levels,
+        yield_mode_label="flat",
+        mortality_mode_label="qx",
+        expense_mode_label="manual",
+        expense_annual_inflation=0.0,
+        index_s0=100.0,
+        index_levels_at_payment=levels,
     )
     out = OUT_DIR / "iul_smoke.xlsx"
     out.write_bytes(build_iul_workbook_from_spec(spec))
@@ -394,18 +453,28 @@ def build_iul() -> Path:
 
 def build_vul() -> Path:
     contract = vul.VULContract(
-        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=25_000.0,
     )
     n_months = (80 - 45) * 12
     rng = np.random.default_rng(42)
     levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
     spec = vul_excel_spec_from_launcher(
-        contract=contract, yield_curve=_flat_yc(), mortality=_synth_mort(),
-        horizon_age=80, spread=0.0, valuation_year=2025,
+        contract=contract,
+        yield_curve=_flat_yc(),
+        mortality=_synth_mort(),
+        horizon_age=80,
+        spread=0.0,
+        valuation_year=2025,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        yield_mode_label="flat", mortality_mode_label="qx",
-        expense_mode_label="manual", expense_annual_inflation=0.0,
-        index_s0=100.0, index_levels_at_payment=levels,
+        yield_mode_label="flat",
+        mortality_mode_label="qx",
+        expense_mode_label="manual",
+        expense_annual_inflation=0.0,
+        index_s0=100.0,
+        index_levels_at_payment=levels,
     )
     out = OUT_DIR / "vul_smoke.xlsx"
     out.write_bytes(build_vul_workbook_from_spec(spec))

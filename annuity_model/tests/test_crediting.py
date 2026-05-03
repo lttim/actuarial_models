@@ -56,9 +56,7 @@ def test_annual_p2p_buffer_validates_bounds():
 def test_segment_credited_return_from_strategy_round_trips():
     s = crediting.AnnualPointToPointCapped(participation=0.85, cap=0.09, floor=-0.02)
     # Identical to direct call.
-    via_fn = crediting.segment_credited_return_from_strategy(
-        strategy=s, raw_index_return=0.12
-    )
+    via_fn = crediting.segment_credited_return_from_strategy(strategy=s, raw_index_return=0.12)
     via_method = s.credit_segment(raw_index_return=0.12)
     assert via_fn == via_method
 
@@ -77,12 +75,8 @@ def test_segment_credited_return_from_strategy_round_trips():
 def test_rila_segment_back_compat_matches_strategy(raw, participation, cap, floor):
     """RILA's existing public ``segment_credited_return`` must be byte-
     identical to :class:`AnnualPointToPointCapped` (Section 1.2)."""
-    direct = rp.segment_credited_return(
-        raw=raw, participation=participation, cap=cap, floor=floor
-    )
-    strategy = crediting.AnnualPointToPointCapped(
-        participation=participation, cap=cap, floor=floor
-    )
+    direct = rp.segment_credited_return(raw=raw, participation=participation, cap=cap, floor=floor)
+    strategy = crediting.AnnualPointToPointCapped(participation=participation, cap=cap, floor=floor)
     via_strategy = strategy.credit_segment(raw_index_return=raw)
     assert math.isclose(direct, via_strategy, rel_tol=0.0, abs_tol=0.0)
 

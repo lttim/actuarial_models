@@ -7,6 +7,7 @@ from concurrent.futures import ProcessPoolExecutor
 from errno import ENOSYS, EPERM
 
 import numpy as np
+
 import pricing_projection as sp
 from _observability import traced
 from liability_aggregation import (
@@ -45,7 +46,9 @@ def _adapter_price(adapter: ProductAdapter, pol: PolicyInput, scenario: RunScena
     )
 
 
-def _worker_pack(args: tuple[int, PolicyInput, RunScenario]) -> tuple[PolicyResult, tuple[ProductType, sp.LiabilityPath]]:
+def _worker_pack(
+    args: tuple[int, PolicyInput, RunScenario],
+) -> tuple[PolicyResult, tuple[ProductType, sp.LiabilityPath]]:
     """Picklable worker for :class:`ProcessPoolExecutor` (one policy)."""
     i, pol, scenario = args
     adapter = get_product_adapter(pol.product_type)
@@ -57,7 +60,7 @@ def _worker_pack(args: tuple[int, PolicyInput, RunScenario]) -> tuple[PolicyResu
             f"Portfolio pricing failed for policy_id={pid!r}, product_type={pol.product_type.value!r}: {exc}"
         ) from exc
     if pol.product_type == ProductType.RILA and hasattr(pricing, "expected_total_cashflows"):
-        cf = np.asarray(getattr(pricing, "expected_total_cashflows"), dtype=float)
+        cf = np.asarray(pricing.expected_total_cashflows, dtype=float)
         cf_sum = float(np.sum(cf))
         if not np.isfinite(cf_sum) or cf_sum <= 0.0:
             raise ValueError(

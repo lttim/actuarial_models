@@ -93,9 +93,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     if log_touched:
-        print(
-            f"OK: {_PARITY_CONSTANTS} changed AND {_MODEL_CHANGE_LOG} also changed."
-        )
+        print(f"OK: {_PARITY_CONSTANTS} changed AND {_MODEL_CHANGE_LOG} also changed.")
         return 0
 
     print(

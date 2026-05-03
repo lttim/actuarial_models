@@ -67,18 +67,12 @@ class MortalityTable2017CSO:
     table: sp.MortalityTableQx
 
     @staticmethod
-    def load(
-        *, sex: Sex, smoker_class: SmokerClass
-    ) -> "MortalityTable2017CSO":
+    def load(*, sex: Sex, smoker_class: SmokerClass) -> MortalityTable2017CSO:
         """Load the 2017 CSO Ultimate table for the requested cohort."""
         if sex not in ("male", "female"):
-            raise ValueError(
-                f"sex must be 'male' or 'female'; got {sex!r}"
-            )
+            raise ValueError(f"sex must be 'male' or 'female'; got {sex!r}")
         if smoker_class not in ("nonsmoker", "smoker"):
-            raise ValueError(
-                f"smoker_class must be 'nonsmoker' or 'smoker'; got {smoker_class!r}"
-            )
+            raise ValueError(f"smoker_class must be 'nonsmoker' or 'smoker'; got {smoker_class!r}")
         artifact_name = _ARTIFACT_BY_KEY[(sex, smoker_class)]
         artifact = get_artifact(artifact_name)
         path = artifact.path
@@ -122,9 +116,7 @@ class MortalityTable2017CSO:
         )
 
 
-def load_2017_cso_ultimate(
-    *, sex: Sex, smoker_class: SmokerClass
-) -> MortalityTable2017CSO:
+def load_2017_cso_ultimate(*, sex: Sex, smoker_class: SmokerClass) -> MortalityTable2017CSO:
     """Convenience free-function alias for :meth:`MortalityTable2017CSO.load`."""
     return MortalityTable2017CSO.load(sex=sex, smoker_class=smoker_class)
 

@@ -6,9 +6,7 @@ Phase 0/1/.../7 of ``docs/seven_product_rollout_plan.md``.
 
 from __future__ import annotations
 
-from product_registry import ProductType, product_label
-
-from products import ProductDefinition, register_product
+from build_fia_excel_workbook import FIAExcelBuildSpec
 from fia_projection import (
     FIAContract,
     FIAProjectionResult,
@@ -16,11 +14,10 @@ from fia_projection import (
     price_fia_single_premium,
     price_fia_single_premium_monte_carlo,
 )
-from build_fia_excel_workbook import FIAExcelBuildSpec
-
 from product_excel import _BUILDER_REGISTRY
+from product_registry import ProductType, product_label
+from products import ProductDefinition, register_product
 from products.fia.ui import FIA_ADAPTER, fia_metric_formatter
-
 
 DEFINITION = register_product(
     ProductDefinition(
@@ -45,5 +42,6 @@ __all__ = [
     "FIA_ADAPTER",
     "liability_path_from_fia_projection",
     "price_fia_single_premium",
+    "price_fia_single_premium_monte_carlo",
     "fia_metric_formatter",
 ]

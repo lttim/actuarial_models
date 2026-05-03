@@ -21,9 +21,7 @@ def test_lapse_assumption_validates_rates():
 
 
 def test_annual_rate_lookup_handles_table_and_ultimate():
-    la = lapse.LapseAssumption(
-        annual_lapse_rates_by_year=(0.08, 0.07, 0.06), ultimate_rate=0.02
-    )
+    la = lapse.LapseAssumption(annual_lapse_rates_by_year=(0.08, 0.07, 0.06), ultimate_rate=0.02)
     assert la.annual_rate_for_policy_year(1) == pytest.approx(0.08)
     assert la.annual_rate_for_policy_year(2) == pytest.approx(0.07)
     assert la.annual_rate_for_policy_year(3) == pytest.approx(0.06)
@@ -52,9 +50,7 @@ def test_monthly_decrements_zero_when_no_table():
 def test_combined_monthly_survival_decreasing_and_bounded():
     qm = np.full(12, 0.001, dtype=float)
     qw = np.full(12, 0.005, dtype=float)
-    surv = lapse.combined_monthly_survival(
-        mortality_monthly_q=qm, lapse_monthly_q=qw
-    )
+    surv = lapse.combined_monthly_survival(mortality_monthly_q=qm, lapse_monthly_q=qw)
     assert surv.shape == (12,)
     assert np.all(surv > 0.0) and np.all(surv <= 1.0)
     # Monotone non-increasing

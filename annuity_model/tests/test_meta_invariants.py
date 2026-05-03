@@ -31,8 +31,8 @@ import rila_projection as rp  # noqa: F401  -- import so dispatch self-registers
 import term_projection as tp  # noqa: F401  -- import so dispatch self-registers
 from liability_dispatch import liability_path_for, registered_typenames
 from product_registry import (
-    ProductType,
     _PRICING_METRIC_FORMATTERS,
+    ProductType,
     get_pricing_metrics,
     implemented_product_types,
 )
@@ -89,9 +89,7 @@ def test_liability_dispatch_keys_match_real_result_classnames() -> None:
     horizon_age = 75
 
     spia_result = sp.price_spia_single_premium(
-        contract=sp.SPIAContract(
-            issue_age=issue_age, sex="male", benefit_annual=1_000.0
-        ),
+        contract=sp.SPIAContract(issue_age=issue_age, sex="male", benefit_annual=1_000.0),
         yield_curve=yc,
         mortality=mort,
         horizon_age=horizon_age,

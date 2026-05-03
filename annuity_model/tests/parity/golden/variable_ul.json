@@ -15,10 +15,10 @@
     "yield_rate": 0.04
   },
   "metrics": {
-    "annuity_factor": 258.77925743518205,
+    "annuity_factor": 258.7792574352,
     "av_end_T": 0.0,
     "n_months": 900,
-    "pv_benefit": 23524.460429963572,
+    "pv_benefit": 23524.4604299636,
     "pv_monthly_expenses": 0.0,
     "single_premium": 25000.0
   },

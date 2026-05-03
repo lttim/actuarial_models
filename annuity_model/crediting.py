@@ -81,13 +81,9 @@ class AnnualPointToPointCapped:
 
     def __post_init__(self) -> None:
         if float(self.participation) < 0.0:
-            raise ValueError(
-                f"participation must be >= 0; got {self.participation!r}"
-            )
+            raise ValueError(f"participation must be >= 0; got {self.participation!r}")
         if float(self.cap) < float(self.floor):
-            raise ValueError(
-                f"cap ({self.cap!r}) must be >= floor ({self.floor!r})"
-            )
+            raise ValueError(f"cap ({self.cap!r}) must be >= floor ({self.floor!r})")
 
     def credit_segment(self, *, raw_index_return: float) -> float:
         x = float(self.participation) * float(raw_index_return)

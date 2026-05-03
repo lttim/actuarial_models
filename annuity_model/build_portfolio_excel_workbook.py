@@ -31,7 +31,7 @@ def _policy_cf_rows(policy_results: list[object], n_months: int) -> list[list[fl
     """Precompute one liability cashflow vector per policy."""
     rows: list[list[float]] = []
     for pr in policy_results:
-        pricing = getattr(pr, "pricing")
+        pricing = pr.pricing
         rows.append(_policy_cf_row(pricing, n_months))
     return rows
 
@@ -75,7 +75,13 @@ def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
     ws_pc["A1"].font = Font(bold=True)
     ws_pc["B1"].font = Font(bold=True)
     for j, pr in enumerate(res.policy_results, start=first_pc):
-        hdr = str(pr.policy_id).replace("[", "").replace("]", "").replace("*", "").replace("?", "")[:200]
+        hdr = (
+            str(pr.policy_id)
+            .replace("[", "")
+            .replace("]", "")
+            .replace("*", "")
+            .replace("?", "")[:200]
+        )
         ws_pc.cell(row=1, column=j, value=hdr or f"policy_{j}").font = Font(bold=True)
     policy_cf_rows = _policy_cf_rows(list(res.policy_results), n)
     for i in range(n):
@@ -97,7 +103,11 @@ def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
     for pt in _sorted_product_types(dict(res.rollups_by_product_type)):
         scal: ProductTypeRollupScalars = res.product_type_scalar_rollups[pt]
         path = res.rollups_by_product_type[pt]
-        sum_cf = float(path.expected_total_cashflows.sum()) if len(path.expected_total_cashflows) else 0.0
+        sum_cf = (
+            float(path.expected_total_cashflows.sum())
+            if len(path.expected_total_cashflows)
+            else 0.0
+        )
         ws_rt.cell(row=r, column=1, value=pt.value)
         ws_rt.cell(row=r, column=2, value=scal.policy_count)
         ws_rt.cell(
@@ -108,7 +118,9 @@ def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
         ws_rt.cell(
             row=r,
             column=4,
-            value=scal.sum_undiscounted_cashflows if scal.sum_undiscounted_cashflows is not None else sum_cf,
+            value=scal.sum_undiscounted_cashflows
+            if scal.sum_undiscounted_cashflows is not None
+            else sum_cf,
         )
         r += 1
 
@@ -169,8 +181,12 @@ def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
     # --- README ---
     ws_rm = wb.create_sheet("README")
     ws_rm["A1"] = "Portfolio v1 workbook"
-    ws_rm["A2"] = "Per-policy pricing is seriatim in Python; total_cf on LiabilityAggregate sums PolicyCashflows."
-    ws_rm["A3"] = "ALM is not embedded here (v1); run ALM from the app or CLI on the aggregate path."
+    ws_rm["A2"] = (
+        "Per-policy pricing is seriatim in Python; total_cf on LiabilityAggregate sums PolicyCashflows."
+    )
+    ws_rm["A3"] = (
+        "ALM is not embedded here (v1); run ALM from the app or CLI on the aggregate path."
+    )
 
     validate_workbook_or_raise(wb)
     buf = io.BytesIO()

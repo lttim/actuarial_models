@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Protocol, Union
+from typing import Any, Protocol, TypeAlias
 
 import numpy as np
 
@@ -33,18 +33,18 @@ from build_wl_excel_workbook import WLExcelBuildSpec, wl_excel_spec_from_launche
 # this union (P1, 2026-04) lets mypy catch "wrong product, wrong contract"
 # wiring at the call site instead of at the runtime ``isinstance`` check
 # inside each adapter. New products MUST extend this union when they land.
-ProductContract = Union[
-    sp.SPIAContract,
-    tp.TermLifeContract,
-    rp.RILAContract,
-    my.MYGAContract,
-    fp.FIAContract,
-    va.VAContract,
-    wl.WLContract,
-    ul.ULContract,
-    iul.IULContract,
-    vul.VULContract,
-]
+ProductContract: TypeAlias = (
+    sp.SPIAContract
+    | tp.TermLifeContract
+    | rp.RILAContract
+    | my.MYGAContract
+    | fp.FIAContract
+    | va.VAContract
+    | wl.WLContract
+    | ul.ULContract
+    | iul.IULContract
+    | vul.VULContract
+)
 
 
 class ProductType(str, Enum):
@@ -173,9 +173,7 @@ class ProductAdapter(Protocol):
     ) -> ExcelBuildSpec | TermExcelBuildSpec | RILAExcelBuildSpec: ...
 
 
-def validate_run_inputs(
-    product_type: ProductType, state: Mapping[str, Any]
-) -> tuple[str, ...]:
+def validate_run_inputs(product_type: ProductType, state: Mapping[str, Any]) -> tuple[str, ...]:
     """Per-product pre-flight for Streamlit run-form session state.
 
     Returns a tuple of human-readable error messages; empty tuple means
@@ -205,12 +203,15 @@ def validate_run_inputs(
         errors.append("issue_age is required.")
     if horizon_age is None:
         errors.append("horizon_age is required.")
-    if isinstance(issue_age, (int, float)) and isinstance(horizon_age, (int, float)):
-        if int(horizon_age) <= int(issue_age):
-            errors.append(
-                f"horizon_age ({int(horizon_age)}) must be strictly greater than "
-                f"issue_age ({int(issue_age)}); otherwise the projection horizon is empty."
-            )
+    if (
+        isinstance(issue_age, (int, float))
+        and isinstance(horizon_age, (int, float))
+        and int(horizon_age) <= int(issue_age)
+    ):
+        errors.append(
+            f"horizon_age ({int(horizon_age)}) must be strictly greater than "
+            f"issue_age ({int(issue_age)}); otherwise the projection horizon is empty."
+        )
 
     extra = _PRODUCT_VALIDATORS.get(product_type)
     if extra is not None:
@@ -226,7 +227,9 @@ def _validate_myga(state: Mapping[str, Any]) -> list[str]:
     years = state.get("myga_guarantee_years")
     if sp_val is not None and (not isinstance(sp_val, (int, float)) or float(sp_val) <= 0):
         errors.append("myga_single_premium must be > 0.")
-    if rate is not None and (not isinstance(rate, (int, float)) or not (-0.5 <= float(rate) <= 1.0)):
+    if rate is not None and (
+        not isinstance(rate, (int, float)) or not (-0.5 <= float(rate) <= 1.0)
+    ):
         errors.append("myga_declared_rate must be in [-0.5, 1.0].")
     if years is not None and (not isinstance(years, (int, float)) or not (1 <= int(years) <= 30)):
         errors.append("myga_guarantee_years must be in [1, 30].")
@@ -1035,6 +1038,7 @@ def term_premium_mode_label_options() -> tuple[str, ...]:
 def term_benefit_timing_label_options() -> tuple[str, ...]:
     return tuple(_TERM_BENEFIT_TIMING_BY_LABEL.keys())
 
+
 _PRODUCT_UI_CONFIG: dict[ProductType, ProductUIConfig] = {
     ProductType.SPIA: ProductUIConfig(
         selected_info_message=None,
@@ -1208,9 +1212,15 @@ def _accumulation_pricing_metrics(result: Any) -> tuple[PricingMetric, ...]:
     """Shared accumulation-product metrics (MYGA / FIA / VA)."""
     av_end = float(getattr(result, "account_value_end_month", np.array([0.0]))[-1])
     return (
-        PricingMetric(label="Single premium (input)", value=float(result.single_premium), is_money=True),
-        PricingMetric(label="PV benefit (death+maturity)", value=float(result.pv_benefit), is_money=True),
-        PricingMetric(label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True),
+        PricingMetric(
+            label="Single premium (input)", value=float(result.single_premium), is_money=True
+        ),
+        PricingMetric(
+            label="PV benefit (death+maturity)", value=float(result.pv_benefit), is_money=True
+        ),
+        PricingMetric(
+            label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True
+        ),
         PricingMetric(label="Account value at horizon", value=av_end, is_money=True),
     )
 
@@ -1220,8 +1230,12 @@ def _life_single_premium_metrics(result: Any) -> tuple[PricingMetric, ...]:
     av_end = float(getattr(result, "account_value_end_month", np.array([0.0]))[-1])
     return (
         PricingMetric(label="Single premium", value=float(result.single_premium), is_money=True),
-        PricingMetric(label="PV claims (face × death-prob)", value=float(result.pv_benefit), is_money=True),
-        PricingMetric(label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True),
+        PricingMetric(
+            label="PV claims (face × death-prob)", value=float(result.pv_benefit), is_money=True
+        ),
+        PricingMetric(
+            label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True
+        ),
         PricingMetric(label="Account value at horizon", value=av_end, is_money=True),
     )
 
@@ -1230,9 +1244,17 @@ def _wl_pricing_metrics(result: Any) -> tuple[PricingMetric, ...]:
     """WL has no AV; show face amount instead."""
     face = float(getattr(result, "face_amount", 0.0))
     return (
-        PricingMetric(label="Single premium (NSP + expenses)", value=float(result.single_premium), is_money=True),
-        PricingMetric(label="PV claims (face × death-prob)", value=float(result.pv_benefit), is_money=True),
-        PricingMetric(label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True),
+        PricingMetric(
+            label="Single premium (NSP + expenses)",
+            value=float(result.single_premium),
+            is_money=True,
+        ),
+        PricingMetric(
+            label="PV claims (face × death-prob)", value=float(result.pv_benefit), is_money=True
+        ),
+        PricingMetric(
+            label="PV monthly expenses", value=float(result.pv_monthly_expenses), is_money=True
+        ),
         PricingMetric(label="Face amount", value=face, is_money=True),
     )
 

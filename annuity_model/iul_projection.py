@@ -358,21 +358,23 @@ def price_iul_single_premium(
         first_term = int(np.argmax(terminated))
         if terminated[first_term]:
             death_prob_month[first_term:] = 0.0
-            survival_end[first_term:] = float(survival_end[first_term - 1]) if first_term > 0 else 1.0
-            survival_start[first_term + 1:] = float(survival_end[first_term])
+            survival_end[first_term:] = (
+                float(survival_end[first_term - 1]) if first_term > 0 else 1.0
+            )
+            survival_start[first_term + 1 :] = float(survival_end[first_term])
 
     if lapse is not None:
         from lapse import combined_monthly_survival
+
         lapse_q_m = lapse.monthly_decrements(n_months)
         survival_combined = combined_monthly_survival(
-            mortality_monthly_q=monthly_q, lapse_monthly_q=lapse_q_m,
+            mortality_monthly_q=monthly_q,
+            lapse_monthly_q=lapse_q_m,
         )
         survival_combined_start = np.empty_like(survival_combined)
         survival_combined_start[0] = 1.0
         survival_combined_start[1:] = survival_combined[:-1]
-        death_prob_month = np.clip(
-            survival_combined_start * monthly_q, 0.0, 1.0
-        )
+        death_prob_month = np.clip(survival_combined_start * monthly_q, 0.0, 1.0)
         survival_end = survival_combined
         survival_start = survival_combined_start
 
@@ -503,18 +505,28 @@ def price_iul_single_premium_monte_carlo(
     dt = 1.0 / 12.0
     n_months = max(1, int(round((horizon - contract.issue_age) / dt)))
     idx_paths = sp.simulate_index_levels_gbm(
-        n_sims=n_sims, n_months=n_months, s0=s0,
-        annual_drift=annual_drift, annual_vol=annual_vol, seed=seed,
+        n_sims=n_sims,
+        n_months=n_months,
+        s0=s0,
+        annual_drift=annual_drift,
+        annual_vol=annual_vol,
+        seed=seed,
     )
     pvb = np.full(int(n_sims), np.nan, dtype=float)
     for i in range(int(n_sims)):
         path = idx_paths[i, :]
         levels_payment = path[1:].astype(float)
         res = price_iul_single_premium(
-            contract=contract, yield_curve=yield_curve, mortality=mortality,
-            horizon_age=horizon, spread=spread, valuation_year=valuation_year,
-            expenses=expenses, expenses_csv_path=expenses_csv_path,
-            index_s0=float(path[0]), index_levels_payment=levels_payment,
+            contract=contract,
+            yield_curve=yield_curve,
+            mortality=mortality,
+            horizon_age=horizon,
+            spread=spread,
+            valuation_year=valuation_year,
+            expenses=expenses,
+            expenses_csv_path=expenses_csv_path,
+            index_s0=float(path[0]),
+            index_levels_payment=levels_payment,
             expense_annual_inflation=expense_annual_inflation,
         )
         pvb[i] = float(res.pv_benefit)
@@ -535,6 +547,4 @@ def liability_path_from_iul_projection(pricing: IULProjectionResult) -> sp.Liabi
 
 from liability_dispatch import register_liability_path_converter  # noqa: E402
 
-register_liability_path_converter(
-    "IULProjectionResult", liability_path_from_iul_projection
-)
+register_liability_path_converter("IULProjectionResult", liability_path_from_iul_projection)

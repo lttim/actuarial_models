@@ -13,8 +13,8 @@ from portfolio_runner import run_portfolio
 from pricing_run_form_state import default_inforce_scratch_row
 from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
 from pricing_ui import (
-    _build_portfolio_profit_decomposition_rows_for_policy_results,
     _build_portfolio_profit_decomposition_rows,
+    _build_portfolio_profit_decomposition_rows_for_policy_results,
     _build_profit_decomposition_rows,
     _merge_profit_waterfall_row_sets,
 )
@@ -57,11 +57,7 @@ def test_mixed_book_generic_bridge_matches_scalar_sums() -> None:
     sum_pv_m = sum(float(getattr(pr.pricing, "pv_monthly_expenses")) for pr in res.policy_results)
     sum_sp = sum(float(getattr(pr.pricing, "single_premium")) for pr in res.policy_results)
     n = len(res.policy_results)
-    issue = (
-        float(scen.expenses.policy_expense_dollars) * n
-        if scen.expenses is not None
-        else 0.0
-    )
+    issue = float(scen.expenses.policy_expense_dollars) * n if scen.expenses is not None else 0.0
     assert rows[0] == ("PV benefits (portfolio sum)", sum_pv_b, True)
     assert rows[1][0] == "PV monthly cashflow component (portfolio sum)"
     assert rows[1][1] == pytest.approx(sum_pv_m)

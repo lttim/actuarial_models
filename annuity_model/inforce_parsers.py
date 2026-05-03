@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Mapping, cast
+from collections.abc import Mapping
+from typing import Any, Literal, cast
 
 import pandas as pd
 
@@ -97,7 +98,11 @@ def fia_row_to_contract(row: Mapping[str, Any]) -> ProductContract:
 
 def va_row_to_contract(row: Mapping[str, Any]) -> ProductContract:
     basis_raw = row.get("gmdb_basis", "return_of_premium")
-    basis = str(basis_raw).strip() if basis_raw is not None and not pd.isna(basis_raw) else "return_of_premium"
+    basis = (
+        str(basis_raw).strip()
+        if basis_raw is not None and not pd.isna(basis_raw)
+        else "return_of_premium"
+    )
     if basis not in ("return_of_premium", "max_anniversary"):
         basis = "return_of_premium"
     return va.VAContract(

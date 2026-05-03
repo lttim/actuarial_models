@@ -100,7 +100,10 @@ def price_wl_single_premium(
     *,
     contract: WLContract,
     yield_curve: sp.YieldCurve,
-    mortality: sp.MortalityTableQx | sp.MortalityTableRP2014MP2016 | MortalityTable2017CSO | None = None,
+    mortality: sp.MortalityTableQx
+    | sp.MortalityTableRP2014MP2016
+    | MortalityTable2017CSO
+    | None = None,
     horizon_age: int | None = None,
     spread: float = 0.0,
     valuation_year: int | None = None,
@@ -116,9 +119,7 @@ def price_wl_single_premium(
         raise ValueError("face_amount must be > 0.")
     del index_scenario_csv_path  # accepted for adapter-signature parity, unused.
 
-    mort = _resolve_wl_mortality(
-        mortality, sex=contract.sex, smoker_class=contract.smoker_class
-    )
+    mort = _resolve_wl_mortality(mortality, sex=contract.sex, smoker_class=contract.smoker_class)
 
     horizon = int(horizon_age) if horizon_age is not None else int(contract.horizon_age)
     dt = 1.0 / 12.0
@@ -148,14 +149,13 @@ def price_wl_single_premium(
         mortality_q_m = np.clip(1.0 - mort_step, 0.0, 1.0)
         lapse_q_m = lapse.monthly_decrements(n_months)
         survival_combined = combined_monthly_survival(
-            mortality_monthly_q=mortality_q_m, lapse_monthly_q=lapse_q_m,
+            mortality_monthly_q=mortality_q_m,
+            lapse_monthly_q=lapse_q_m,
         )
         survival_combined_start = np.empty_like(survival_combined)
         survival_combined_start[0] = 1.0
         survival_combined_start[1:] = survival_combined[:-1]
-        death_prob_month = np.clip(
-            survival_combined_start * mortality_q_m, 0.0, 1.0
-        )
+        death_prob_month = np.clip(survival_combined_start * mortality_q_m, 0.0, 1.0)
         survival_end = survival_combined
         survival_start = survival_combined_start
 
@@ -247,6 +247,4 @@ def liability_path_from_wl_projection(pricing: WLProjectionResult) -> sp.Liabili
 
 from liability_dispatch import register_liability_path_converter  # noqa: E402
 
-register_liability_path_converter(
-    "WLProjectionResult", liability_path_from_wl_projection
-)
+register_liability_path_converter("WLProjectionResult", liability_path_from_wl_projection)

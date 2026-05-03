@@ -90,11 +90,7 @@ pytestmark = [pytest.mark.invariant]
 
 def _local_sibling_module_names() -> set[str]:
     """Return the set of module names that live next to ``pricing_ui.py``."""
-    return {
-        path.stem
-        for path in PACKAGE_ROOT.glob("*.py")
-        if path.name != "__init__.py"
-    }
+    return {path.stem for path in PACKAGE_ROOT.glob("*.py") if path.name != "__init__.py"}
 
 
 def _toplevel_defined_names(source: str) -> set[str]:

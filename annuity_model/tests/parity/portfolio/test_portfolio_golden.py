@@ -11,12 +11,14 @@ import pytest
 from inforce_io import load_policy_inputs_from_csv
 from portfolio import Portfolio
 from portfolio_runner import run_portfolio
-from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
 from portfolio_summary import portfolio_result_to_summary_dict
+from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
 
 pytestmark = pytest.mark.parity
 
-GOLDEN_PATH = Path(__file__).resolve().parents[1] / "golden" / "portfolio" / "portfolio_5policy.json"
+GOLDEN_PATH = (
+    Path(__file__).resolve().parents[1] / "golden" / "portfolio" / "portfolio_5policy.json"
+)
 
 
 def _current_snapshot() -> dict[str, object]:
@@ -29,7 +31,8 @@ def _current_snapshot() -> dict[str, object]:
         "summary": portfolio_result_to_summary_dict(res),
         "n_months_total_path": len(res.liability_path_total.expected_total_cashflows),
         "by_type_months": {
-            pt.value: len(p.expected_total_cashflows) for pt, p in res.rollups_by_product_type.items()
+            pt.value: len(p.expected_total_cashflows)
+            for pt, p in res.rollups_by_product_type.items()
         },
     }
 

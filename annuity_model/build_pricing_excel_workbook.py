@@ -338,6 +338,7 @@ def excel_spec_from_launcher(
         }
     )
 
+    excel_mort: Literal["rp_mp", "static"]
     if isinstance(mortality, sp.MortalityTableRP2014MP2016):
         base_qx_df = pd.DataFrame(
             {

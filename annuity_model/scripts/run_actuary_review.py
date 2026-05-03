@@ -147,7 +147,7 @@ def _git(*args: str) -> str:
 
 
 def _utc_now() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def _branch() -> str:
@@ -172,7 +172,7 @@ def _changed_files() -> list[str]:
     """Return the list of changed-vs-HEAD file paths (modified + untracked)."""
     tracked = _git("diff", "--name-only", "HEAD").strip().splitlines()
     untracked = _untracked_files()
-    return sorted(set(p for p in tracked + untracked if p))
+    return sorted({p for p in tracked + untracked if p})
 
 
 def _per_file_diff(path: str) -> str:
@@ -285,9 +285,7 @@ def _cached_test_status() -> str:
     if stale:
         stale_bullets = "\n".join(f"  - `{nid}`" for nid in stale[:10])
         stale_extra = "" if len(stale) <= 10 else f"\n  - ... ({len(stale) - 10} more)"
-        parts.append(
-            f"- Stale entries (renamed / removed tests; safe to ignore): **{len(stale)}**"
-        )
+        parts.append(f"- Stale entries (renamed / removed tests; safe to ignore): **{len(stale)}**")
         parts.append(f"- Stale nodeids:\n{stale_bullets}{stale_extra}")
     return "\n".join(parts)
 

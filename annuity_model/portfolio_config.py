@@ -36,9 +36,7 @@ def portfolio_v1_enabled() -> bool:
     raw = os.environ.get("ANNUITY_MODEL_PORTFOLIO_V1", "").strip().lower()
     if raw in ("1", "true", "yes", "on"):
         return True
-    if raw in ("0", "false", "no", "off"):
-        return False
-    return True
+    return raw not in ("0", "false", "no", "off")
 
 
 def _session_ui_force_sidebar_key() -> str:

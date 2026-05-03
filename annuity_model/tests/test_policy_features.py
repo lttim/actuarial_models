@@ -41,14 +41,25 @@ def test_surrender_charge_schedule_maps_policy_years_to_months():
 def test_segment_allocations_normalize_weights_and_apply_buffer():
     allocs = normalize_segment_allocations(
         (
-            SegmentAllocation(weight=25.0, design="cap_floor", participation=1.0, cap=0.10, floor=0.0),
-            SegmentAllocation(weight=75.0, design="buffer", participation=1.0, cap=0.12, buffer=0.10),
+            SegmentAllocation(
+                weight=25.0, design="cap_floor", participation=1.0, cap=0.10, floor=0.0
+            ),
+            SegmentAllocation(
+                weight=75.0, design="buffer", participation=1.0, cap=0.12, buffer=0.10
+            ),
         )
     )
     assert sum(a.weight for a in allocs) == pytest.approx(1.0)
-    assert segment_credited_return(allocation=allocs[0], raw_index_return=0.20) == pytest.approx(0.10)
-    assert segment_credited_return(allocation=allocs[1], raw_index_return=-0.15) == pytest.approx(-0.05)
-    assert buffer_credited_return(raw_index_return=-0.08, participation=1.0, cap=0.12, buffer=0.10) == 0.0
+    assert segment_credited_return(allocation=allocs[0], raw_index_return=0.20) == pytest.approx(
+        0.10
+    )
+    assert segment_credited_return(allocation=allocs[1], raw_index_return=-0.15) == pytest.approx(
+        -0.05
+    )
+    assert (
+        buffer_credited_return(raw_index_return=-0.08, participation=1.0, cap=0.12, buffer=0.10)
+        == 0.0
+    )
 
 
 def test_glwb_and_loan_terms_validate_bounds():

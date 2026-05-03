@@ -26,12 +26,10 @@ from liability_dispatch import liability_path_for, registered_typenames
 from liability_layouts import LIABILITY_LAYOUTS
 from product_registry import (
     _PRICING_METRIC_FORMATTERS,
-    _PRODUCT_ADAPTERS,
     ProductType,
     get_product_adapter,
     implemented_product_types,
 )
-
 from products import (
     ProductDefinition,
     discover_products,

@@ -42,6 +42,7 @@ import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
 from alm_excel_ladder import ALM_ENGINE_SHEET
+from build_portfolio_excel_workbook import build_portfolio_workbook_bytes
 from build_pricing_excel_workbook import (
     ALM_ENGINE_FIELD_GUIDE_SHEET,
     ALM_ENGINE_STEP_MONTHS,
@@ -57,7 +58,6 @@ from build_pricing_excel_workbook import (
     alm_excel_truncate_snapshot,
     mc_excel_snapshot_from_result,
 )
-from build_portfolio_excel_workbook import build_portfolio_workbook_bytes
 from inforce_io import load_policy_inputs_from_csv
 from liability_aggregation import padded_cashflows_on_portfolio_grid
 from portfolio import PolicyInput, Portfolio, PortfolioResult, RunScenario
@@ -68,11 +68,6 @@ from portfolio_config import (
 )
 from portfolio_runner import run_portfolio
 from portfolio_summary import portfolio_result_to_summary_dict
-from pricing_scenario_materialize import (
-    build_mortality_from_seeds,
-    build_yield_curve_from_seeds,
-    run_scenario_for_portfolio_policies,
-)
 from pricing_run_form_state import (
     PORTFOLIO_INFORCE_SCRATCH_COLUMNS,
     PORTFOLIO_KEY,
@@ -82,6 +77,11 @@ from pricing_run_form_state import (
     default_inforce_scratch_row,
     ensure_session_choice,
     run_number_input,
+)
+from pricing_scenario_materialize import (
+    build_mortality_from_seeds,
+    build_yield_curve_from_seeds,
+    run_scenario_for_portfolio_policies,
 )
 from product_excel import build_product_workbook
 from product_registry import (
@@ -1072,11 +1072,11 @@ def _build_portfolio_generic_pv_bridge_rows(
     for pr in policy_results:
         p = pr.pricing
         if hasattr(p, "pv_benefit"):
-            sum_pv_b += float(getattr(p, "pv_benefit"))
+            sum_pv_b += float(p.pv_benefit)
         if hasattr(p, "pv_monthly_expenses"):
-            sum_pv_m += float(getattr(p, "pv_monthly_expenses"))
+            sum_pv_m += float(p.pv_monthly_expenses)
         if hasattr(p, "single_premium"):
-            sum_sp += float(getattr(p, "single_premium"))
+            sum_sp += float(p.single_premium)
         n_pol += 1
     issue_total = (
         float(expenses.policy_expense_dollars) * n_pol
@@ -1127,9 +1127,7 @@ def _build_portfolio_profit_decomposition_rows_for_policy_results(
                 row_sets.append(rows_one)
             merged = _merge_profit_waterfall_row_sets(row_sets)
             if pt == ProductType.TERM_LIFE:
-                cap = (
-                    "Portfolio Term book: same waterfall interpretation as Pricing Run; table amounts sum policies."
-                )
+                cap = "Portfolio Term book: same waterfall interpretation as Pricing Run; table amounts sum policies."
             elif pt == ProductType.SPIA:
                 cap = "Portfolio SPIA book: same ladder as Pricing Run; table amounts sum policies."
             else:
@@ -1206,7 +1204,9 @@ def _render_portfolio_liability_projection_chart(res: PortfolioResult) -> None:
         default=options,
         key=f"portfolio_proj_series_{run_tag}",
     )
-    cumulative = st.toggle("Cumulative cashflows", value=False, key="portfolio_projection_cumulative")
+    cumulative = st.toggle(
+        "Cumulative cashflows", value=False, key="portfolio_projection_cumulative"
+    )
     if not selected:
         st.info("Select at least one series to plot.")
         return
@@ -1255,7 +1255,9 @@ def _render_portfolio_alm_baseline_section(res: PortfolioResult) -> None:
     fr = np.asarray(alm.funding_ratio, dtype=float)
     fr0 = float(fr[0]) if fr.size else float("nan")
     min_fr = float(np.nanmin(fr)) if fr.size else float("nan")
-    min_surp = float(np.min(np.asarray(alm.surplus, dtype=float))) if alm.surplus.size else float("nan")
+    min_surp = (
+        float(np.min(np.asarray(alm.surplus, dtype=float))) if alm.surplus.size else float("nan")
+    )
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.metric("Initial funding ratio", f"{fr0:.4f}")
@@ -1285,7 +1287,9 @@ def _render_portfolio_alm_baseline_section(res: PortfolioResult) -> None:
         .mark_rule(color="#888", strokeDash=[4, 4])
         .encode(y="y:Q")
     )
-    st.altair_chart((line + rule).properties(height=320, title="Surplus path"), use_container_width=True)
+    st.altair_chart(
+        (line + rule).properties(height=320, title="Surplus path"), use_container_width=True
+    )
     fr_df = pd.DataFrame({"Time (years)": ty_vis, "Funding ratio": fr})
     fr_chart = (
         alt.Chart(fr_df)
@@ -2576,11 +2580,15 @@ def _snapshot_pricing_economics_from_session(
     spread = float(st.session_state.get(RUN_KEY.SPREAD, 0.0))
     product_caps = get_product_capabilities(selected_product)
     can_use_economic_scenario = bool(product_caps.supports_economic_scenario)
-    use_index = bool(st.session_state.get(RUN_KEY.USE_INDEX, True)) if can_use_economic_scenario else False
+    use_index = (
+        bool(st.session_state.get(RUN_KEY.USE_INDEX, True)) if can_use_economic_scenario else False
+    )
     index_csv = str(st.session_state.get(RUN_KEY.INDEX_CSV, sp.DEFAULT_SP500_SCENARIO_CSV))
     expense_inflation_pct = float(st.session_state.get(RUN_KEY.EXPENSE_INFLATION_PCT, 2.5))
     can_use_monte_carlo = bool(product_caps.supports_monte_carlo)
-    mc_enable = bool(st.session_state.get(RUN_KEY.MC_ENABLE, False)) if can_use_monte_carlo else False
+    mc_enable = (
+        bool(st.session_state.get(RUN_KEY.MC_ENABLE, False)) if can_use_monte_carlo else False
+    )
     mc_n_sims = int(st.session_state.get(RUN_KEY.MC_N_SIMS, 100))
     mc_seed = int(st.session_state.get(RUN_KEY.MC_SEED, 42))
     mc_drift_pct = float(st.session_state.get(RUN_KEY.MC_DRIFT_PCT, 6.0))
@@ -2722,18 +2730,29 @@ def _render_run_and_results() -> None:
             m1, m2, m3 = st.columns(3)
             with m1:
                 run_number_input(
-                    "Single premium ($)", "run_myga_single_premium",
-                    default=100_000.0, min_value=1.0, step=1_000.0,
+                    "Single premium ($)",
+                    "run_myga_single_premium",
+                    default=100_000.0,
+                    min_value=1.0,
+                    step=1_000.0,
                 )
             with m2:
                 run_number_input(
-                    "Declared rate (annual decimal)", "run_myga_declared_rate",
-                    default=0.045, min_value=-0.5, max_value=1.0, format="%.4f",
+                    "Declared rate (annual decimal)",
+                    "run_myga_declared_rate",
+                    default=0.045,
+                    min_value=-0.5,
+                    max_value=1.0,
+                    format="%.4f",
                 )
             with m3:
                 run_number_input(
-                    "Guarantee years", "run_myga_guarantee_years",
-                    default=5, min_value=1, max_value=30, step=1,
+                    "Guarantee years",
+                    "run_myga_guarantee_years",
+                    default=5,
+                    min_value=1,
+                    max_value=30,
+                    step=1,
                 )
         elif selected_product == ProductType.FIA:
             benefit_annual = 0.0
@@ -2744,28 +2763,47 @@ def _render_run_and_results() -> None:
             f1, f2, f3, f4, f5 = st.columns(5)
             with f1:
                 run_number_input(
-                    "Single premium ($)", "run_fia_single_premium",
-                    default=100_000.0, min_value=1.0, step=1_000.0,
+                    "Single premium ($)",
+                    "run_fia_single_premium",
+                    default=100_000.0,
+                    min_value=1.0,
+                    step=1_000.0,
                 )
             with f2:
                 run_number_input(
-                    "Participation", "run_fia_participation",
-                    default=0.80, min_value=0.0, max_value=5.0, format="%.4f",
+                    "Participation",
+                    "run_fia_participation",
+                    default=0.80,
+                    min_value=0.0,
+                    max_value=5.0,
+                    format="%.4f",
                 )
             with f3:
                 run_number_input(
-                    "Annual cap", "run_fia_cap",
-                    default=0.07, min_value=-1.0, max_value=2.0, format="%.4f",
+                    "Annual cap",
+                    "run_fia_cap",
+                    default=0.07,
+                    min_value=-1.0,
+                    max_value=2.0,
+                    format="%.4f",
                 )
             with f4:
                 run_number_input(
-                    "Annual floor", "run_fia_floor",
-                    default=0.0, min_value=-1.0, max_value=1.0, format="%.4f",
+                    "Annual floor",
+                    "run_fia_floor",
+                    default=0.0,
+                    min_value=-1.0,
+                    max_value=1.0,
+                    format="%.4f",
                 )
             with f5:
                 run_number_input(
-                    "Horizon years", "run_fia_horizon_years",
-                    default=10, min_value=1, max_value=40, step=1,
+                    "Horizon years",
+                    "run_fia_horizon_years",
+                    default=10,
+                    min_value=1,
+                    max_value=40,
+                    step=1,
                 )
         elif selected_product == ProductType.VARIABLE_ANNUITY:
             benefit_annual = 0.0
@@ -2776,19 +2814,30 @@ def _render_run_and_results() -> None:
             v1, v2, v3 = st.columns(3)
             with v1:
                 run_number_input(
-                    "Single premium ($)", "run_va_single_premium",
-                    default=100_000.0, min_value=1.0, step=1_000.0,
+                    "Single premium ($)",
+                    "run_va_single_premium",
+                    default=100_000.0,
+                    min_value=1.0,
+                    step=1_000.0,
                 )
             with v2:
                 run_number_input(
-                    "M&E charge (annual)", "run_va_me_charge",
-                    default=0.014, min_value=0.0, max_value=0.05,
-                    format="%.4f", help="Industry typical 100-200 bps.",
+                    "M&E charge (annual)",
+                    "run_va_me_charge",
+                    default=0.014,
+                    min_value=0.0,
+                    max_value=0.05,
+                    format="%.4f",
+                    help="Industry typical 100-200 bps.",
                 )
             with v3:
                 run_number_input(
-                    "Horizon years", "run_va_horizon_years",
-                    default=20, min_value=1, max_value=40, step=1,
+                    "Horizon years",
+                    "run_va_horizon_years",
+                    default=20,
+                    min_value=1,
+                    max_value=40,
+                    step=1,
                 )
         elif selected_product == ProductType.WHOLE_LIFE:
             benefit_annual = 0.0
@@ -2799,12 +2848,16 @@ def _render_run_and_results() -> None:
             w1, w2 = st.columns(2)
             with w1:
                 run_number_input(
-                    "Face amount ($)", "run_wl_face_amount",
-                    default=250_000.0, min_value=1.0, step=10_000.0,
+                    "Face amount ($)",
+                    "run_wl_face_amount",
+                    default=250_000.0,
+                    min_value=1.0,
+                    step=10_000.0,
                 )
             with w2:
                 st.selectbox(
-                    "Smoker class", options=["nonsmoker", "smoker"],
+                    "Smoker class",
+                    options=["nonsmoker", "smoker"],
                     key="run_wl_smoker_class",
                 )
         elif selected_product == ProductType.UNIVERSAL_LIFE:
@@ -2816,30 +2869,48 @@ def _render_run_and_results() -> None:
             u1, u2, u3 = st.columns(3)
             with u1:
                 run_number_input(
-                    "Face amount ($)", "run_ul_face_amount",
-                    default=250_000.0, min_value=1.0, step=10_000.0,
+                    "Face amount ($)",
+                    "run_ul_face_amount",
+                    default=250_000.0,
+                    min_value=1.0,
+                    step=10_000.0,
                 )
                 st.selectbox(
-                    "Smoker class", options=["nonsmoker", "smoker"],
+                    "Smoker class",
+                    options=["nonsmoker", "smoker"],
                     key="run_ul_smoker_class",
                 )
             with u2:
                 run_number_input(
-                    "Single premium ($)", "run_ul_single_premium",
-                    default=25_000.0, min_value=1.0, step=1_000.0,
+                    "Single premium ($)",
+                    "run_ul_single_premium",
+                    default=25_000.0,
+                    min_value=1.0,
+                    step=1_000.0,
                 )
                 run_number_input(
-                    "Premium load (decimal)", "run_ul_premium_load",
-                    default=0.06, min_value=0.0, max_value=0.5, format="%.4f",
+                    "Premium load (decimal)",
+                    "run_ul_premium_load",
+                    default=0.06,
+                    min_value=0.0,
+                    max_value=0.5,
+                    format="%.4f",
                 )
             with u3:
                 run_number_input(
-                    "Monthly expense charge ($)", "run_ul_monthly_expense",
-                    default=7.50, min_value=0.0, step=0.50,
+                    "Monthly expense charge ($)",
+                    "run_ul_monthly_expense",
+                    default=7.50,
+                    min_value=0.0,
+                    step=0.50,
                 )
                 run_number_input(
-                    "Declared rate (annual)", "run_ul_declared_rate",
-                    default=0.04, min_value=-0.5, max_value=1.0, format="%.4f",
+                    "Declared rate (annual)",
+                    "run_ul_declared_rate",
+                    default=0.04,
+                    min_value=-0.5,
+                    max_value=1.0,
+                    format="%.4f",
                 )
         elif selected_product == ProductType.INDEXED_UL:
             benefit_annual = 0.0
@@ -2857,26 +2928,40 @@ def _render_run_and_results() -> None:
             x1, x2, x3 = st.columns(3)
             with x1:
                 run_number_input(
-                    "Face amount ($)", "run_vul_face_amount",
-                    default=250_000.0, min_value=1.0, step=10_000.0,
+                    "Face amount ($)",
+                    "run_vul_face_amount",
+                    default=250_000.0,
+                    min_value=1.0,
+                    step=10_000.0,
                 )
                 st.selectbox(
-                    "Smoker class", options=["nonsmoker", "smoker"],
+                    "Smoker class",
+                    options=["nonsmoker", "smoker"],
                     key="run_vul_smoker_class",
                 )
             with x2:
                 run_number_input(
-                    "Single premium ($)", "run_vul_single_premium",
-                    default=25_000.0, min_value=1.0, step=1_000.0,
+                    "Single premium ($)",
+                    "run_vul_single_premium",
+                    default=25_000.0,
+                    min_value=1.0,
+                    step=1_000.0,
                 )
                 run_number_input(
-                    "Premium load", "run_vul_premium_load",
-                    default=0.06, min_value=0.0, max_value=0.5, format="%.4f",
+                    "Premium load",
+                    "run_vul_premium_load",
+                    default=0.06,
+                    min_value=0.0,
+                    max_value=0.5,
+                    format="%.4f",
                 )
             with x3:
                 run_number_input(
-                    "Monthly expense", "run_vul_monthly_expense",
-                    default=7.50, min_value=0.0, step=0.50,
+                    "Monthly expense",
+                    "run_vul_monthly_expense",
+                    default=7.50,
+                    min_value=0.0,
+                    step=0.50,
                 )
         else:
             benefit_annual = run_number_input(
@@ -2982,9 +3067,7 @@ def _render_run_and_results() -> None:
                 # tests/test_pricing_ui_term_config.py.
                 term_years_value = parse_term_length_label_to_years(str(term_choice))
                 premium_mode_value = parse_term_premium_mode_label(str(premium_mode_choice))
-                benefit_timing_value = parse_term_benefit_timing_label(
-                    str(benefit_timing_choice)
-                )
+                benefit_timing_value = parse_term_benefit_timing_label(str(benefit_timing_choice))
                 contract = tp.TermLifeContract(
                     issue_age=int(issue_age),
                     sex="male" if sex == "male" else "female",
@@ -3002,15 +3085,21 @@ def _render_run_and_results() -> None:
                 )
             elif selected_product == ProductType.MYGA:
                 import myga_projection as my_proj
+
                 contract = my_proj.MYGAContract(
                     issue_age=int(issue_age),
                     sex="male" if sex == "male" else "female",
-                    single_premium=float(st.session_state.get("run_myga_single_premium", 100_000.0)),
-                    declared_rate_annual=float(st.session_state.get("run_myga_declared_rate", 0.045)),
+                    single_premium=float(
+                        st.session_state.get("run_myga_single_premium", 100_000.0)
+                    ),
+                    declared_rate_annual=float(
+                        st.session_state.get("run_myga_declared_rate", 0.045)
+                    ),
                     guarantee_years=int(st.session_state.get("run_myga_guarantee_years", 5)),
                 )
             elif selected_product == ProductType.FIA:
                 import fia_projection as fp_proj
+
                 contract = fp_proj.FIAContract(
                     issue_age=int(issue_age),
                     sex="male" if sex == "male" else "female",
@@ -3022,6 +3111,7 @@ def _render_run_and_results() -> None:
                 )
             elif selected_product == ProductType.VARIABLE_ANNUITY:
                 import va_projection as va_proj
+
                 contract = va_proj.VAContract(
                     issue_age=int(issue_age),
                     sex="male" if sex == "male" else "female",
@@ -3031,6 +3121,7 @@ def _render_run_and_results() -> None:
                 )
             elif selected_product == ProductType.WHOLE_LIFE:
                 import wl_projection as wl_proj
+
                 contract = wl_proj.WLContract(
                     issue_age=int(issue_age),
                     sex="male" if sex == "male" else "female",
@@ -3039,6 +3130,7 @@ def _render_run_and_results() -> None:
                 )
             elif selected_product == ProductType.UNIVERSAL_LIFE:
                 import ul_projection as ul_proj
+
                 contract = ul_proj.ULContract(
                     issue_age=int(issue_age),
                     sex="male" if sex == "male" else "female",
@@ -3046,7 +3138,9 @@ def _render_run_and_results() -> None:
                     face_amount=float(st.session_state.get("run_ul_face_amount", 250_000.0)),
                     single_premium=float(st.session_state.get("run_ul_single_premium", 25_000.0)),
                     premium_load_pct=float(st.session_state.get("run_ul_premium_load", 0.06)),
-                    monthly_expense_charge=float(st.session_state.get("run_ul_monthly_expense", 7.50)),
+                    monthly_expense_charge=float(
+                        st.session_state.get("run_ul_monthly_expense", 7.50)
+                    ),
                     declared_rate_annual=float(st.session_state.get("run_ul_declared_rate", 0.04)),
                 )
             elif selected_product == ProductType.INDEXED_UL:
@@ -3057,6 +3151,7 @@ def _render_run_and_results() -> None:
                 )
             elif selected_product == ProductType.VARIABLE_UL:
                 import vul_projection as vul_proj
+
                 contract = vul_proj.VULContract(
                     issue_age=int(issue_age),
                     sex="male" if sex == "male" else "female",
@@ -3064,7 +3159,9 @@ def _render_run_and_results() -> None:
                     face_amount=float(st.session_state.get("run_vul_face_amount", 250_000.0)),
                     single_premium=float(st.session_state.get("run_vul_single_premium", 25_000.0)),
                     premium_load_pct=float(st.session_state.get("run_vul_premium_load", 0.06)),
-                    monthly_expense_charge=float(st.session_state.get("run_vul_monthly_expense", 7.50)),
+                    monthly_expense_charge=float(
+                        st.session_state.get("run_vul_monthly_expense", 7.50)
+                    ),
                 )
             else:
                 contract = sp.SPIAContract(
@@ -3261,7 +3358,10 @@ def _render_run_and_results() -> None:
             has_premium_summary = all(
                 hasattr(mc_res, name)
                 for name in (
-                    "premium_mean", "premium_median", "premium_p05", "premium_p95",
+                    "premium_mean",
+                    "premium_median",
+                    "premium_p05",
+                    "premium_p95",
                 )
             )
             if has_premium_summary:
@@ -4819,7 +4919,9 @@ def _portfolio_reference_product_for_economics(row_ids: list[str]) -> ProductTyp
 def _portfolio_run_scenario_for_policies(policies: tuple[PolicyInput, ...]) -> RunScenario:
     sex_raw = str(getattr(policies[0].contract, "sex", "male")).strip().lower()
     sex: Literal["male", "female"] = "female" if sex_raw == "female" else "male"
-    return run_scenario_for_portfolio_policies(dict(st.session_state), policies, sex=sex, repo_root=ROOT)
+    return run_scenario_for_portfolio_policies(
+        dict(st.session_state), policies, sex=sex, repo_root=ROOT
+    )
 
 
 def _next_portfolio_policy_id(used: list[str]) -> str:
@@ -4832,7 +4934,9 @@ def _next_portfolio_policy_id(used: list[str]) -> str:
     return f"P{n:04d}"
 
 
-def _portfolio_collect_used_policy_ids(row_ids: list[str], *, skip_row_id: str | None = None) -> list[str]:
+def _portfolio_collect_used_policy_ids(
+    row_ids: list[str], *, skip_row_id: str | None = None
+) -> list[str]:
     out: list[str] = []
     for rid in row_ids:
         if skip_row_id is not None and rid == skip_row_id:
@@ -4984,15 +5088,35 @@ def _render_portfolio_contract_fields(row_id: str, pt: ProductType) -> None:
                 key=pfx + "monthly_premium",
             )
         with c3:
-            st.number_input("Term (years)", min_value=1, max_value=50, step=1, key=pfx + "term_years")
+            st.number_input(
+                "Term (years)", min_value=1, max_value=50, step=1, key=pfx + "term_years"
+            )
     elif pt == ProductType.RILA:
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            st.number_input("Participation", min_value=0.0, max_value=5.0, format="%.4f", key=pfx + "participation")
+            st.number_input(
+                "Participation",
+                min_value=0.0,
+                max_value=5.0,
+                format="%.4f",
+                key=pfx + "participation",
+            )
         with c2:
-            st.number_input("Cap (annual decimal)", min_value=-1.0, max_value=2.0, format="%.4f", key=pfx + "cap")
+            st.number_input(
+                "Cap (annual decimal)",
+                min_value=-1.0,
+                max_value=2.0,
+                format="%.4f",
+                key=pfx + "cap",
+            )
         with c3:
-            st.number_input("Floor (annual decimal)", min_value=-1.0, max_value=1.0, format="%.4f", key=pfx + "floor")
+            st.number_input(
+                "Floor (annual decimal)",
+                min_value=-1.0,
+                max_value=1.0,
+                format="%.4f",
+                key=pfx + "floor",
+            )
         with c4:
             st.number_input(
                 "Rider fee (annual on AV)",
@@ -5004,7 +5128,9 @@ def _render_portfolio_contract_fields(row_id: str, pt: ProductType) -> None:
     elif pt == ProductType.MYGA:
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+            st.number_input(
+                "Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium"
+            )
         with c2:
             st.number_input(
                 "Declared rate (annual decimal)",
@@ -5014,17 +5140,39 @@ def _render_portfolio_contract_fields(row_id: str, pt: ProductType) -> None:
                 key=pfx + "declared_rate_annual",
             )
         with c3:
-            st.number_input("Guarantee years", min_value=1, max_value=30, step=1, key=pfx + "guarantee_years")
+            st.number_input(
+                "Guarantee years", min_value=1, max_value=30, step=1, key=pfx + "guarantee_years"
+            )
     elif pt == ProductType.FIA:
         c1, c2, c3, c4, c5, c6 = st.columns(6)
         with c1:
-            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+            st.number_input(
+                "Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium"
+            )
         with c2:
-            st.number_input("Participation", min_value=0.0, max_value=5.0, format="%.4f", key=pfx + "participation")
+            st.number_input(
+                "Participation",
+                min_value=0.0,
+                max_value=5.0,
+                format="%.4f",
+                key=pfx + "participation",
+            )
         with c3:
-            st.number_input("Cap (annual decimal)", min_value=-1.0, max_value=2.0, format="%.4f", key=pfx + "cap")
+            st.number_input(
+                "Cap (annual decimal)",
+                min_value=-1.0,
+                max_value=2.0,
+                format="%.4f",
+                key=pfx + "cap",
+            )
         with c4:
-            st.number_input("Floor (annual decimal)", min_value=-1.0, max_value=1.0, format="%.4f", key=pfx + "floor")
+            st.number_input(
+                "Floor (annual decimal)",
+                min_value=-1.0,
+                max_value=1.0,
+                format="%.4f",
+                key=pfx + "floor",
+            )
         with c5:
             st.number_input(
                 "Rider fee (annual on AV)",
@@ -5034,11 +5182,15 @@ def _render_portfolio_contract_fields(row_id: str, pt: ProductType) -> None:
                 key=pfx + "rider_fee_annual",
             )
         with c6:
-            st.number_input("Horizon (years)", min_value=1, max_value=80, step=1, key=pfx + "horizon_years")
+            st.number_input(
+                "Horizon (years)", min_value=1, max_value=80, step=1, key=pfx + "horizon_years"
+            )
     elif pt == ProductType.VARIABLE_ANNUITY:
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+            st.number_input(
+                "Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium"
+            )
         with c2:
             st.number_input(
                 "M&E charge (annual decimal)",
@@ -5048,7 +5200,9 @@ def _render_portfolio_contract_fields(row_id: str, pt: ProductType) -> None:
                 key=pfx + "me_charge_annual",
             )
         with c3:
-            st.number_input("Horizon (years)", min_value=1, max_value=80, step=1, key=pfx + "horizon_years")
+            st.number_input(
+                "Horizon (years)", min_value=1, max_value=80, step=1, key=pfx + "horizon_years"
+            )
         st.selectbox(
             "GMDB basis",
             options=["return_of_premium", "max_anniversary"],
@@ -5060,27 +5214,57 @@ def _render_portfolio_contract_fields(row_id: str, pt: ProductType) -> None:
     elif pt == ProductType.UNIVERSAL_LIFE:
         c1, c2 = st.columns(2)
         with c1:
-            st.number_input("Face amount ($)", min_value=1.0, step=10_000.0, key=pfx + "face_amount")
+            st.number_input(
+                "Face amount ($)", min_value=1.0, step=10_000.0, key=pfx + "face_amount"
+            )
         with c2:
-            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+            st.number_input(
+                "Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium"
+            )
     elif pt == ProductType.INDEXED_UL:
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
-            st.number_input("Face amount ($)", min_value=1.0, step=10_000.0, key=pfx + "face_amount")
+            st.number_input(
+                "Face amount ($)", min_value=1.0, step=10_000.0, key=pfx + "face_amount"
+            )
         with c2:
-            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+            st.number_input(
+                "Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium"
+            )
         with c3:
-            st.number_input("Participation", min_value=0.0, max_value=5.0, format="%.4f", key=pfx + "participation")
+            st.number_input(
+                "Participation",
+                min_value=0.0,
+                max_value=5.0,
+                format="%.4f",
+                key=pfx + "participation",
+            )
         with c4:
-            st.number_input("Cap (annual decimal)", min_value=-1.0, max_value=2.0, format="%.4f", key=pfx + "cap")
+            st.number_input(
+                "Cap (annual decimal)",
+                min_value=-1.0,
+                max_value=2.0,
+                format="%.4f",
+                key=pfx + "cap",
+            )
         with c5:
-            st.number_input("Floor (annual decimal)", min_value=-1.0, max_value=1.0, format="%.4f", key=pfx + "floor")
+            st.number_input(
+                "Floor (annual decimal)",
+                min_value=-1.0,
+                max_value=1.0,
+                format="%.4f",
+                key=pfx + "floor",
+            )
     elif pt == ProductType.VARIABLE_UL:
         c1, c2 = st.columns(2)
         with c1:
-            st.number_input("Face amount ($)", min_value=1.0, step=10_000.0, key=pfx + "face_amount")
+            st.number_input(
+                "Face amount ($)", min_value=1.0, step=10_000.0, key=pfx + "face_amount"
+            )
         with c2:
-            st.number_input("Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium")
+            st.number_input(
+                "Single premium ($)", min_value=1.0, step=1000.0, key=pfx + "single_premium"
+            )
     else:
         st.warning(f"No manual fields wired for {pt.value}.")
 
@@ -5151,7 +5335,9 @@ def _render_portfolio_section() -> None:
             st.session_state[meta_pt_prev] = sel
 
             opts_pid = _portfolio_policy_id_options(row_ids, row_id)
-            cur_pid = str(st.session_state.get(pfx + "policy_id", opts_pid[0] if opts_pid else "")).strip()
+            cur_pid = str(
+                st.session_state.get(pfx + "policy_id", opts_pid[0] if opts_pid else "")
+            ).strip()
             if cur_pid and cur_pid not in opts_pid:
                 opts_pid = [cur_pid, *opts_pid]
             st.selectbox(
@@ -5163,7 +5349,9 @@ def _render_portfolio_section() -> None:
 
             c1, c2, c3 = st.columns(3)
             with c1:
-                st.number_input("Issue age", min_value=0, max_value=120, step=1, key=pfx + "issue_age")
+                st.number_input(
+                    "Issue age", min_value=0, max_value=120, step=1, key=pfx + "issue_age"
+                )
             with c2:
                 st.selectbox(
                     "Sex",
@@ -5259,7 +5447,9 @@ def _render_portfolio_section() -> None:
                     "product_type": pt.value,
                     "policy_count": scal.policy_count,
                     "sum_single_premium": scal.sum_single_premium,
-                    "rollup_cf_sum": float(res.rollups_by_product_type[pt].expected_total_cashflows.sum()),
+                    "rollup_cf_sum": float(
+                        res.rollups_by_product_type[pt].expected_total_cashflows.sum()
+                    ),
                 }
             )
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)

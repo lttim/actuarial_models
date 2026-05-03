@@ -86,9 +86,14 @@ def fia_excel_spec_from_launcher(
     **_kw: object,
 ) -> FIAExcelBuildSpec:
     return FIAExcelBuildSpec(
-        contract=contract, yield_curve=yield_curve, mortality=mortality,
-        horizon_age=int(horizon_age), spread=float(spread), valuation_year=int(valuation_year),
-        expenses=expenses, yield_mode_label=str(yield_mode_label),
+        contract=contract,
+        yield_curve=yield_curve,
+        mortality=mortality,
+        horizon_age=int(horizon_age),
+        spread=float(spread),
+        valuation_year=int(valuation_year),
+        expenses=expenses,
+        yield_mode_label=str(yield_mode_label),
         mortality_mode_label=str(mortality_mode_label),
         expense_mode_label=str(expense_mode_label),
         expense_annual_inflation=float(expense_annual_inflation),
@@ -103,10 +108,16 @@ def build_fia_workbook_from_spec(
     out_path: str | Path | None = None,
 ) -> bytes:
     res = fp.price_fia_single_premium(
-        contract=spec.contract, yield_curve=spec.yield_curve, mortality=spec.mortality,
-        horizon_age=spec.horizon_age, spread=spec.spread,
-        valuation_year=(spec.valuation_year if not isinstance(spec.mortality, sp.MortalityTableQx) else None),
-        expenses=spec.expenses, index_s0=float(spec.index_s0),
+        contract=spec.contract,
+        yield_curve=spec.yield_curve,
+        mortality=spec.mortality,
+        horizon_age=spec.horizon_age,
+        spread=spec.spread,
+        valuation_year=(
+            spec.valuation_year if not isinstance(spec.mortality, sp.MortalityTableQx) else None
+        ),
+        expenses=spec.expenses,
+        index_s0=float(spec.index_s0),
         index_levels_payment=np.asarray(spec.index_levels_payment, dtype=float),
         expense_annual_inflation=float(spec.expense_annual_inflation),
     )
@@ -131,7 +142,9 @@ def build_fia_workbook_from_spec(
         ("Mortality mode (documentation)", spec.mortality_mode_label),
         ("Expense mode (documentation)", spec.expense_mode_label),
     ]
-    write_inputs_sheet(ws_in, InputsSheetSpec(title="FIA Inputs (matches model launcher / Python)", rows=rows))
+    write_inputs_sheet(
+        ws_in, InputsSheetSpec(title="FIA Inputs (matches model launcher / Python)", rows=rows)
+    )
     nm = (
         f"=MIN(MAX(1,ROUND(({_in_addr('B', _IN_ROW_HORIZON)}"
         f"-{_in_addr('B', _IN_ROW_ISSUE_AGE)})*{_in_addr('B', _IN_ROW_FREQ)},0)),"
@@ -141,10 +154,12 @@ def build_fia_workbook_from_spec(
     ws_in[f"B{_IN_ROW_NMONTHS}"] = nm
     ws_in[f"B{_IN_ROW_NMONTHS}"].number_format = "0"
 
-    ycdf = pd.DataFrame({
-        "maturity_years": np.asarray(spec.yield_curve.maturities_years, dtype=float),
-        "zero_rate": np.asarray(spec.yield_curve.zero_rates, dtype=float),
-    })
+    ycdf = pd.DataFrame(
+        {
+            "maturity_years": np.asarray(spec.yield_curve.maturities_years, dtype=float),
+            "zero_rate": np.asarray(spec.yield_curve.zero_rates, dtype=float),
+        }
+    )
     _, y_last_row = write_yield_curve_sheet(wb, ycdf)
 
     ws_mc_curve = wb.create_sheet(RECALC_MONTHLY_CURVE_SHEET)
@@ -197,23 +212,23 @@ def build_fia_workbook_from_spec(
     ws_pr["C2"] = f"={issue_age_ref}"
 
     hdr = (
-        "Month",          # A
-        "t_years",        # B
-        "AttainedAge",    # C
-        "SurvivalEnd",    # D
+        "Month",  # A
+        "t_years",  # B
+        "AttainedAge",  # C
+        "SurvivalEnd",  # D
         "SurvivalStart",  # E
-        "MonthDeathProb", # F
-        "IndexLevel_m",   # G
-        "RawSegReturn",   # H
-        "CreditedSeg",    # I
-        "AV_end",         # J
-        "DeathCF",        # K
-        "ExpExpenseCF",   # L
-        "ExpTotalCF",     # M  <-- layout column = M
-        "MaturityCF",     # N
-        "DiscountFactor", # O
-        "PVBenefitCF",    # P
-        "PVExpenseCF",    # Q
+        "MonthDeathProb",  # F
+        "IndexLevel_m",  # G
+        "RawSegReturn",  # H
+        "CreditedSeg",  # I
+        "AV_end",  # J
+        "DeathCF",  # K
+        "ExpExpenseCF",  # L
+        "ExpTotalCF",  # M  <-- layout column = M
+        "MaturityCF",  # N
+        "DiscountFactor",  # O
+        "PVBenefitCF",  # P
+        "PVExpenseCF",  # Q
     )
     for c, h in enumerate(hdr, start=1):
         cell = ws_pr.cell(row=3, column=c, value=h if h else None)
@@ -240,33 +255,45 @@ def build_fia_workbook_from_spec(
         else:
             ws_pr.cell(row=r, column=5, value=f'=IF({a}="","",D{r - 1})')
         ws_pr.cell(row=r, column=6, value=f'=IF({a}="","",MAX(0,MIN(1,E{r}-D{r})))')
-        ws_pr.cell(row=r, column=7, value=f'=IF({a}="","",IFERROR(INDEX({idx_b},MATCH({a},{idx_a},0)),""))')
         ws_pr.cell(
-            row=r, column=8,
+            row=r, column=7, value=f'=IF({a}="","",IFERROR(INDEX({idx_b},MATCH({a},{idx_a},0)),""))'
+        )
+        ws_pr.cell(
+            row=r,
+            column=8,
             value=(
                 f'=IF({a}="","",IF(AND({a}>=12,MOD({a},12)=0),'
-                f'IFERROR(INDEX({idx_b},MATCH({a},{idx_a},0))/INDEX({idx_b},MATCH({a}-12,{idx_a},0))-1,0),0))'
+                f"IFERROR(INDEX({idx_b},MATCH({a},{idx_a},0))/INDEX({idx_b},MATCH({a}-12,{idx_a},0))-1,0),0))"
             ),
         )
         ws_pr.cell(
-            row=r, column=9,
+            row=r,
+            column=9,
             value=(
                 f'=IF({a}="","",IF(AND({a}>=12,MOD({a},12)=0),'
-                f'MAX({floor_ref},MIN({cap_ref},{part_ref}*H{r})),0))'
+                f"MAX({floor_ref},MIN({cap_ref},{part_ref}*H{r})),0))"
             ),
         )
-        ws_pr.cell(row=r, column=10, value=f'=IF({a}="","",IF({a}=1,{sp_ref}*(1+I{r}),J{r-1}*(1+I{r})))')
+        ws_pr.cell(
+            row=r, column=10, value=f'=IF({a}="","",IF({a}=1,{sp_ref}*(1+I{r}),J{r - 1}*(1+I{r})))'
+        )
         ws_pr.cell(row=r, column=11, value=f'=IF({a}="",0,J{r}*F{r})')
-        ws_pr.cell(row=r, column=12, value=f'=IF({a}="",0,{exp_m_ref}*POWER(1+(POWER(1+{exp_inf_ref},1/12)-1),{a}-1)*E{r})')
+        ws_pr.cell(
+            row=r,
+            column=12,
+            value=f'=IF({a}="",0,{exp_m_ref}*POWER(1+(POWER(1+{exp_inf_ref},1/12)-1),{a}-1)*E{r})',
+        )
         # MaturityCF in column N (paid at the horizon month only)
         ws_pr.cell(
-            row=r, column=14,
+            row=r,
+            column=14,
             value=f'=IF({a}="",0,IF({a}={horizon_months_ref},J{r}*D{r},0))',
         )
         # ExpTotalCF (column M) = DeathCF + Expense + Maturity
         ws_pr.cell(row=r, column=13, value=f'=IF({a}="",0,K{r}+L{r}+N{r})')
         ws_pr.cell(
-            row=r, column=15,
+            row=r,
+            column=15,
             value=f'=IF({a}="","",IFERROR(INDEX({mc_ref},MATCH({a},{RECALC_MONTHLY_CURVE_SHEET}!$A:$A,0)),""))',
         )
         ws_pr.cell(row=r, column=16, value=f'=IF({a}="",0,(K{r}+N{r})*O{r})')
@@ -285,8 +312,11 @@ def build_fia_workbook_from_spec(
             rows=(
                 (4, "PV benefits (claims+maturity)", f"=SUM(P{first}:P{last_cap_row})"),
                 (5, "PV expenses", f"=SUM(Q{first}:Q{last_cap_row})"),
-                (6, "Σ l_end · v (annuity-style factor)",
-                 f"=SUMPRODUCT(D{first}:D{last_cap_row},O{first}:O{last_cap_row})"),
+                (
+                    6,
+                    "Σ l_end · v (annuity-style factor)",
+                    f"=SUMPRODUCT(D{first}:D{last_cap_row},O{first}:O{last_cap_row})",
+                ),
                 (7, "PV total (ben+exp)", "=X4+X5"),
                 (8, "Single premium (input)", f"={sp_ref}"),
                 (9, "Reserve at t=0", "=X7"),
@@ -298,8 +328,11 @@ def build_fia_workbook_from_spec(
     pv_e = float(np.sum(res.expected_expense_cashflows * res.discount_factors))
     pv_t = float(np.sum(res.expected_total_cashflows * res.discount_factors))
     snap_py = ExcelPythonSnapshot(
-        pv_benefit=pv_b, pv_monthly_expenses=pv_e, pv_monthly_total=pv_t,
-        single_premium=float(res.single_premium), annuity_factor=float(res.annuity_factor),
+        pv_benefit=pv_b,
+        pv_monthly_expenses=pv_e,
+        pv_monthly_total=pv_t,
+        single_premium=float(res.single_premium),
+        annuity_factor=float(res.annuity_factor),
     )
     fia_rows: list[tuple[str, float, str, str]] = [
         ("PV benefits", pv_b, f"={LIABILITY_SHEET_NAME}!X4", "money"),
@@ -309,7 +342,10 @@ def build_fia_workbook_from_spec(
         ("Annuity factor", float(res.annuity_factor), f"={LIABILITY_SHEET_NAME}!X6", "factor"),
     ]
     write_model_check_sheet(
-        wb, snap_py, alm_layout=None, alm_snapshot=None,
+        wb,
+        snap_py,
+        alm_layout=None,
+        alm_snapshot=None,
         pricing_rows=fia_rows,
         sheet_title=f"Python snapshot vs Excel ({LIABILITY_SHEET_NAME})",
         subtitle=(

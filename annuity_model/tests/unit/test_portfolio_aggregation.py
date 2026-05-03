@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 import pricing_projection as sp
 from liability_aggregation import (
@@ -71,7 +72,11 @@ def test_aggregate_partition_by_type_matches_total(
 ) -> None:
     """Two SPIA-shaped paths + one other type still sum to the all-in aggregate."""
     types = (ProductType.SPIA, ProductType.SPIA, ProductType.TERM_LIFE)
-    paths = [_path(n_months, float(scale_a)), _path(n_months, float(scale_b)), _path(n_months, float(scale_c))]
+    paths = [
+        _path(n_months, float(scale_a)),
+        _path(n_months, float(scale_b)),
+        _path(n_months, float(scale_c)),
+    ]
     typed = list(zip(types, paths, strict=True))
     total = aggregate_liability_paths(paths)
     by_t = aggregate_by_product_type(typed)

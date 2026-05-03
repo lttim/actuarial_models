@@ -130,9 +130,7 @@ def price_ul_single_premium(
         raise ValueError("single_premium must be > 0.")
     del index_scenario_csv_path  # accepted for adapter signature parity
 
-    mort = _ul_resolve_mortality(
-        mortality, sex=contract.sex, smoker_class=contract.smoker_class
-    )
+    mort = _ul_resolve_mortality(mortality, sex=contract.sex, smoker_class=contract.smoker_class)
 
     horizon = int(horizon_age) if horizon_age is not None else int(contract.horizon_age)
     dt = 1.0 / 12.0
@@ -181,23 +179,24 @@ def price_ul_single_premium(
         first_term = int(np.argmax(evol.is_terminated_after_month))
         if evol.is_terminated_after_month[first_term]:
             death_prob_month[first_term:] = 0.0
-            survival_end[first_term:] = float(survival_end[first_term - 1]) if first_term > 0 else 1.0
-            survival_start[first_term + 1:] = float(survival_end[first_term])
+            survival_end[first_term:] = (
+                float(survival_end[first_term - 1]) if first_term > 0 else 1.0
+            )
+            survival_start[first_term + 1 :] = float(survival_end[first_term])
 
     if lapse is not None:
         from lapse import combined_monthly_survival
 
         lapse_q_m = lapse.monthly_decrements(n_months)
         survival_combined = combined_monthly_survival(
-            mortality_monthly_q=monthly_q, lapse_monthly_q=lapse_q_m,
+            mortality_monthly_q=monthly_q,
+            lapse_monthly_q=lapse_q_m,
         )
         survival_combined_start = np.empty_like(survival_combined)
         survival_combined_start[0] = 1.0
         survival_combined_start[1:] = survival_combined[:-1]
         # death_prob_month overridden under combined decrements
-        death_prob_month = np.clip(
-            survival_combined_start * monthly_q, 0.0, 1.0
-        )
+        death_prob_month = np.clip(survival_combined_start * monthly_q, 0.0, 1.0)
         survival_end = survival_combined
         survival_start = survival_combined_start
 
@@ -289,6 +288,4 @@ def liability_path_from_ul_projection(pricing: ULProjectionResult) -> sp.Liabili
 
 from liability_dispatch import register_liability_path_converter  # noqa: E402
 
-register_liability_path_converter(
-    "ULProjectionResult", liability_path_from_ul_projection
-)
+register_liability_path_converter("ULProjectionResult", liability_path_from_ul_projection)

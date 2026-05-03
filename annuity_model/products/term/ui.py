@@ -8,8 +8,8 @@ Re-exports the Term-Life-specific UI surface (selectbox label parsers,
 from __future__ import annotations
 
 from product_registry import (
-    ProductType,
     _PRICING_METRIC_FORMATTERS,
+    ProductType,
     get_product_adapter,
     get_product_ui_config,
     get_term_contract_ui_config,

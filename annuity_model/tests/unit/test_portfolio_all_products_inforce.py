@@ -21,7 +21,7 @@ def test_all_products_default_inforce_loads_ten_distinct_types() -> None:
     )
     types = {p.product_type for p in policies}
     assert len(policies) == 10
-    assert types == {pt for pt in ProductType}
+    assert types == set(ProductType)
 
 
 def test_all_products_default_portfolio_runs_with_baseline_alm() -> None:
@@ -43,4 +43,6 @@ def test_all_products_default_portfolio_runs_with_baseline_alm() -> None:
         assumptions=asm,
         initial_asset_market_value=aum,
     )
-    assert float(res.alm_result.duration_gap) == pytest.approx(float(direct.duration_gap), rel=0, abs=1e-9)
+    assert float(res.alm_result.duration_gap) == pytest.approx(
+        float(direct.duration_gap), rel=0, abs=1e-9
+    )

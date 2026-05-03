@@ -6,20 +6,17 @@ Phase 0/1/.../7 of ``docs/seven_product_rollout_plan.md``.
 
 from __future__ import annotations
 
+from build_ul_excel_workbook import ULExcelBuildSpec
+from product_excel import _BUILDER_REGISTRY
 from product_registry import ProductType, product_label
-
 from products import ProductDefinition, register_product
+from products.universal_life.ui import UNIVERSAL_LIFE_ADAPTER, universal_life_metric_formatter
 from ul_projection import (
     ULContract,
     ULProjectionResult,
     liability_path_from_ul_projection,
     price_ul_single_premium,
 )
-from build_ul_excel_workbook import ULExcelBuildSpec
-
-from product_excel import _BUILDER_REGISTRY
-from products.universal_life.ui import UNIVERSAL_LIFE_ADAPTER, universal_life_metric_formatter
-
 
 DEFINITION = register_product(
     ProductDefinition(

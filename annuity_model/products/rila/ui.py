@@ -6,8 +6,8 @@ from typing import Any
 
 from pricing_run_form_state import RUN_KEY
 from product_registry import (
-    ProductType,
     _PRICING_METRIC_FORMATTERS,
+    ProductType,
     get_product_adapter,
     get_product_ui_config,
 )
@@ -17,7 +17,9 @@ rila_metric_formatter = _PRICING_METRIC_FORMATTERS[ProductType.RILA]
 rila_ui_config = get_product_ui_config(ProductType.RILA)
 
 
-def _monthly_amount_schedule(*, amount: float, start_month: int, end_month: int) -> tuple[float, ...]:
+def _monthly_amount_schedule(
+    *, amount: float, start_month: int, end_month: int
+) -> tuple[float, ...]:
     if amount <= 0.0 or end_month < start_month:
         return ()
     months = max(int(end_month), int(start_month))
@@ -112,9 +114,23 @@ def render_rila_pricing_controls(st_mod: Any, run_number_input_fn: Any) -> None:
                 step=100.0,
             )
         with a2:
-            run_number_input_fn("Start month", RUN_KEY.RILA_WITHDRAWAL_START, default=121, min_value=1, max_value=1200, step=1)
+            run_number_input_fn(
+                "Start month",
+                RUN_KEY.RILA_WITHDRAWAL_START,
+                default=121,
+                min_value=1,
+                max_value=1200,
+                step=1,
+            )
         with a3:
-            run_number_input_fn("End month", RUN_KEY.RILA_WITHDRAWAL_END, default=240, min_value=1, max_value=1200, step=1)
+            run_number_input_fn(
+                "End month",
+                RUN_KEY.RILA_WITHDRAWAL_END,
+                default=240,
+                min_value=1,
+                max_value=1200,
+                step=1,
+            )
         with a4:
             run_number_input_fn(
                 "Surrender charge year 1",
@@ -124,18 +140,53 @@ def render_rila_pricing_controls(st_mod: Any, run_number_input_fn: Any) -> None:
                 max_value=1.0,
                 format="%.4f",
             )
-        run_number_input_fn("Surrender charge years", RUN_KEY.RILA_SURRENDER_CHARGE_YEARS, default=7, min_value=0, max_value=20, step=1)
+        run_number_input_fn(
+            "Surrender charge years",
+            RUN_KEY.RILA_SURRENDER_CHARGE_YEARS,
+            default=7,
+            min_value=0,
+            max_value=20,
+            step=1,
+        )
     with glwb:
         st_mod.checkbox("Enable GLWB", key=RUN_KEY.RILA_GLWB_ENABLED, value=False)
         g1, g2, g3, g4 = st_mod.columns(4)
         with g1:
-            run_number_input_fn("GLWB fee", RUN_KEY.RILA_GLWB_FEE, default=0.01, min_value=0.0, max_value=1.0, format="%.4f")
+            run_number_input_fn(
+                "GLWB fee",
+                RUN_KEY.RILA_GLWB_FEE,
+                default=0.01,
+                min_value=0.0,
+                max_value=1.0,
+                format="%.4f",
+            )
         with g2:
-            run_number_input_fn("Roll-up", RUN_KEY.RILA_GLWB_ROLLUP, default=0.05, min_value=0.0, max_value=1.0, format="%.4f")
+            run_number_input_fn(
+                "Roll-up",
+                RUN_KEY.RILA_GLWB_ROLLUP,
+                default=0.05,
+                min_value=0.0,
+                max_value=1.0,
+                format="%.4f",
+            )
         with g3:
-            run_number_input_fn("Income start month", RUN_KEY.RILA_GLWB_INCOME_START, default=121, min_value=1, max_value=1200, step=1)
+            run_number_input_fn(
+                "Income start month",
+                RUN_KEY.RILA_GLWB_INCOME_START,
+                default=121,
+                min_value=1,
+                max_value=1200,
+                step=1,
+            )
         with g4:
-            run_number_input_fn("Withdrawal rate", RUN_KEY.RILA_GLWB_WITHDRAWAL_RATE, default=0.05, min_value=0.0, max_value=1.0, format="%.4f")
+            run_number_input_fn(
+                "Withdrawal rate",
+                RUN_KEY.RILA_GLWB_WITHDRAWAL_RATE,
+                default=0.05,
+                min_value=0.0,
+                max_value=1.0,
+                format="%.4f",
+            )
 
 
 def build_rila_contract_from_session(
@@ -145,7 +196,12 @@ def build_rila_contract_from_session(
     sex: str,
 ):
     import rila_projection as rp
-    from policy_features import GLWBRider, MonthlySchedule, SegmentAllocation, SurrenderChargeSchedule
+    from policy_features import (
+        GLWBRider,
+        MonthlySchedule,
+        SegmentAllocation,
+        SurrenderChargeSchedule,
+    )
 
     buffer_weight = float(session_state.get(RUN_KEY.RILA_BUFFER_WEIGHT, 0.0))
     base_weight = max(0.0, 1.0 - buffer_weight)
@@ -154,7 +210,15 @@ def build_rila_contract_from_session(
     floor = float(session_state.get(RUN_KEY.RILA_FLOOR, 0.0))
     allocations: list[SegmentAllocation] = []
     if base_weight > 0.0:
-        allocations.append(SegmentAllocation(weight=base_weight, design="cap_floor", participation=participation, cap=cap, floor=floor))
+        allocations.append(
+            SegmentAllocation(
+                weight=base_weight,
+                design="cap_floor",
+                participation=participation,
+                cap=cap,
+                floor=floor,
+            )
+        )
     if buffer_weight > 0.0:
         allocations.append(
             SegmentAllocation(
@@ -193,7 +257,7 @@ def build_rila_contract_from_session(
                 years=int(session_state.get(RUN_KEY.RILA_SURRENDER_CHARGE_YEARS, 7)),
             )
         ),
-        death_benefit_type=str(session_state.get(RUN_KEY.RILA_DEATH_BENEFIT_TYPE, "account_value")),  # type: ignore[arg-type]
+        death_benefit_type=str(session_state.get(RUN_KEY.RILA_DEATH_BENEFIT_TYPE, "account_value")),
         glwb=glwb,
     )
 

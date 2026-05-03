@@ -70,7 +70,9 @@ def template_text() -> str:
     return KIT_TEMPLATE.read_text()
 
 
-@pytest.mark.parametrize("label,fragment", REQUIRED_FRAGMENTS, ids=[r[0] for r in REQUIRED_FRAGMENTS])
+@pytest.mark.parametrize(
+    "label,fragment", REQUIRED_FRAGMENTS, ids=[r[0] for r in REQUIRED_FRAGMENTS]
+)
 def test_canonical_agents_contains_fragment(canonical_text: str, label: str, fragment: str) -> None:
     """Every fragment must already exist in annuity_model/AGENTS.md."""
     assert fragment in canonical_text, (
@@ -80,7 +82,9 @@ def test_canonical_agents_contains_fragment(canonical_text: str, label: str, fra
     )
 
 
-@pytest.mark.parametrize("label,fragment", REQUIRED_FRAGMENTS, ids=[r[0] for r in REQUIRED_FRAGMENTS])
+@pytest.mark.parametrize(
+    "label,fragment", REQUIRED_FRAGMENTS, ids=[r[0] for r in REQUIRED_FRAGMENTS]
+)
 def test_kit_template_contains_fragment(template_text: str, label: str, fragment: str) -> None:
     """Every fragment must also exist in actuarial_parity_kit/AGENTS_template.md."""
     assert fragment in template_text, (

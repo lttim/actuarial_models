@@ -16,11 +16,11 @@
     "yield_rate": 0.035
   },
   "metrics": {
-    "annuity_factor": 198.77685082886063,
+    "annuity_factor": 198.7768508289,
     "n_months": 360,
-    "pv_benefit": 1480.1924417638083,
-    "pv_monthly_expenses": 5603.481232631726,
-    "single_premium": 7083.673674395534
+    "pv_benefit": 1480.1924417638,
+    "pv_monthly_expenses": 5603.4812326317,
+    "single_premium": 7083.6736743955
   },
   "product": "rila"
 }

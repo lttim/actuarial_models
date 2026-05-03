@@ -350,6 +350,7 @@ def test_alm_surplus_and_funding_ratio_identities_rila(rate: float, age: int) ->
 # combined check fails loudly if either the asset side stops scaling or
 # the engine starts cross-coupling LiabPV_0 to the asset side.
 
+
 def _assert_assets_strictly_increase(
     alm_lo: object, alm_hi: object, aum_lo: float, aum_hi: float
 ) -> None:
@@ -385,12 +386,18 @@ def test_alm_assets_strictly_increase_in_initial_assets_spia(
     aum_lo = float(pricing.single_premium)  # type: ignore[attr-defined]
     aum_hi = aum_lo * (1.0 + bump)
     alm_lo = sp.run_alm_projection_from_pricing_result(
-        pricing=pricing, yield_curve=yc, spread=0.0,
-        assumptions=_ALM_DEFAULT_ASSUMPTIONS, initial_asset_market_value=aum_lo,
+        pricing=pricing,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=_ALM_DEFAULT_ASSUMPTIONS,
+        initial_asset_market_value=aum_lo,
     )
     alm_hi = sp.run_alm_projection_from_pricing_result(
-        pricing=pricing, yield_curve=yc, spread=0.0,
-        assumptions=_ALM_DEFAULT_ASSUMPTIONS, initial_asset_market_value=aum_hi,
+        pricing=pricing,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=_ALM_DEFAULT_ASSUMPTIONS,
+        initial_asset_market_value=aum_hi,
     )
     _assert_assets_strictly_increase(alm_lo, alm_hi, aum_lo, aum_hi)
 
@@ -409,12 +416,18 @@ def test_alm_assets_strictly_increase_in_initial_assets_term(
     aum_lo = 500_000.0
     aum_hi = aum_lo * (1.0 + bump)
     alm_lo = sp.run_alm_projection_from_pricing_result(
-        pricing=pricing, yield_curve=yc, spread=0.0,
-        assumptions=_ALM_DEFAULT_ASSUMPTIONS, initial_asset_market_value=aum_lo,
+        pricing=pricing,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=_ALM_DEFAULT_ASSUMPTIONS,
+        initial_asset_market_value=aum_lo,
     )
     alm_hi = sp.run_alm_projection_from_pricing_result(
-        pricing=pricing, yield_curve=yc, spread=0.0,
-        assumptions=_ALM_DEFAULT_ASSUMPTIONS, initial_asset_market_value=aum_hi,
+        pricing=pricing,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=_ALM_DEFAULT_ASSUMPTIONS,
+        initial_asset_market_value=aum_hi,
     )
     _assert_assets_strictly_increase(alm_lo, alm_hi, aum_lo, aum_hi)
 
@@ -433,11 +446,17 @@ def test_alm_assets_strictly_increase_in_initial_assets_rila(
     aum_lo = 400_000.0
     aum_hi = aum_lo * (1.0 + bump)
     alm_lo = sp.run_alm_projection_from_pricing_result(
-        pricing=pricing, yield_curve=yc, spread=0.0,
-        assumptions=_ALM_DEFAULT_ASSUMPTIONS, initial_asset_market_value=aum_lo,
+        pricing=pricing,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=_ALM_DEFAULT_ASSUMPTIONS,
+        initial_asset_market_value=aum_lo,
     )
     alm_hi = sp.run_alm_projection_from_pricing_result(
-        pricing=pricing, yield_curve=yc, spread=0.0,
-        assumptions=_ALM_DEFAULT_ASSUMPTIONS, initial_asset_market_value=aum_hi,
+        pricing=pricing,
+        yield_curve=yc,
+        spread=0.0,
+        assumptions=_ALM_DEFAULT_ASSUMPTIONS,
+        initial_asset_market_value=aum_hi,
     )
     _assert_assets_strictly_increase(alm_lo, alm_hi, aum_lo, aum_hi)

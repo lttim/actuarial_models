@@ -82,9 +82,7 @@ def _count_canonical_literals(path: Path, keys: frozenset[str]) -> int:
     text = path.read_text()
     if "run_" not in text:
         return 0
-    pattern = re.compile(
-        "|".join(rf'["\']{re.escape(k)}["\']' for k in keys)
-    )
+    pattern = re.compile("|".join(rf'["\']{re.escape(k)}["\']' for k in keys))
     return len(pattern.findall(text))
 
 
@@ -134,9 +132,7 @@ def baseline() -> dict[str, int]:
     return _load_baseline()
 
 
-def test_no_file_exceeds_baseline(
-    actual_counts: dict[str, int], baseline: dict[str, int]
-) -> None:
+def test_no_file_exceeds_baseline(actual_counts: dict[str, int], baseline: dict[str, int]) -> None:
     """A regression here means new ``"run_*"`` literals snuck in.
 
     Fix by replacing them with ``RUN_KEY.<NAME>`` (importing
@@ -163,8 +159,7 @@ def test_no_file_exceeds_baseline(
     assert not overshoots, (
         "Raw 'run_*' session-state literals increased. The ratchet only "
         "permits the count to DECREASE. Use RUN_KEY.<NAME> from "
-        "pricing_run_form_state for any new reference.\n"
-        + "\n".join(overshoots)
+        "pricing_run_form_state for any new reference.\n" + "\n".join(overshoots)
     )
 
 
@@ -188,8 +183,7 @@ def test_source_of_truth_excluded() -> None:
     to the baseline by accident, fail loudly."""
     raw = json.loads(BASELINE_PATH.read_text())
     assert SOURCE_OF_TRUTH not in raw, (
-        f"{SOURCE_OF_TRUTH} must NOT be in the baseline; it owns the "
-        "canonical RUN_KEY constants."
+        f"{SOURCE_OF_TRUTH} must NOT be in the baseline; it owns the canonical RUN_KEY constants."
     )
 
 
@@ -204,12 +198,11 @@ def test_run_key_namespace_round_trips() -> None:
     from pricing_run_form_state import RUN_KEY, RUN_STATE_KEY_NAMES
 
     attr_values = {v for v in vars(RUN_KEY).values() if isinstance(v, str)}
-    assert RUN_STATE_KEY_NAMES <= attr_values, (
+    assert attr_values >= RUN_STATE_KEY_NAMES, (
         "RUN_STATE_KEY_NAMES contains entries not declared on RUN_KEY: "
         f"{sorted(RUN_STATE_KEY_NAMES - attr_values)}"
     )
     extras = {v for v in attr_values if v.startswith("run_")} - RUN_STATE_KEY_NAMES
     assert not extras, (
-        "RUN_KEY declares 'run_*' attributes missing from "
-        f"RUN_STATE_KEY_NAMES: {sorted(extras)}"
+        f"RUN_KEY declares 'run_*' attributes missing from RUN_STATE_KEY_NAMES: {sorted(extras)}"
     )

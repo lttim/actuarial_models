@@ -113,7 +113,7 @@ def test_test_dashboard_batch_min_python_matches_pyproject() -> None:
 
 
 TEST_DASH_SHELL_REQUIRED_CLAUSES = {
-    "prefers project venv": r'\./\.venv/bin/python',
+    "prefers project venv": r"\./\.venv/bin/python",
     "version guard": r"sys\.version_info\[:2\]\s*>=\s*required",
     "imports test_dashboard": r"import test_dashboard",
     "self-check mode": r"--self-check",

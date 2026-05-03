@@ -111,14 +111,13 @@ def test_entry_point_is_traced(qualname: str, fn: object) -> None:
     assert hasattr(fn, "__wrapped__"), (
         f"{qualname} is missing the @traced(...) decorator from "
         "_observability. Production OTel deployments will lose this "
-        "span. Re-add `@traced(\"<span name>\")` directly above the "
+        'span. Re-add `@traced("<span name>")` directly above the '
         "function definition."
     )
     # Sanity: the wrapper is truly a wrapper, not the original under a
     # different name.
     assert getattr(fn, "__wrapped__") is not fn, (
-        f"{qualname} __wrapped__ points at itself; the decorator is not "
-        "actually applied."
+        f"{qualname} __wrapped__ points at itself; the decorator is not actually applied."
     )
 
 
@@ -212,7 +211,7 @@ def test_span_name_is_passed_through_when_otel_present(
         def record_exception(self, exc: BaseException) -> None:  # pragma: no cover
             pass
 
-        def __enter__(self) -> "_FakeSpan":
+        def __enter__(self) -> _FakeSpan:
             return self
 
         def __exit__(self, *args: object) -> None:
@@ -249,7 +248,7 @@ def test_default_span_name_falls_back_to_qualname(
         def record_exception(self, exc: BaseException) -> None:  # pragma: no cover
             pass
 
-        def __enter__(self) -> "_FakeSpan":
+        def __enter__(self) -> _FakeSpan:
             return self
 
         def __exit__(self, *args: object) -> None:

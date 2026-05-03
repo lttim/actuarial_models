@@ -6,20 +6,17 @@ Phase 0/1/.../7 of ``docs/seven_product_rollout_plan.md``.
 
 from __future__ import annotations
 
+from build_wl_excel_workbook import WLExcelBuildSpec
+from product_excel import _BUILDER_REGISTRY
 from product_registry import ProductType, product_label
-
 from products import ProductDefinition, register_product
+from products.whole_life.ui import WHOLE_LIFE_ADAPTER, whole_life_metric_formatter
 from wl_projection import (
     WLContract,
     WLProjectionResult,
     liability_path_from_wl_projection,
     price_wl_single_premium,
 )
-from build_wl_excel_workbook import WLExcelBuildSpec
-
-from product_excel import _BUILDER_REGISTRY
-from products.whole_life.ui import WHOLE_LIFE_ADAPTER, whole_life_metric_formatter
-
 
 DEFINITION = register_product(
     ProductDefinition(

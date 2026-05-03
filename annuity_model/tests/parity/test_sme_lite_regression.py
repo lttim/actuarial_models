@@ -38,12 +38,11 @@ from typing import Any
 import numpy as np
 import pytest
 
-from parity_constants import SME_LITE_MC_TOL, SME_LITE_TOL  # noqa: F401
-
 # Imports for product engines. Kept inside the test functions where
 # possible so a missing engine doesn't break collection of unrelated
 # scenarios. Top-level imports only for shared types.
 import pricing_projection as sp
+from parity_constants import SME_LITE_MC_TOL, SME_LITE_TOL  # noqa: F401
 
 GOLDEN_PATH = Path(__file__).parent / "golden" / "sme" / "sme_baseline.json"
 PERF_BUDGET_SECONDS = 30.0
@@ -82,12 +81,16 @@ def _flat_index(n_months: int, level: float = 100.0) -> np.ndarray:
 
 def _scenario_spia() -> dict[str, float]:
     contract = sp.SPIAContract(
-        issue_age=65, sex="male", benefit_annual=6_000.0,
+        issue_age=65,
+        sex="male",
+        benefit_annual=6_000.0,
     )
     res = sp.price_spia_single_premium(
-        contract=contract, yield_curve=_flat_yc(),
+        contract=contract,
+        yield_curve=_flat_yc(),
         mortality=_synthetic_mortality(),
-        horizon_age=85, expenses=_zero_expenses(),
+        horizon_age=85,
+        expenses=_zero_expenses(),
     )
     return {
         "pv_benefit": float(res.pv_benefit),
@@ -101,11 +104,15 @@ def _scenario_term() -> dict[str, float]:
     import term_projection as tp
 
     contract = tp.TermLifeContract(
-        issue_age=35, sex="male", death_benefit=250_000.0,
-        monthly_premium=20.0, term_years=20,
+        issue_age=35,
+        sex="male",
+        death_benefit=250_000.0,
+        monthly_premium=20.0,
+        term_years=20,
     )
     res = tp.price_term_life_level_monthly(
-        contract=contract, yield_curve=_flat_yc(),
+        contract=contract,
+        yield_curve=_flat_yc(),
         mortality=_synthetic_mortality(),
         horizon_age=55,
     )
@@ -121,19 +128,25 @@ def _scenario_rila() -> dict[str, float]:
     import rila_projection as rila
 
     contract = rila.RILAContract(
-        issue_age=60, sex="male",
-        participation=0.8, cap=0.07, floor=0.0, rider_fee_annual=0.0,
+        issue_age=60,
+        sex="male",
+        participation=0.8,
+        cap=0.07,
+        floor=0.0,
+        rider_fee_annual=0.0,
     )
     n_months = (70 - 60) * 12
     # RILA single premium closes the implicit equation from scheduled expenses
     # (see ``rila_projection.price_rila_single_premium``); use a positive
     # monthly expense so the snapshot is economically meaningful.
     res = rila.price_rila_single_premium(
-        contract=contract, yield_curve=_flat_yc(),
+        contract=contract,
+        yield_curve=_flat_yc(),
         mortality=_synthetic_mortality(),
         horizon_age=70,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 25.0),
-        index_s0=100.0, index_levels_payment=_flat_index(n_months),
+        index_s0=100.0,
+        index_levels_payment=_flat_index(n_months),
     )
     return {
         "pv_benefit": float(res.pv_benefit),
@@ -146,13 +159,18 @@ def _scenario_myga() -> dict[str, float]:
     import myga_projection as my
 
     contract = my.MYGAContract(
-        issue_age=60, sex="male", single_premium=100_000.0,
-        declared_rate_annual=0.045, guarantee_years=5,
+        issue_age=60,
+        sex="male",
+        single_premium=100_000.0,
+        declared_rate_annual=0.045,
+        guarantee_years=5,
     )
     res = my.price_myga_single_premium(
-        contract=contract, yield_curve=_flat_yc(0.045),
+        contract=contract,
+        yield_curve=_flat_yc(0.045),
         mortality=_synthetic_mortality(),
-        horizon_age=70, expenses=_zero_expenses(),
+        horizon_age=70,
+        expenses=_zero_expenses(),
     )
     return {
         "pv_benefit": float(res.pv_benefit),
@@ -165,15 +183,23 @@ def _scenario_fia() -> dict[str, float]:
     import fia_projection as fp
 
     contract = fp.FIAContract(
-        issue_age=60, sex="male", single_premium=100_000.0,
-        participation=0.8, cap=0.07, floor=0.0, horizon_years=10,
+        issue_age=60,
+        sex="male",
+        single_premium=100_000.0,
+        participation=0.8,
+        cap=0.07,
+        floor=0.0,
+        horizon_years=10,
     )
     n_months = 10 * 12
     res = fp.price_fia_single_premium(
-        contract=contract, yield_curve=_flat_yc(),
+        contract=contract,
+        yield_curve=_flat_yc(),
         mortality=_synthetic_mortality(),
-        horizon_age=70, expenses=_zero_expenses(),
-        index_s0=100.0, index_levels_payment=_flat_index(n_months),
+        horizon_age=70,
+        expenses=_zero_expenses(),
+        index_s0=100.0,
+        index_levels_payment=_flat_index(n_months),
     )
     return {
         "pv_benefit": float(res.pv_benefit),
@@ -186,15 +212,21 @@ def _scenario_va() -> dict[str, float]:
     import va_projection as va
 
     contract = va.VAContract(
-        issue_age=55, sex="male", single_premium=100_000.0,
-        me_charge_annual=0.014, horizon_years=20,
+        issue_age=55,
+        sex="male",
+        single_premium=100_000.0,
+        me_charge_annual=0.014,
+        horizon_years=20,
     )
     n_months = 20 * 12
     res = va.price_va_single_premium(
-        contract=contract, yield_curve=_flat_yc(),
+        contract=contract,
+        yield_curve=_flat_yc(),
         mortality=_synthetic_mortality(),
-        horizon_age=75, expenses=_zero_expenses(),
-        index_s0=100.0, index_levels_payment=_flat_index(n_months),
+        horizon_age=75,
+        expenses=_zero_expenses(),
+        index_s0=100.0,
+        index_levels_payment=_flat_index(n_months),
     )
     return {
         "pv_benefit": float(res.pv_benefit),
@@ -207,12 +239,17 @@ def _scenario_wl() -> dict[str, float]:
     import wl_projection as wl
 
     contract = wl.WLContract(
-        issue_age=45, sex="male", smoker_class="nonsmoker", face_amount=250_000.0,
+        issue_age=45,
+        sex="male",
+        smoker_class="nonsmoker",
+        face_amount=250_000.0,
     )
     res = wl.price_wl_single_premium(
-        contract=contract, yield_curve=_flat_yc(),
+        contract=contract,
+        yield_curve=_flat_yc(),
         mortality=_synthetic_mortality(),
-        horizon_age=80, expenses=_zero_expenses(),
+        horizon_age=80,
+        expenses=_zero_expenses(),
     )
     return {
         "pv_benefit": float(res.pv_benefit),
@@ -224,13 +261,20 @@ def _scenario_ul() -> dict[str, float]:
     import ul_projection as ul
 
     contract = ul.ULContract(
-        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
-        premium_load_pct=0.06, monthly_expense_charge=7.50, declared_rate_annual=0.04,
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=25_000.0,
+        premium_load_pct=0.06,
+        monthly_expense_charge=7.50,
+        declared_rate_annual=0.04,
     )
     res = ul.price_ul_single_premium(
-        contract=contract, yield_curve=_flat_yc(),
+        contract=contract,
+        yield_curve=_flat_yc(),
         mortality=_synthetic_mortality(),
-        horizon_age=80, expenses=_zero_expenses(),
+        horizon_age=80,
+        expenses=_zero_expenses(),
     )
     return {
         "pv_benefit": float(res.pv_benefit),
@@ -243,16 +287,25 @@ def _scenario_iul() -> dict[str, float]:
     import iul_projection as iul
 
     contract = iul.IULContract(
-        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
-        premium_load_pct=0.06, monthly_expense_charge=7.50,
-        participation=1.0, cap=0.10, floor=0.0,
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=25_000.0,
+        premium_load_pct=0.06,
+        monthly_expense_charge=7.50,
+        participation=1.0,
+        cap=0.10,
+        floor=0.0,
     )
     n_months = (80 - 45) * 12
     res = iul.price_iul_single_premium(
-        contract=contract, yield_curve=_flat_yc(),
+        contract=contract,
+        yield_curve=_flat_yc(),
         mortality=_synthetic_mortality(),
-        horizon_age=80, expenses=_zero_expenses(),
-        index_s0=100.0, index_levels_payment=_flat_index(n_months),
+        horizon_age=80,
+        expenses=_zero_expenses(),
+        index_s0=100.0,
+        index_levels_payment=_flat_index(n_months),
     )
     return {
         "pv_benefit": float(res.pv_benefit),
@@ -265,15 +318,22 @@ def _scenario_vul() -> dict[str, float]:
     import vul_projection as vul
 
     contract = vul.VULContract(
-        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
-        premium_load_pct=0.06, monthly_expense_charge=7.50,
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=25_000.0,
+        premium_load_pct=0.06,
+        monthly_expense_charge=7.50,
     )
     n_months = (80 - 45) * 12
     res = vul.price_vul_single_premium(
-        contract=contract, yield_curve=_flat_yc(),
+        contract=contract,
+        yield_curve=_flat_yc(),
         mortality=_synthetic_mortality(),
-        horizon_age=80, expenses=_zero_expenses(),
-        index_s0=100.0, index_levels_payment=_flat_index(n_months),
+        horizon_age=80,
+        expenses=_zero_expenses(),
+        index_s0=100.0,
+        index_levels_payment=_flat_index(n_months),
     )
     return {
         "pv_benefit": float(res.pv_benefit),

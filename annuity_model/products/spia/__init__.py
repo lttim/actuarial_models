@@ -26,8 +26,8 @@ to make ``get_product_definition(ProductType.SPIA)`` resolve.
 
 from __future__ import annotations
 
+from product_excel import _BUILDER_REGISTRY
 from product_registry import ProductType, product_label
-
 from products import ProductDefinition, register_product
 from products.spia.engine import (
     SPIAContract,
@@ -35,8 +35,6 @@ from products.spia.engine import (
     liability_path_from_spia_projection,
     price_spia_single_premium,
 )
-from product_excel import _BUILDER_REGISTRY
-
 from products.spia.excel import ExcelBuildSpec, build_workbook_from_spec
 from products.spia.ui import SPIA_ADAPTER, spia_metric_formatter, spia_ui_config
 

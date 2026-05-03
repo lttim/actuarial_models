@@ -746,9 +746,7 @@ def validate_workbook(workbook: object, *, strict: bool = False) -> list[Formula
             )
             if strict:
                 cell_issues.extend(
-                    _unknown_function_calls(
-                        sheet, cell.coordinate, v, _stripped=stripped
-                    )
+                    _unknown_function_calls(sheet, cell.coordinate, v, _stripped=stripped)
                 )
             template_cache[template_key] = [iss.message for iss in cell_issues]
             issues.extend(cell_issues)

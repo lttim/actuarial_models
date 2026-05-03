@@ -2145,15 +2145,18 @@ def run_alm_projection(
     """
     if initial_asset_market_value is None:
         initial_asset_market_value = float(pricing.single_premium)
-    return run_alm_projection_from_liability_path(
-        liability_path=liability_path_from_spia_projection(pricing),
-        yield_curve=yield_curve,
-        spread=spread,
-        assumptions=assumptions,
-        initial_asset_market_value=float(initial_asset_market_value),
-        asset_curve=asset_curve,
-        liability_curve=liability_curve,
-        liability_cashflows=liability_cashflows,
+    return cast(
+        ALMResult,
+        run_alm_projection_from_liability_path(
+            liability_path=liability_path_from_spia_projection(pricing),
+            yield_curve=yield_curve,
+            spread=spread,
+            assumptions=assumptions,
+            initial_asset_market_value=float(initial_asset_market_value),
+            asset_curve=asset_curve,
+            liability_curve=liability_curve,
+            liability_cashflows=liability_cashflows,
+        ),
     )
 
 
@@ -2199,15 +2202,18 @@ def run_alm_projection_from_pricing_result(
         )
     if initial_asset_market_value is None:
         initial_asset_market_value = float(pricing.single_premium)
-    return run_alm_projection_from_liability_path(
-        liability_path=liability_path_for(pricing),
-        yield_curve=yield_curve,
-        spread=spread,
-        assumptions=assumptions,
-        initial_asset_market_value=float(initial_asset_market_value),
-        asset_curve=asset_curve,
-        liability_curve=liability_curve,
-        liability_cashflows=liability_cashflows,
+    return cast(
+        ALMResult,
+        run_alm_projection_from_liability_path(
+            liability_path=liability_path_for(pricing),
+            yield_curve=yield_curve,
+            spread=spread,
+            assumptions=assumptions,
+            initial_asset_market_value=float(initial_asset_market_value),
+            asset_curve=asset_curve,
+            liability_curve=liability_curve,
+            liability_cashflows=liability_cashflows,
+        ),
     )
 
 

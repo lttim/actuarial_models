@@ -56,27 +56,19 @@ class AVConfig:
 
     def __post_init__(self) -> None:
         if float(self.initial_premium) < 0.0:
-            raise ValueError(
-                f"initial_premium must be >= 0; got {self.initial_premium!r}"
-            )
+            raise ValueError(f"initial_premium must be >= 0; got {self.initial_premium!r}")
         if not (0.0 <= float(self.premium_load_pct) < 1.0):
-            raise ValueError(
-                f"premium_load_pct must be in [0, 1); got {self.premium_load_pct!r}"
-            )
+            raise ValueError(f"premium_load_pct must be in [0, 1); got {self.premium_load_pct!r}")
         if float(self.monthly_expense_charge) < 0.0:
             raise ValueError(
-                f"monthly_expense_charge must be >= 0; got "
-                f"{self.monthly_expense_charge!r}"
+                f"monthly_expense_charge must be >= 0; got {self.monthly_expense_charge!r}"
             )
         if self.db_type not in ("return_of_av", "level_face"):
             raise ValueError(
-                f"db_type must be 'return_of_av' or 'level_face'; got "
-                f"{self.db_type!r}"
+                f"db_type must be 'return_of_av' or 'level_face'; got {self.db_type!r}"
             )
         if float(self.face_amount) <= 0.0:
-            raise ValueError(
-                f"face_amount must be > 0; got {self.face_amount!r}"
-            )
+            raise ValueError(f"face_amount must be > 0; got {self.face_amount!r}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,13 +150,9 @@ def evolve_account_value(
     cred = np.asarray(monthly_credit_rate, dtype=float)
     qm = np.asarray(monthly_coi_q, dtype=float)
     if cred.shape != (n_months,):
-        raise ValueError(
-            f"monthly_credit_rate shape {cred.shape!r} != ({n_months},)"
-        )
+        raise ValueError(f"monthly_credit_rate shape {cred.shape!r} != ({n_months},)")
     if qm.shape != (n_months,):
-        raise ValueError(
-            f"monthly_coi_q shape {qm.shape!r} != ({n_months},)"
-        )
+        raise ValueError(f"monthly_coi_q shape {qm.shape!r} != ({n_months},)")
 
     av_end = np.zeros(n_months, dtype=float)
     db_end = np.zeros(n_months, dtype=float)

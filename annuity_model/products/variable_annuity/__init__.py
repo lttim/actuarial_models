@@ -6,9 +6,11 @@ Phase 0/1/.../7 of ``docs/seven_product_rollout_plan.md``.
 
 from __future__ import annotations
 
+from build_va_excel_workbook import VAExcelBuildSpec
+from product_excel import _BUILDER_REGISTRY
 from product_registry import ProductType, product_label
-
 from products import ProductDefinition, register_product
+from products.variable_annuity.ui import VARIABLE_ANNUITY_ADAPTER, variable_annuity_metric_formatter
 from va_projection import (
     VAContract,
     VAProjectionResult,
@@ -16,11 +18,6 @@ from va_projection import (
     price_va_single_premium,
     price_va_single_premium_monte_carlo,
 )
-from build_va_excel_workbook import VAExcelBuildSpec
-
-from product_excel import _BUILDER_REGISTRY
-from products.variable_annuity.ui import VARIABLE_ANNUITY_ADAPTER, variable_annuity_metric_formatter
-
 
 DEFINITION = register_product(
     ProductDefinition(
@@ -45,5 +42,6 @@ __all__ = [
     "VARIABLE_ANNUITY_ADAPTER",
     "liability_path_from_va_projection",
     "price_va_single_premium",
+    "price_va_single_premium_monte_carlo",
     "variable_annuity_metric_formatter",
 ]

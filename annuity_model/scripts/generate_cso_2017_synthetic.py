@@ -117,24 +117,40 @@ def main() -> int:
     BASE_A, BASE_B, BASE_C = 4.5e-4, 4.5e-5, 0.094
 
     male_ns = _build_table(
-        sex="male", smoker_class="nonsmoker",
-        a=BASE_A, b=BASE_B, c=BASE_C,
-        smoker_mult=1.0, sex_mult=1.0,
+        sex="male",
+        smoker_class="nonsmoker",
+        a=BASE_A,
+        b=BASE_B,
+        c=BASE_C,
+        smoker_mult=1.0,
+        sex_mult=1.0,
     )
     female_ns = _build_table(
-        sex="female", smoker_class="nonsmoker",
-        a=BASE_A, b=BASE_B, c=BASE_C,
-        smoker_mult=1.0, sex_mult=0.70,  # female ~30% lower
+        sex="female",
+        smoker_class="nonsmoker",
+        a=BASE_A,
+        b=BASE_B,
+        c=BASE_C,
+        smoker_mult=1.0,
+        sex_mult=0.70,  # female ~30% lower
     )
     male_sk = _build_table(
-        sex="male", smoker_class="smoker",
-        a=BASE_A, b=BASE_B, c=BASE_C,
-        smoker_mult=2.20, sex_mult=1.0,  # smoker ~2.2x non-smoker
+        sex="male",
+        smoker_class="smoker",
+        a=BASE_A,
+        b=BASE_B,
+        c=BASE_C,
+        smoker_mult=2.20,
+        sex_mult=1.0,  # smoker ~2.2x non-smoker
     )
     female_sk = _build_table(
-        sex="female", smoker_class="smoker",
-        a=BASE_A, b=BASE_B, c=BASE_C,
-        smoker_mult=2.20, sex_mult=0.70,
+        sex="female",
+        smoker_class="smoker",
+        a=BASE_A,
+        b=BASE_B,
+        c=BASE_C,
+        smoker_mult=2.20,
+        sex_mult=0.70,
     )
 
     _write(OUT_DIR / "cso_2017_ult_male_nonsmoker_qx.csv", *male_ns)

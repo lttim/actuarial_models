@@ -75,7 +75,9 @@ def aggregate_by_product_type(
     return out
 
 
-def padded_cashflows_on_portfolio_grid(path: sp.LiabilityPath, portfolio_n_months: int) -> np.ndarray:
+def padded_cashflows_on_portfolio_grid(
+    path: sp.LiabilityPath, portfolio_n_months: int
+) -> np.ndarray:
     """Return *path* expected cashflows left-aligned on a *portfolio_n_months* grid.
 
     Trailing months are zero. If *path* is longer than *portfolio_n_months*, raises
@@ -103,9 +105,7 @@ def assert_rollups_sum_to_total(
         summed += cf
     if not np.allclose(summed, cf_p, rtol=rtol, atol=atol):
         diff = float(np.max(np.abs(summed - cf_p)))
-        raise AssertionError(
-            f"rollup sum != portfolio total: max_abs_diff={diff} (atol={atol})."
-        )
+        raise AssertionError(f"rollup sum != portfolio total: max_abs_diff={diff} (atol={atol}).")
     if not np.allclose(ty_p, _union_times_years(n), rtol=0.0, atol=1e-12):
         raise AssertionError("portfolio.times_years is not the standard monthly union grid.")
 

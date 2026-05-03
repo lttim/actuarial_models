@@ -59,9 +59,7 @@ class LapseAssumption:
                     "almost always a unit error."
                 )
         if not (0.0 <= float(self.ultimate_rate) < 1.0):
-            raise ValueError(
-                f"ultimate_rate={self.ultimate_rate!r} must be in [0, 1)."
-            )
+            raise ValueError(f"ultimate_rate={self.ultimate_rate!r} must be in [0, 1).")
 
     def annual_rate_for_policy_year(self, policy_year: int) -> float:
         """Return ``q_w`` for *policy_year* (1-indexed).
@@ -111,8 +109,7 @@ def combined_monthly_survival(
     qw = np.asarray(lapse_monthly_q, dtype=float)
     if qm.shape != qw.shape:
         raise ValueError(
-            f"mortality_monthly_q shape {qm.shape!r} must equal "
-            f"lapse_monthly_q shape {qw.shape!r}."
+            f"mortality_monthly_q shape {qm.shape!r} must equal lapse_monthly_q shape {qw.shape!r}."
         )
     if qm.ndim != 1:
         raise ValueError("inputs must be 1-D arrays.")

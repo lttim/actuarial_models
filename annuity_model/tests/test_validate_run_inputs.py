@@ -18,8 +18,8 @@ from __future__ import annotations
 import pytest
 
 from product_registry import (
-    ProductType,
     _PRODUCT_VALIDATORS,
+    ProductType,
     validate_run_inputs,
 )
 
@@ -49,9 +49,7 @@ def test_horizon_must_exceed_issue() -> None:
         ProductType.SPIA,
         {"issue_age": 65, "horizon_age": 65},
     )
-    assert any(
-        "must be strictly greater than" in e and "issue_age" in e for e in errors
-    )
+    assert any("must be strictly greater than" in e and "issue_age" in e for e in errors)
 
 
 def test_horizon_below_issue_is_reported() -> None:

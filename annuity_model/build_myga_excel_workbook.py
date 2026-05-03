@@ -211,23 +211,23 @@ def build_myga_workbook_from_spec(
     ws_pr["C2"] = f"={issue_age_ref}"
 
     hdr = (
-        "Month",         # A
-        "t_years",       # B
-        "AttainedAge",   # C
-        "SurvivalEnd",   # D
-        "SurvivalStart", # E
-        "MonthDeathProb", # F
-        "AV_end",        # G
-        "DeathCF",       # H
-        "MaturityCF",    # I
+        "Month",  # A
+        "t_years",  # B
+        "AttainedAge",  # C
+        "SurvivalEnd",  # D
+        "SurvivalStart",  # E
+        "MonthDeathProb",  # F
+        "AV_end",  # G
+        "DeathCF",  # H
+        "MaturityCF",  # I
         "ExpBenefitCF",  # J
         "ExpExpenseCF",  # K
-        "ExpTotalCF",    # L  <-- RILA-style accumulation: ExpTotalCF in column L
-        "ExpTotalCFAlt", # M  (mirror -- liability_layouts has total_cf_col="M")
-        "",              # N
-        "DiscountFactor", # O
-        "PVBenefitCF",   # P
-        "PVExpenseCF",   # Q
+        "ExpTotalCF",  # L  <-- RILA-style accumulation: ExpTotalCF in column L
+        "ExpTotalCFAlt",  # M  (mirror -- liability_layouts has total_cf_col="M")
+        "",  # N
+        "DiscountFactor",  # O
+        "PVBenefitCF",  # P
+        "PVExpenseCF",  # Q
     )
     for c, h in enumerate(hdr, start=1):
         cell = ws_pr.cell(row=3, column=c, value=h if h else None)
@@ -238,16 +238,18 @@ def build_myga_workbook_from_spec(
         ws_pr.cell(row=r, column=1, value=f'=IF(ROW()-3>{nm_ref},"",ROW()-3)')
         ws_pr.cell(row=r, column=2, value=f'=IF({a}="","",{a}/{freq_ref})')
         ws_pr.cell(
-            row=r, column=3,
+            row=r,
+            column=3,
             value=f'=IF({a}="","",{issue_age_ref}+({a}-1)/{freq_ref})',
         )
         # SurvivalEnd: piecewise constant force from the qx table
         ws_pr.cell(
-            row=r, column=4,
+            row=r,
+            column=4,
             value=(
                 f'=IF({a}="","",IFERROR(POWER(1-MIN(MAX(IFERROR(INDEX({SHEET_QX}!$B$2:$B$200,'
-                f'MATCH(INT({issue_age_ref}+({a}-1)/12),{SHEET_QX}!$A$2:$A$200,0)),0),0),0.999),'
-                f'{a}/12)*1,0))'
+                f"MATCH(INT({issue_age_ref}+({a}-1)/12),{SHEET_QX}!$A$2:$A$200,0)),0),0),0.999),"
+                f"{a}/12)*1,0))"
             ),
         )
         if r == first:
@@ -257,21 +259,24 @@ def build_myga_workbook_from_spec(
         ws_pr.cell(row=r, column=6, value=f'=IF({a}="","",MAX(0,MIN(1,E{r}-D{r})))')
         # AV_end: SP * (1+rate)^(t/12)
         ws_pr.cell(
-            row=r, column=7,
+            row=r,
+            column=7,
             value=f'=IF({a}="","",{sp_ref}*POWER(1+{rate_ref},{a}/12))',
         )
         # DeathCF = AV * P(death this month)
         ws_pr.cell(row=r, column=8, value=f'=IF({a}="",0,G{r}*F{r})')
         # MaturityCF = AV[T]*survival_end[T-1] only on month T; else 0
         ws_pr.cell(
-            row=r, column=9,
+            row=r,
+            column=9,
             value=f'=IF({a}="",0,IF({a}={guar_months},G{r}*D{r},0))',
         )
         # ExpBenefitCF = DeathCF + MaturityCF
         ws_pr.cell(row=r, column=10, value=f'=IF({a}="",0,H{r}+I{r})')
         # Expense (monthly $ * inflation factor * survival_start)
         ws_pr.cell(
-            row=r, column=11,
+            row=r,
+            column=11,
             value=f'=IF({a}="",0,{exp_m_ref}*POWER(1+(POWER(1+{exp_inf_ref},1/12)-1),{a}-1)*E{r})',
         )
         # ExpTotalCF (column L) = J + K  (benefit + expense)
@@ -280,7 +285,8 @@ def build_myga_workbook_from_spec(
         ws_pr.cell(row=r, column=13, value=f'=IF({a}="",0,L{r})')
         # Discount factor from MonthlyCurve_recalc
         ws_pr.cell(
-            row=r, column=15,
+            row=r,
+            column=15,
             value=(
                 f'=IF({a}="","",IFERROR(INDEX({mc_ref},'
                 f'MATCH({a},{RECALC_MONTHLY_CURVE_SHEET}!$A:$A,0)),""))'
@@ -335,7 +341,12 @@ def build_myga_workbook_from_spec(
         ("PV expenses", pv_e, f"={LIABILITY_SHEET_NAME}!X5", "money"),
         ("PV total (ben+exp)", pv_t, f"={LIABILITY_SHEET_NAME}!X7", "money"),
         ("Single premium", sp_value, f"={LIABILITY_SHEET_NAME}!X8", "money"),
-        ("Annuity factor (Σ l_end · v)", float(res.annuity_factor), f"={LIABILITY_SHEET_NAME}!X6", "factor"),
+        (
+            "Annuity factor (Σ l_end · v)",
+            float(res.annuity_factor),
+            f"={LIABILITY_SHEET_NAME}!X6",
+            "factor",
+        ),
     ]
     write_model_check_sheet(
         wb,

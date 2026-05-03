@@ -6,8 +6,8 @@ analog.
 
 from __future__ import annotations
 
+from product_excel import _BUILDER_REGISTRY
 from product_registry import ProductType, product_label
-
 from products import ProductDefinition, register_product
 from products.term.engine import (
     TermLifeContract,
@@ -15,8 +15,6 @@ from products.term.engine import (
     liability_path_from_term_projection,
     price_term_life_level_monthly,
 )
-from product_excel import _BUILDER_REGISTRY
-
 from products.term.excel import TermExcelBuildSpec, term_excel_spec_from_launcher
 from products.term.ui import TERM_ADAPTER, term_metric_formatter, term_ui_config
 

@@ -39,8 +39,8 @@ from openpyxl import load_workbook
 import pricing_projection as sp
 from build_pricing_excel_workbook import (
     ExcelPythonSnapshot,
-    excel_spec_from_launcher,
     build_workbook_from_spec,
+    excel_spec_from_launcher,
 )
 from excel_runtime_recalc import (
     LIBREOFFICE_INSTALL_HINT,
@@ -125,9 +125,7 @@ def test_modelcheck_cells_recalc_to_python_values(libreoffice_or_skip: None) -> 
     assert isinstance(ws["C9"].value, str) and ws["C9"].value.startswith("=")
 
     recalculated = recalc_workbook(blob, timeout=120.0)
-    cells = read_recalculated_cells(
-        recalculated, ["ModelCheck!C5", "ModelCheck!C9"]
-    )
+    cells = read_recalculated_cells(recalculated, ["ModelCheck!C5", "ModelCheck!C9"])
 
     assert cells["ModelCheck!C5"] is not None, (
         "soffice did not produce a cached value for ModelCheck!C5; the "

@@ -17,7 +17,9 @@ def load_policy_inputs_from_csv(path: str | Path) -> tuple[PolicyInput, ...]:
     return load_policy_inputs_from_csv_from_dataframe(df)
 
 
-def load_policy_inputs_from_excel(path: str | Path, *, sheet_name: str | int = 0) -> tuple[PolicyInput, ...]:
+def load_policy_inputs_from_excel(
+    path: str | Path, *, sheet_name: str | int = 0
+) -> tuple[PolicyInput, ...]:
     """Parse the first sheet (or *sheet_name*) of an Excel inforce workbook."""
     df = pd.read_excel(Path(path), sheet_name=sheet_name)
     return load_policy_inputs_from_csv_from_dataframe(df)

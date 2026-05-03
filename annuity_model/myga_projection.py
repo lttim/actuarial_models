@@ -162,9 +162,7 @@ def price_myga_single_premium(
         survival_combined_start[0] = 1.0
         survival_combined_start[1:] = survival_combined[:-1]
         # Death prob and lapse prob attributable per month.
-        death_prob_month = np.clip(
-            survival_combined_start * mortality_q_m, 0.0, 1.0
-        )
+        death_prob_month = np.clip(survival_combined_start * mortality_q_m, 0.0, 1.0)
         lapse_prob_month = np.clip(
             survival_combined_start * (1.0 - mortality_q_m) * lapse_q_m, 0.0, 1.0
         )
@@ -266,6 +264,4 @@ def liability_path_from_myga_projection(pricing: MYGAProjectionResult) -> sp.Lia
 # `run_alm_projection_from_pricing_result` without an isinstance chain.
 from liability_dispatch import register_liability_path_converter  # noqa: E402
 
-register_liability_path_converter(
-    "MYGAProjectionResult", liability_path_from_myga_projection
-)
+register_liability_path_converter("MYGAProjectionResult", liability_path_from_myga_projection)

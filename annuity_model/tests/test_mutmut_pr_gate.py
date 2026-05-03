@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import sys
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -54,9 +53,7 @@ def test_no_touched_files_returns_zero(capsys: pytest.CaptureFixture[str]) -> No
 def test_touched_files_outside_surface_returns_zero(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    rc = gate.main(
-        ["--skip-run", "--touched-files", "tests/test_foo.py", "docs/README.md"]
-    )
+    rc = gate.main(["--skip-run", "--touched-files", "tests/test_foo.py", "docs/README.md"])
     assert rc == 0
     assert "no parity-critical files" in capsys.readouterr().out
 
@@ -128,9 +125,7 @@ def test_per_file_threshold_overrides_default(
         "pricing_projection.py",
         {f"pp.x__mutmut_{i}": (0 if i < 2 else 1) for i in range(5)},
     )
-    thresholds = _write_thresholds(
-        tmp_path, default=0, per_file={"pricing_projection.py": 3}
-    )
+    thresholds = _write_thresholds(tmp_path, default=0, per_file={"pricing_projection.py": 3})
     rc = gate.main(
         [
             "--skip-run",
@@ -157,9 +152,7 @@ def test_per_file_threshold_can_still_fail_when_exceeded(
         "pricing_projection.py",
         {f"pp.x__mutmut_{i}": 0 for i in range(4)},
     )
-    thresholds = _write_thresholds(
-        tmp_path, default=0, per_file={"pricing_projection.py": 3}
-    )
+    thresholds = _write_thresholds(tmp_path, default=0, per_file={"pricing_projection.py": 3})
     rc = gate.main(
         [
             "--skip-run",
@@ -245,8 +238,8 @@ def test_surface_matches_nightly_workflow() -> None:
         if in_block:
             if stripped == "]":
                 break
-            if stripped.startswith('"') and stripped.endswith(',') or stripped.endswith('"'):
-                declared.append(stripped.strip(',').strip('"'))
+            if stripped.startswith('"') and stripped.endswith(",") or stripped.endswith('"'):
+                declared.append(stripped.strip(",").strip('"'))
     nightly = frozenset(declared)
     assert nightly == gate.MUTMUT_SURFACE, (
         "MUTMUT_SURFACE drift between PR gate and nightly:\n"

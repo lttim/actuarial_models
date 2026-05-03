@@ -20,12 +20,16 @@ def test_discover_tests_metadata_non_empty() -> None:
         assert "description" in r
 
 
-def test_parse_junit_results_empty_when_missing_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_parse_junit_results_empty_when_missing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(td, "JUNIT_PATH", tmp_path / "nope.xml")
     assert td.parse_junit_results() == {}
 
 
-def test_parse_junit_results_parametrize_aggregation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_parse_junit_results_parametrize_aggregation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     xml = dedent(
         """\
         <?xml version="1.0" encoding="utf-8"?>

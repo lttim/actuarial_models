@@ -113,7 +113,9 @@ def _walk_page_ranges(tree: ast.Module) -> list[tuple[str, int, int]]:
     out: list[tuple[str, int, int]] = []
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name.startswith("_render_"):
-            end = max((getattr(n, "lineno", node.lineno) for n in ast.walk(node)), default=node.lineno)
+            end = max(
+                (getattr(n, "lineno", node.lineno) for n in ast.walk(node)), default=node.lineno
+            )
             out.append((node.name, node.lineno, end))
     out.sort(key=lambda t: t[1])
     return out
@@ -121,12 +123,12 @@ def _walk_page_ranges(tree: ast.Module) -> list[tuple[str, int, int]]:
 
 def _is_session_state_attr(value: ast.AST) -> bool:
     """Match ``st.session_state`` (Attribute) or a bare ``session_state``."""
-    if isinstance(value, ast.Attribute) and value.attr == "session_state":
-        if isinstance(value.value, ast.Name) and value.value.id == "st":
-            return True
-    if isinstance(value, ast.Name) and value.id == "session_state":
-        return True
-    return False
+    return (
+        isinstance(value, ast.Attribute)
+        and value.attr == "session_state"
+        and isinstance(value.value, ast.Name)
+        and value.value.id == "st"
+    ) or (isinstance(value, ast.Name) and value.id == "session_state")
 
 
 def _extract_string_or_attr(node: ast.AST) -> tuple[str | None, bool]:
@@ -134,23 +136,22 @@ def _extract_string_or_attr(node: ast.AST) -> tuple[str | None, bool]:
     a ``RUN_KEY.X`` attribute; ``(None, False)`` otherwise."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value, True
-    if isinstance(node, ast.Attribute):
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
         # RUN_KEY.X -> resolve to the literal value via the runtime
         # import so we record the *underlying* key, not the symbol path.
-        if isinstance(node.value, ast.Name):
-            try:
-                import sys as _sys
+        try:
+            import sys as _sys
 
-                _sys.path.insert(0, str(REPO_ROOT))
-                import pricing_run_form_state as prfs
+            _sys.path.insert(0, str(REPO_ROOT))
+            import pricing_run_form_state as prfs
 
-                holder = getattr(prfs, node.value.id, None)
-                if holder is not None:
-                    val = getattr(holder, node.attr, None)
-                    if isinstance(val, str):
-                        return val, False
-            except Exception:
-                return None, False
+            holder = getattr(prfs, node.value.id, None)
+            if holder is not None:
+                val = getattr(holder, node.attr, None)
+                if isinstance(val, str):
+                    return val, False
+        except Exception:
+            return None, False
     return None, False
 
 
@@ -167,44 +168,54 @@ def _audit(tree: ast.Module) -> AuditReport:
         if isinstance(node, ast.Subscript) and _is_session_state_attr(node.value):
             key, is_lit = _extract_string_or_attr(node.slice)
             if key:
-                rep.add(KeyUsage(page=page, key=key, line=node.lineno, via="subscript", is_literal=is_lit))
+                rep.add(
+                    KeyUsage(
+                        page=page, key=key, line=node.lineno, via="subscript", is_literal=is_lit
+                    )
+                )
             continue
 
         # st.session_state.get("key", ...) / .setdefault("key", ...) /
         # .pop("key", ...) / .update({...})
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            if _is_session_state_attr(node.func.value):
-                if node.func.attr in {"get", "setdefault", "pop"} and node.args:
-                    key, is_lit = _extract_string_or_attr(node.args[0])
-                    if key:
-                        rep.add(
-                            KeyUsage(
-                                page=page,
-                                key=key,
-                                line=node.lineno,
-                                via=f"method:{node.func.attr}",
-                                is_literal=is_lit,
-                            )
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and _is_session_state_attr(node.func.value)
+        ):
+            if node.func.attr in {"get", "setdefault", "pop"} and node.args:
+                key, is_lit = _extract_string_or_attr(node.args[0])
+                if key:
+                    rep.add(
+                        KeyUsage(
+                            page=page,
+                            key=key,
+                            line=node.lineno,
+                            via=f"method:{node.func.attr}",
+                            is_literal=is_lit,
                         )
-                continue
+                    )
+            continue
 
         # st.<widget>(..., key="...") / RUN_KEY.X
         if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
-                if node.func.value.id in {"st"}:
-                    for kw in node.keywords:
-                        if kw.arg == "key":
-                            key, is_lit = _extract_string_or_attr(kw.value)
-                            if key:
-                                rep.add(
-                                    KeyUsage(
-                                        page=page,
-                                        key=key,
-                                        line=node.lineno,
-                                        via="widget_key",
-                                        is_literal=is_lit,
-                                    )
+            if (
+                isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id in {"st"}
+            ):
+                for kw in node.keywords:
+                    if kw.arg == "key":
+                        key, is_lit = _extract_string_or_attr(kw.value)
+                        if key:
+                            rep.add(
+                                KeyUsage(
+                                    page=page,
+                                    key=key,
+                                    line=node.lineno,
+                                    via="widget_key",
+                                    is_literal=is_lit,
                                 )
+                            )
             # Custom helpers like run_number_input(..., key=...)
             if isinstance(node.func, ast.Name) and node.func.id.endswith("_input"):
                 for kw in node.keywords:
@@ -260,9 +271,7 @@ def _to_json(rep: AuditReport) -> dict[str, object]:
             "unique_keys": len(rep.key_to_pages),
             "pages": len(rep.page_to_keys),
         },
-        "per_page": {
-            page: sorted(keys) for page, keys in sorted(rep.page_to_keys.items())
-        },
+        "per_page": {page: sorted(keys) for page, keys in sorted(rep.page_to_keys.items())},
         "cross_page": rep.cross_page_keys(),
     }
 
@@ -309,8 +318,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         }
         if bad:
             print(
-                f"\n[audit] FAIL: {len(bad)} cross-page key(s) not in "
-                "--allow-cross-page:",
+                f"\n[audit] FAIL: {len(bad)} cross-page key(s) not in --allow-cross-page:",
                 file=sys.stderr,
             )
             for k, pages in bad.items():

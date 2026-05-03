@@ -12,15 +12,19 @@ from actuarial_benchmarks import (
     UL_BENCHMARK_AV_20Y_LO,
     UL_SENSITIVITY_EPS,
 )
-from parity_constants import AV_TOL
 
 pytestmark = [pytest.mark.parity, pytest.mark.product_ul]
 
 
 def _baseline_contract() -> ul.ULContract:
     return ul.ULContract(
-        issue_age=45, sex="male", face_amount=250_000.0, single_premium=25_000.0,
-        premium_load_pct=0.06, monthly_expense_charge=7.50, declared_rate_annual=0.04,
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=25_000.0,
+        premium_load_pct=0.06,
+        monthly_expense_charge=7.50,
+        declared_rate_annual=0.04,
     )
 
 
@@ -37,8 +41,10 @@ def _mort() -> sp.MortalityTableQx:
 def _price(contract=None, yc=None, mort=None):
     return ul.price_ul_single_premium(
         contract=contract or _baseline_contract(),
-        yield_curve=yc or _yc(), mortality=mort or _mort(),
-        horizon_age=120, expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        yield_curve=yc or _yc(),
+        mortality=mort or _mort(),
+        horizon_age=120,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
     )
 
 
@@ -67,8 +73,13 @@ def test_ul_av_at_20y_within_band():
 def test_ul_nar_zero_when_av_geq_face():
     """If AV >= face (Type A), NAR == 0 and COI == 0."""
     big_premium = ul.ULContract(
-        issue_age=45, sex="male", face_amount=10_000.0, single_premium=100_000.0,
-        premium_load_pct=0.0, monthly_expense_charge=0.0, declared_rate_annual=0.04,
+        issue_age=45,
+        sex="male",
+        face_amount=10_000.0,
+        single_premium=100_000.0,
+        premium_load_pct=0.0,
+        monthly_expense_charge=0.0,
+        declared_rate_annual=0.04,
     )
     res = _price(contract=big_premium)
     # AV[0] = 100_000; face = 10_000 -> NAR = 0 throughout.
@@ -80,8 +91,13 @@ def test_ul_higher_premium_extends_av():
     """Larger SP should make AV last longer (more months before depletion)."""
     base = _price()
     bigger = ul.ULContract(
-        issue_age=45, sex="male", face_amount=250_000.0, single_premium=50_000.0,
-        premium_load_pct=0.06, monthly_expense_charge=7.50, declared_rate_annual=0.04,
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=50_000.0,
+        premium_load_pct=0.06,
+        monthly_expense_charge=7.50,
+        declared_rate_annual=0.04,
     )
     res_big = _price(contract=bigger)
     base_terminate = (

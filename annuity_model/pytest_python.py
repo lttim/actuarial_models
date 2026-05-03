@@ -44,7 +44,11 @@ def project_venv_python(anchor: Path) -> Path | None:
 
 def interpreter_meets_minimum(py: str | Path, major: int, minor: int) -> bool:
     proc = subprocess.run(
-        [str(py), "-c", f"import sys; raise SystemExit(0 if sys.version_info[:2] >= ({major}, {minor}) else 1)"],
+        [
+            str(py),
+            "-c",
+            f"import sys; raise SystemExit(0 if sys.version_info[:2] >= ({major}, {minor}) else 1)",
+        ],
         capture_output=True,
     )
     return proc.returncode == 0

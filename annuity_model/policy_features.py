@@ -12,7 +12,6 @@ from typing import Literal
 
 import numpy as np
 
-
 CreditDesign = Literal["cap_floor", "buffer"]
 
 

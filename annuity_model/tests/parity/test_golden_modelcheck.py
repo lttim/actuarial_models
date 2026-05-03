@@ -51,9 +51,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import pytest
@@ -82,6 +83,17 @@ class GoldenSnapshot:
     product: str
     inputs_summary: dict[str, Any]
     metrics: dict[str, float]
+
+
+def _canonical_metric(value: float | int) -> float | int:
+    """Canonicalize golden JSON metrics without relaxing model parity gates."""
+    if isinstance(value, int):
+        return value
+    return round(float(value), 10)
+
+
+def _canonical_metrics(metrics: dict[str, float]) -> dict[str, float | int]:
+    return {key: _canonical_metric(value) for key, value in metrics.items()}
 
 
 def _flat_yc(rate: float) -> sp.YieldCurve:
@@ -235,24 +247,35 @@ def _myga_snapshot() -> GoldenSnapshot:
     import myga_projection as my
 
     contract = my.MYGAContract(
-        issue_age=60, sex="male", single_premium=100_000.0,
-        declared_rate_annual=0.045, guarantee_years=5,
+        issue_age=60,
+        sex="male",
+        single_premium=100_000.0,
+        declared_rate_annual=0.045,
+        guarantee_years=5,
     )
     yc = _flat_yc(0.045)
     mort = _synthetic_mortality(0.005, 1e-5)
     horizon_age = 70
     res = my.price_myga_single_premium(
-        contract=contract, yield_curve=yc, mortality=mort,
-        horizon_age=horizon_age, spread=0.0, valuation_year=None,
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        spread=0.0,
+        valuation_year=None,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
         expense_annual_inflation=0.0,
     )
     return GoldenSnapshot(
         product="myga",
         inputs_summary=dict(
-            issue_age=60, sex="male", single_premium=100_000.0,
-            declared_rate_annual=0.045, guarantee_years=5,
-            yield_rate=0.045, horizon_age=horizon_age,
+            issue_age=60,
+            sex="male",
+            single_premium=100_000.0,
+            declared_rate_annual=0.045,
+            guarantee_years=5,
+            yield_rate=0.045,
+            horizon_age=horizon_age,
             mortality="synthetic_qx_0.005+1e-5*age",
             spread=0.0,
         ),
@@ -271,8 +294,13 @@ def _fia_snapshot() -> GoldenSnapshot:
     import fia_projection as fp
 
     contract = fp.FIAContract(
-        issue_age=60, sex="male", single_premium=100_000.0,
-        participation=0.8, cap=0.07, floor=0.0, horizon_years=10,
+        issue_age=60,
+        sex="male",
+        single_premium=100_000.0,
+        participation=0.8,
+        cap=0.07,
+        floor=0.0,
+        horizon_years=10,
     )
     yc = _flat_yc(0.04)
     mort = _synthetic_mortality(0.005, 1e-5)
@@ -281,20 +309,34 @@ def _fia_snapshot() -> GoldenSnapshot:
     rng = np.random.default_rng(42)
     levels = 100.0 * np.cumprod(1.0 + rng.normal(0.004, 0.02, size=n_months))
     res = fp.price_fia_single_premium(
-        contract=contract, yield_curve=yc, mortality=mort,
-        horizon_age=horizon_age, spread=0.0, valuation_year=None,
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        spread=0.0,
+        valuation_year=None,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        index_s0=100.0, index_levels_payment=levels,
+        index_s0=100.0,
+        index_levels_payment=levels,
         expense_annual_inflation=0.0,
     )
     return GoldenSnapshot(
         product="fia",
         inputs_summary=dict(
-            issue_age=60, sex="male", single_premium=100_000.0,
-            participation=0.8, cap=0.07, floor=0.0,
-            horizon_years=10, yield_rate=0.04, horizon_age=horizon_age,
+            issue_age=60,
+            sex="male",
+            single_premium=100_000.0,
+            participation=0.8,
+            cap=0.07,
+            floor=0.0,
+            horizon_years=10,
+            yield_rate=0.04,
+            horizon_age=horizon_age,
             mortality="synthetic_qx_0.005+1e-5*age",
-            spread=0.0, index_seed=42, index_drift=0.004, index_vol=0.02,
+            spread=0.0,
+            index_seed=42,
+            index_drift=0.004,
+            index_vol=0.02,
         ),
         metrics={
             "pv_benefit": float(res.pv_benefit),
@@ -311,8 +353,11 @@ def _va_snapshot() -> GoldenSnapshot:
     import va_projection as va
 
     contract = va.VAContract(
-        issue_age=55, sex="male", single_premium=100_000.0,
-        me_charge_annual=0.014, horizon_years=20,
+        issue_age=55,
+        sex="male",
+        single_premium=100_000.0,
+        me_charge_annual=0.014,
+        horizon_years=20,
     )
     yc = _flat_yc(0.04)
     mort = _synthetic_mortality(0.005, 1e-5)
@@ -321,21 +366,33 @@ def _va_snapshot() -> GoldenSnapshot:
     rng = np.random.default_rng(42)
     levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
     res = va.price_va_single_premium(
-        contract=contract, yield_curve=yc, mortality=mort,
-        horizon_age=horizon_age, spread=0.0, valuation_year=None,
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        spread=0.0,
+        valuation_year=None,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        index_s0=100.0, index_levels_payment=levels,
+        index_s0=100.0,
+        index_levels_payment=levels,
         expense_annual_inflation=0.0,
     )
     return GoldenSnapshot(
         product="variable_annuity",
         inputs_summary=dict(
-            issue_age=55, sex="male", single_premium=100_000.0,
-            me_charge_annual=0.014, horizon_years=20,
+            issue_age=55,
+            sex="male",
+            single_premium=100_000.0,
+            me_charge_annual=0.014,
+            horizon_years=20,
             gmdb_basis="return_of_premium",
-            yield_rate=0.04, horizon_age=horizon_age,
+            yield_rate=0.04,
+            horizon_age=horizon_age,
             mortality="synthetic_qx_0.005+1e-5*age",
-            spread=0.0, index_seed=42, index_drift=0.005, index_vol=0.03,
+            spread=0.0,
+            index_seed=42,
+            index_drift=0.005,
+            index_vol=0.03,
         ),
         metrics={
             "pv_benefit": float(res.pv_benefit),
@@ -352,24 +409,33 @@ def _wl_snapshot() -> GoldenSnapshot:
     import wl_projection as wl
 
     contract = wl.WLContract(
-        issue_age=45, sex="male", smoker_class="nonsmoker",
+        issue_age=45,
+        sex="male",
+        smoker_class="nonsmoker",
         face_amount=250_000.0,
     )
     yc = _flat_yc(0.04)
     mort = _synthetic_mortality(0.005, 1e-5)
     horizon_age = 120
     res = wl.price_wl_single_premium(
-        contract=contract, yield_curve=yc, mortality=mort,
-        horizon_age=horizon_age, spread=0.0, valuation_year=None,
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        spread=0.0,
+        valuation_year=None,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
         expense_annual_inflation=0.0,
     )
     return GoldenSnapshot(
         product="whole_life",
         inputs_summary=dict(
-            issue_age=45, sex="male", smoker_class="nonsmoker",
+            issue_age=45,
+            sex="male",
+            smoker_class="nonsmoker",
             face_amount=250_000.0,
-            yield_rate=0.04, horizon_age=horizon_age,
+            yield_rate=0.04,
+            horizon_age=horizon_age,
             mortality="synthetic_qx_0.005+1e-5*age",
             spread=0.0,
         ),
@@ -387,26 +453,39 @@ def _ul_snapshot() -> GoldenSnapshot:
     import ul_projection as ul_proj
 
     contract = ul_proj.ULContract(
-        issue_age=45, sex="male", face_amount=250_000.0,
-        single_premium=25_000.0, premium_load_pct=0.06,
-        monthly_expense_charge=7.50, declared_rate_annual=0.04,
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=25_000.0,
+        premium_load_pct=0.06,
+        monthly_expense_charge=7.50,
+        declared_rate_annual=0.04,
     )
     yc = _flat_yc(0.04)
     mort = _synthetic_mortality(0.005, 1e-5)
     horizon_age = 120
     res = ul_proj.price_ul_single_premium(
-        contract=contract, yield_curve=yc, mortality=mort,
-        horizon_age=horizon_age, spread=0.0, valuation_year=None,
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        spread=0.0,
+        valuation_year=None,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
         expense_annual_inflation=0.0,
     )
     return GoldenSnapshot(
         product="universal_life",
         inputs_summary=dict(
-            issue_age=45, sex="male", face_amount=250_000.0,
-            single_premium=25_000.0, premium_load_pct=0.06,
-            monthly_expense_charge=7.50, declared_rate_annual=0.04,
-            yield_rate=0.04, horizon_age=horizon_age,
+            issue_age=45,
+            sex="male",
+            face_amount=250_000.0,
+            single_premium=25_000.0,
+            premium_load_pct=0.06,
+            monthly_expense_charge=7.50,
+            declared_rate_annual=0.04,
+            yield_rate=0.04,
+            horizon_age=horizon_age,
             mortality="synthetic_qx_0.005+1e-5*age",
             spread=0.0,
         ),
@@ -425,9 +504,15 @@ def _iul_snapshot() -> GoldenSnapshot:
     import iul_projection as iul_proj
 
     contract = iul_proj.IULContract(
-        issue_age=45, sex="male", face_amount=250_000.0,
-        single_premium=25_000.0, premium_load_pct=0.06,
-        monthly_expense_charge=7.50, participation=1.0, cap=0.10, floor=0.0,
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=25_000.0,
+        premium_load_pct=0.06,
+        monthly_expense_charge=7.50,
+        participation=1.0,
+        cap=0.10,
+        floor=0.0,
     )
     yc = _flat_yc(0.04)
     mort = _synthetic_mortality(0.005, 1e-5)
@@ -436,22 +521,36 @@ def _iul_snapshot() -> GoldenSnapshot:
     rng = np.random.default_rng(42)
     levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
     res = iul_proj.price_iul_single_premium(
-        contract=contract, yield_curve=yc, mortality=mort,
-        horizon_age=horizon_age, spread=0.0, valuation_year=None,
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        spread=0.0,
+        valuation_year=None,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        index_s0=100.0, index_levels_payment=levels,
+        index_s0=100.0,
+        index_levels_payment=levels,
         expense_annual_inflation=0.0,
     )
     return GoldenSnapshot(
         product="indexed_ul",
         inputs_summary=dict(
-            issue_age=45, sex="male", face_amount=250_000.0,
-            single_premium=25_000.0, premium_load_pct=0.06,
+            issue_age=45,
+            sex="male",
+            face_amount=250_000.0,
+            single_premium=25_000.0,
+            premium_load_pct=0.06,
             monthly_expense_charge=7.50,
-            participation=1.0, cap=0.10, floor=0.0,
-            yield_rate=0.04, horizon_age=horizon_age,
+            participation=1.0,
+            cap=0.10,
+            floor=0.0,
+            yield_rate=0.04,
+            horizon_age=horizon_age,
             mortality="synthetic_qx_0.005+1e-5*age",
-            spread=0.0, index_seed=42, index_drift=0.005, index_vol=0.03,
+            spread=0.0,
+            index_seed=42,
+            index_drift=0.005,
+            index_vol=0.03,
         ),
         metrics={
             "pv_benefit": float(res.pv_benefit),
@@ -468,8 +567,11 @@ def _vul_snapshot() -> GoldenSnapshot:
     import vul_projection as vul_proj
 
     contract = vul_proj.VULContract(
-        issue_age=45, sex="male", face_amount=250_000.0,
-        single_premium=25_000.0, premium_load_pct=0.06,
+        issue_age=45,
+        sex="male",
+        face_amount=250_000.0,
+        single_premium=25_000.0,
+        premium_load_pct=0.06,
         monthly_expense_charge=7.50,
     )
     yc = _flat_yc(0.04)
@@ -479,21 +581,33 @@ def _vul_snapshot() -> GoldenSnapshot:
     rng = np.random.default_rng(42)
     levels = 100.0 * np.cumprod(1.0 + rng.normal(0.005, 0.03, size=n_months))
     res = vul_proj.price_vul_single_premium(
-        contract=contract, yield_curve=yc, mortality=mort,
-        horizon_age=horizon_age, spread=0.0, valuation_year=None,
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        spread=0.0,
+        valuation_year=None,
         expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
-        index_s0=100.0, index_levels_payment=levels,
+        index_s0=100.0,
+        index_levels_payment=levels,
         expense_annual_inflation=0.0,
     )
     return GoldenSnapshot(
         product="variable_ul",
         inputs_summary=dict(
-            issue_age=45, sex="male", face_amount=250_000.0,
-            single_premium=25_000.0, premium_load_pct=0.06,
+            issue_age=45,
+            sex="male",
+            face_amount=250_000.0,
+            single_premium=25_000.0,
+            premium_load_pct=0.06,
             monthly_expense_charge=7.50,
-            yield_rate=0.04, horizon_age=horizon_age,
+            yield_rate=0.04,
+            horizon_age=horizon_age,
             mortality="synthetic_qx_0.005+1e-5*age",
-            spread=0.0, index_seed=42, index_drift=0.005, index_vol=0.03,
+            spread=0.0,
+            index_seed=42,
+            index_drift=0.005,
+            index_vol=0.03,
         ),
         metrics={
             "pv_benefit": float(res.pv_benefit),
@@ -534,7 +648,7 @@ def _serialise(snap: GoldenSnapshot) -> str:
     payload = {
         "product": snap.product,
         "inputs_summary": snap.inputs_summary,
-        "metrics": snap.metrics,
+        "metrics": _canonical_metrics(snap.metrics),
     }
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
@@ -569,10 +683,7 @@ def test_golden_modelcheck_snapshot(product: str) -> None:
 
     if _is_update_run():
         _update_golden(snap)
-        pytest.skip(
-            f"Updated golden file {_golden_path(product).name} "
-            f"({UPDATE_ENV_VAR}=1)."
-        )
+        pytest.skip(f"Updated golden file {_golden_path(product).name} ({UPDATE_ENV_VAR}=1).")
 
     golden = _load_golden(product)
     assert golden, (
@@ -596,7 +707,7 @@ def test_golden_modelcheck_snapshot(product: str) -> None:
     # Metric-by-metric comparison so the assertion message points at the
     # exact metric that drifted.
     expected_metrics = golden["metrics"]
-    actual_metrics = snap.metrics
+    actual_metrics = _canonical_metrics(snap.metrics)
     assert set(actual_metrics) == set(expected_metrics), (
         f"Metric set for {product!r} drifted. "
         f"Added: {sorted(set(actual_metrics) - set(expected_metrics))!r}, "
@@ -627,9 +738,7 @@ def test_every_implemented_product_has_a_snapshot_builder() -> None:
     """Adding a new product must come with a golden snapshot, not a TODO."""
     from product_registry import implemented_product_types
 
-    missing = [
-        p.value for p in implemented_product_types() if p.value not in SNAPSHOT_BUILDERS
-    ]
+    missing = [p.value for p in implemented_product_types() if p.value not in SNAPSHOT_BUILDERS]
     assert not missing, (
         f"Products implemented but missing golden snapshot builders: {missing!r}. "
         "Add a `_<name>_snapshot()` function above and a corresponding entry "

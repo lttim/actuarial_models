@@ -26,8 +26,11 @@ pytestmark = [pytest.mark.parity, pytest.mark.product_myga]
 
 def _baseline_contract() -> my.MYGAContract:
     return my.MYGAContract(
-        issue_age=60, sex="male", single_premium=100_000.0,
-        declared_rate_annual=0.045, guarantee_years=5,
+        issue_age=60,
+        sex="male",
+        single_premium=100_000.0,
+        declared_rate_annual=0.045,
+        guarantee_years=5,
     )
 
 
@@ -46,7 +49,8 @@ def _price(contract=None, yc=None, mort=None):
         contract=contract or _baseline_contract(),
         yield_curve=yc or _baseline_yc(),
         mortality=mort or _baseline_mort(),
-        horizon_age=70, expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        horizon_age=70,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
     )
 
 
@@ -88,7 +92,7 @@ def test_myga_closed_form_av_match():
     """Section 13.5: AV(T) must equal SP × (1+i)^T to MYGA_CLOSED_FORM_AV_TOL."""
     res = _price()
     av_t = float(res.account_value_end_month[-1])
-    closed_form = 100_000.0 * (1.045 ** 5)
+    closed_form = 100_000.0 * (1.045**5)
     assert abs(av_t - closed_form) <= MYGA_CLOSED_FORM_AV_TOL, (
         f"AV(T)={av_t:.6f} vs closed_form={closed_form:.6f}, "
         f"diff={av_t - closed_form:+.6e} > {MYGA_CLOSED_FORM_AV_TOL}."

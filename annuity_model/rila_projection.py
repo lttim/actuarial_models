@@ -13,6 +13,8 @@ from policy_features import (
     SegmentAllocation,
     SurrenderChargeSchedule,
     normalize_segment_allocations,
+)
+from policy_features import (
     segment_credited_return as policy_segment_credited_return,
 )
 
@@ -170,7 +172,9 @@ def _rila_claims_rel_per_premium_dollar(
     contract: RILAContract,
     L: np.ndarray,
     death_prob: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[
+    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+]:
     """
     Relative simulation with initial AV=1.
 
@@ -392,7 +396,9 @@ def price_rila_single_premium(
         single_premium = float(contract.single_premium)
         if not np.isfinite(single_premium) or single_premium <= 0.0:
             raise ValueError("single_premium must be finite and > 0 when provided.")
-    if contract.single_premium is None and (not np.isfinite(single_premium) or single_premium <= 0.0):
+    if contract.single_premium is None and (
+        not np.isfinite(single_premium) or single_premium <= 0.0
+    ):
         raise ValueError(
             "RILA priced single premium is non-positive. With the current implicit premium "
             "formula, the numerator is policy expenses plus the PV of scheduled monthly "

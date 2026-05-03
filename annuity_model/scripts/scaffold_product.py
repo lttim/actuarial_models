@@ -302,7 +302,9 @@ def _print_followups(code: str, contract: str, result: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--code", required=True, help="lowercase product code, e.g. fia, va_glwb")
     parser.add_argument(
         "--display-name", required=True, help='human-readable name, e.g. "FIA (S&P-linked)"'

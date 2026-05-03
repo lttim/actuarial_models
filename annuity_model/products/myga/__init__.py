@@ -6,20 +6,17 @@ Phase 0/1/.../7 of ``docs/seven_product_rollout_plan.md``.
 
 from __future__ import annotations
 
-from product_registry import ProductType, product_label
-
-from products import ProductDefinition, register_product
+from build_myga_excel_workbook import MYGAExcelBuildSpec
 from myga_projection import (
     MYGAContract,
     MYGAProjectionResult,
     liability_path_from_myga_projection,
     price_myga_single_premium,
 )
-from build_myga_excel_workbook import MYGAExcelBuildSpec
-
 from product_excel import _BUILDER_REGISTRY
+from product_registry import ProductType, product_label
+from products import ProductDefinition, register_product
 from products.myga.ui import MYGA_ADAPTER, myga_metric_formatter
-
 
 DEFINITION = register_product(
     ProductDefinition(

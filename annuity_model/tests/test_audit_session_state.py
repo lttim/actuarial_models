@@ -162,9 +162,7 @@ def test_json_output_is_parseable(
 ) -> None:
     fake_ui = tmp_path / "fake_pricing_ui.py"
     fake_ui.write_text(
-        "def _render_a():\n"
-        "    import streamlit as st\n"
-        "    return st.session_state['x']\n"
+        "def _render_a():\n    import streamlit as st\n    return st.session_state['x']\n"
     )
     monkeypatch.setattr(audit, "PRICING_UI", fake_ui)
     rc = audit.main(["--json"])

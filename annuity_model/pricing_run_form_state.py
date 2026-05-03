@@ -23,6 +23,7 @@ Mitigation
 from __future__ import annotations
 
 from collections.abc import Mapping, MutableMapping, Sequence
+from contextlib import suppress
 from typing import Any
 
 import streamlit as st
@@ -34,6 +35,7 @@ from product_registry import (
     get_term_contract_ui_config,
     parse_term_length_label_to_years,
 )
+
 
 class RUN_KEY:
     """Canonical Streamlit ``st.session_state`` keys for the Pricing Run page.
@@ -451,9 +453,7 @@ def build_run_form_seed_defaults(
         RUN_KEY.TERM_BENEFIT_ANNUAL: float(
             saved_inputs.get("benefit_annual", term_ui.default_death_benefit)
         ),
-        RUN_KEY.TERM_LENGTH: str(
-            saved_inputs.get("term_length", term_ui.term_length_options[0])
-        ),
+        RUN_KEY.TERM_LENGTH: str(saved_inputs.get("term_length", term_ui.term_length_options[0])),
         RUN_KEY.TERM_PREMIUM_MODE: str(
             saved_inputs.get("term_premium_mode", term_ui.premium_mode_options[0])
         ),
@@ -472,19 +472,25 @@ def build_run_form_seed_defaults(
         RUN_KEY.RILA_CAP: float(saved_inputs.get("rila_cap", 0.10)),
         RUN_KEY.RILA_FLOOR: float(saved_inputs.get("rila_floor", 0.0)),
         RUN_KEY.RILA_RIDER_FEE: float(saved_inputs.get("rila_rider_fee_annual", 0.01)),
-        RUN_KEY.RILA_DEATH_BENEFIT_TYPE: str(saved_inputs.get("rila_death_benefit_type", "account_value")),
+        RUN_KEY.RILA_DEATH_BENEFIT_TYPE: str(
+            saved_inputs.get("rila_death_benefit_type", "account_value")
+        ),
         RUN_KEY.RILA_BUFFER_WEIGHT: float(saved_inputs.get("rila_buffer_weight", 0.0)),
         RUN_KEY.RILA_BUFFER: float(saved_inputs.get("rila_buffer", 0.10)),
         RUN_KEY.RILA_WITHDRAWAL_AMOUNT: float(saved_inputs.get("rila_withdrawal_amount", 0.0)),
         RUN_KEY.RILA_WITHDRAWAL_START: int(saved_inputs.get("rila_withdrawal_start", 121)),
         RUN_KEY.RILA_WITHDRAWAL_END: int(saved_inputs.get("rila_withdrawal_end", 240)),
         RUN_KEY.RILA_SURRENDER_CHARGE_Y1: float(saved_inputs.get("rila_surrender_charge_y1", 0.07)),
-        RUN_KEY.RILA_SURRENDER_CHARGE_YEARS: int(saved_inputs.get("rila_surrender_charge_years", 7)),
+        RUN_KEY.RILA_SURRENDER_CHARGE_YEARS: int(
+            saved_inputs.get("rila_surrender_charge_years", 7)
+        ),
         RUN_KEY.RILA_GLWB_ENABLED: bool(saved_inputs.get("rila_glwb_enabled", False)),
         RUN_KEY.RILA_GLWB_FEE: float(saved_inputs.get("rila_glwb_fee", 0.01)),
         RUN_KEY.RILA_GLWB_ROLLUP: float(saved_inputs.get("rila_glwb_rollup", 0.05)),
         RUN_KEY.RILA_GLWB_INCOME_START: int(saved_inputs.get("rila_glwb_income_start", 121)),
-        RUN_KEY.RILA_GLWB_WITHDRAWAL_RATE: float(saved_inputs.get("rila_glwb_withdrawal_rate", 0.05)),
+        RUN_KEY.RILA_GLWB_WITHDRAWAL_RATE: float(
+            saved_inputs.get("rila_glwb_withdrawal_rate", 0.05)
+        ),
         # MYGA
         RUN_KEY.MYGA_SINGLE_PREMIUM: float(saved_inputs.get("myga_single_premium", 100_000.0)),
         RUN_KEY.MYGA_DECLARED_RATE: float(saved_inputs.get("myga_declared_rate", 0.045)),
@@ -518,7 +524,9 @@ def build_run_form_seed_defaults(
         RUN_KEY.IUL_PARTICIPATION: float(saved_inputs.get("iul_participation", 1.0)),
         RUN_KEY.IUL_CAP: float(saved_inputs.get("iul_cap", 0.10)),
         RUN_KEY.IUL_FLOOR: float(saved_inputs.get("iul_floor", 0.0)),
-        RUN_KEY.IUL_DEATH_BENEFIT_TYPE: str(saved_inputs.get("iul_death_benefit_type", "level_face")),
+        RUN_KEY.IUL_DEATH_BENEFIT_TYPE: str(
+            saved_inputs.get("iul_death_benefit_type", "level_face")
+        ),
         RUN_KEY.IUL_PLANNED_PREMIUM: float(saved_inputs.get("iul_planned_premium", 0.0)),
         RUN_KEY.IUL_PREMIUM_MODE_MONTHS: int(saved_inputs.get("iul_premium_mode_months", 12)),
         RUN_KEY.IUL_PREMIUM_END_MONTH: int(saved_inputs.get("iul_premium_end_month", 240)),
@@ -588,7 +596,7 @@ def default_inforce_scratch_row(
         meta={},
         default_product_type=product_type,
     )
-    row: dict[str, Any] = {c: None for c in PORTFOLIO_INFORCE_SCRATCH_COLUMNS}
+    row: dict[str, Any] = dict.fromkeys(PORTFOLIO_INFORCE_SCRATCH_COLUMNS)
     row["product_type"] = product_type.value
     row["issue_age"] = int(seeds[RUN_KEY.ISSUE_AGE])
     row["sex"] = str(seeds[RUN_KEY.SEX])
@@ -599,9 +607,7 @@ def default_inforce_scratch_row(
     elif product_type == ProductType.TERM_LIFE:
         row["death_benefit"] = float(seeds[RUN_KEY.TERM_BENEFIT_ANNUAL])
         row["monthly_premium"] = float(seeds[RUN_KEY.TERM_MONTHLY_PREMIUM])
-        row["term_years"] = int(
-            parse_term_length_label_to_years(str(seeds[RUN_KEY.TERM_LENGTH]))
-        )
+        row["term_years"] = int(parse_term_length_label_to_years(str(seeds[RUN_KEY.TERM_LENGTH])))
     elif product_type == ProductType.RILA:
         row["participation"] = float(seeds[RUN_KEY.RILA_PARTICIPATION])
         row["cap"] = float(seeds[RUN_KEY.RILA_CAP])
@@ -648,10 +654,8 @@ def default_inforce_scratch_row(
             if v is None or (isinstance(v, float) and str(v) == "nan"):
                 continue
             if k == "issue_age":
-                try:
+                with suppress(TypeError, ValueError):
                     row["issue_age"] = int(v)
-                except (TypeError, ValueError):
-                    pass
             elif k == "sex":
                 s = str(v).strip().lower()
                 if s in ("male", "female"):

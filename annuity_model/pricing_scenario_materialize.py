@@ -65,7 +65,9 @@ def build_yield_curve_from_seeds(
     if y_mode == "flat":
         return sp.YieldCurve.from_flat_rate(float(flat_rate))
     if y_mode == "zero_csv":
-        return sp.YieldCurve.load_zero_curve_csv(str(resolve_repo_path(zero_csv, repo_root=repo_root)))
+        return sp.YieldCurve.load_zero_curve_csv(
+            str(resolve_repo_path(zero_csv, repo_root=repo_root))
+        )
     return sp.YieldCurve.load_par_yield_csv_and_bootstrap(
         str(resolve_repo_path(par_csv, repo_root=repo_root)),
         coupon_freq=int(coupon_freq),
@@ -98,7 +100,9 @@ def build_mortality_from_seeds(
     if mode == "synthetic":
         return minimal_mortality(), False
     if mode == "qx_csv":
-        return sp.MortalityTableQx.load_qx_csv(str(resolve_repo_path(qx_csv, repo_root=repo_root))), False
+        return sp.MortalityTableQx.load_qx_csv(
+            str(resolve_repo_path(qx_csv, repo_root=repo_root))
+        ), False
     if mode == "cso_2017_ult":
         from mortality_2017_cso import MortalityTable2017CSO
 
@@ -228,7 +232,9 @@ def run_scenario_for_portfolio_policies(
         RUN_KEY.MP_OUT,
     ):
         seeds[mk] = ref_base[mk]
-    return run_scenario_from_pricing_seeds(seeds, default_product_type=ref, sex=sex, repo_root=repo_root)
+    return run_scenario_from_pricing_seeds(
+        seeds, default_product_type=ref, sex=sex, repo_root=repo_root
+    )
 
 
 __all__ = [

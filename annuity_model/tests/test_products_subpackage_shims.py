@@ -39,9 +39,6 @@ import build_pricing_excel_workbook as bpw
 import build_rila_excel_workbook as brw
 import build_term_excel_workbook as btw
 import pricing_projection as sp
-import rila_projection as rp
-import term_projection as tp
-
 import products.rila as rila_pkg
 import products.rila.engine as rila_engine
 import products.rila.excel as rila_excel
@@ -57,6 +54,8 @@ import products.term.engine as term_engine
 import products.term.excel as term_excel
 import products.term.schema as term_schema
 import products.term.ui as term_ui
+import rila_projection as rp
+import term_projection as tp
 from product_registry import ProductType, get_product_adapter
 
 pytestmark = [pytest.mark.invariant]
@@ -98,10 +97,7 @@ def test_spia_engine_reexports_legacy_callables() -> None:
         spia_engine.price_spia_single_premium_monte_carlo
         is sp.price_spia_single_premium_monte_carlo
     )
-    assert (
-        spia_engine.liability_path_from_spia_projection
-        is sp.liability_path_from_spia_projection
-    )
+    assert spia_engine.liability_path_from_spia_projection is sp.liability_path_from_spia_projection
 
 
 def test_spia_excel_reexports_legacy_builder() -> None:
@@ -133,18 +129,13 @@ def test_term_schema_reexports_legacy_classes() -> None:
 
 def test_term_engine_reexports_legacy_callables() -> None:
     assert term_engine.price_term_life_level_monthly is tp.price_term_life_level_monthly
-    assert (
-        term_engine.liability_path_from_term_projection
-        is tp.liability_path_from_term_projection
-    )
+    assert term_engine.liability_path_from_term_projection is tp.liability_path_from_term_projection
 
 
 def test_term_excel_reexports_legacy_builder() -> None:
     assert term_excel.TermExcelBuildSpec is btw.TermExcelBuildSpec
     assert term_excel.term_excel_spec_from_launcher is btw.term_excel_spec_from_launcher
-    assert (
-        term_excel.build_term_workbook_from_spec is btw.build_term_workbook_from_spec
-    )
+    assert term_excel.build_term_workbook_from_spec is btw.build_term_workbook_from_spec
 
 
 def test_term_ui_reexports_adapter_and_parsers() -> None:
@@ -160,9 +151,7 @@ def test_term_ui_reexports_adapter_and_parsers() -> None:
 
     assert term_ui.parse_term_length_label_to_years is parse_term_length_label_to_years
     assert term_ui.parse_term_premium_mode_label is parse_term_premium_mode_label
-    assert (
-        term_ui.parse_term_benefit_timing_label is parse_term_benefit_timing_label
-    )
+    assert term_ui.parse_term_benefit_timing_label is parse_term_benefit_timing_label
 
 
 def test_term_package_top_level_reexports_match_subpackage() -> None:
@@ -190,18 +179,13 @@ def test_rila_engine_reexports_legacy_callables() -> None:
         rila_engine.price_rila_single_premium_monte_carlo
         is rp.price_rila_single_premium_monte_carlo
     )
-    assert (
-        rila_engine.liability_path_from_rila_projection
-        is rp.liability_path_from_rila_projection
-    )
+    assert rila_engine.liability_path_from_rila_projection is rp.liability_path_from_rila_projection
 
 
 def test_rila_excel_reexports_legacy_builder() -> None:
     assert rila_excel.RILAExcelBuildSpec is brw.RILAExcelBuildSpec
     assert rila_excel.rila_excel_spec_from_launcher is brw.rila_excel_spec_from_launcher
-    assert (
-        rila_excel.build_rila_workbook_from_spec is brw.build_rila_workbook_from_spec
-    )
+    assert rila_excel.build_rila_workbook_from_spec is brw.build_rila_workbook_from_spec
 
 
 def test_rila_ui_reexports_adapter() -> None:
@@ -241,9 +225,7 @@ def test_every_product_subpackage_exposes_canonical_layout(package) -> None:
 
 @pytest.mark.parametrize("pkg_name", _discover_on_disk_product_packages())
 @pytest.mark.parametrize("submodule", _CANONICAL_SUBMODULES)
-def test_every_product_package_canonical_shims_import(
-    pkg_name: str, submodule: str
-) -> None:
+def test_every_product_package_canonical_shims_import(pkg_name: str, submodule: str) -> None:
     """Every on-disk product package must parse and import all canonical shims.
 
     This is stronger than :func:`test_every_product_subpackage_exposes_canonical_layout`

@@ -6,9 +6,11 @@ Phase 0/1/.../7 of ``docs/seven_product_rollout_plan.md``.
 
 from __future__ import annotations
 
+from build_vul_excel_workbook import VULExcelBuildSpec
+from product_excel import _BUILDER_REGISTRY
 from product_registry import ProductType, product_label
-
 from products import ProductDefinition, register_product
+from products.variable_ul.ui import VARIABLE_UL_ADAPTER, variable_ul_metric_formatter
 from vul_projection import (
     VULContract,
     VULProjectionResult,
@@ -16,11 +18,6 @@ from vul_projection import (
     price_vul_single_premium,
     price_vul_single_premium_monte_carlo,
 )
-from build_vul_excel_workbook import VULExcelBuildSpec
-
-from product_excel import _BUILDER_REGISTRY
-from products.variable_ul.ui import VARIABLE_UL_ADAPTER, variable_ul_metric_formatter
-
 
 DEFINITION = register_product(
     ProductDefinition(
@@ -45,5 +42,6 @@ __all__ = [
     "VARIABLE_UL_ADAPTER",
     "liability_path_from_vul_projection",
     "price_vul_single_premium",
+    "price_vul_single_premium_monte_carlo",
     "variable_ul_metric_formatter",
 ]

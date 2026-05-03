@@ -5,8 +5,8 @@ See :mod:`products.spia` for the pattern; this module is the RILA analog.
 
 from __future__ import annotations
 
+from product_excel import _BUILDER_REGISTRY
 from product_registry import ProductType, product_label
-
 from products import ProductDefinition, register_product
 from products.rila.engine import (
     RILAContract,
@@ -14,8 +14,6 @@ from products.rila.engine import (
     liability_path_from_rila_projection,
     price_rila_single_premium,
 )
-from product_excel import _BUILDER_REGISTRY
-
 from products.rila.excel import RILAExcelBuildSpec, rila_excel_spec_from_launcher
 from products.rila.ui import RILA_ADAPTER, rila_metric_formatter, rila_ui_config
 

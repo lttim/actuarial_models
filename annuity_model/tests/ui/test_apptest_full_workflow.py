@@ -104,6 +104,7 @@ def _navigate_to_section(at: Any, section: str) -> None:
     """
     _find_section_radio(at).set_value(section).run()
 
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 REPO_ROOT = ROOT.parent
 if str(ROOT) not in sys.path:
@@ -357,9 +358,7 @@ def test_alm_section_renders_after_pricing_run(
     )
 
     _navigate_to_section(at, "alm")
-    assert_no_exceptions(
-        at, context=f"render ALM section after {product_label} pricing run"
-    )
+    assert_no_exceptions(at, context=f"render ALM section after {product_label} pricing run")
 
 
 @pytest.mark.ui
@@ -434,9 +433,7 @@ def test_excel_download_workbook_passes_strict_validation(
     assert _session_get(at, "pricing_res") is not None
 
     _navigate_to_section(at, "excel_replicator")
-    assert_no_exceptions(
-        at, context=f"render Excel Replicator for {product_label} download"
-    )
+    assert_no_exceptions(at, context=f"render Excel Replicator for {product_label} download")
 
     build_err = _session_get(at, "pricing_xlsx_built_error")
     assert build_err is None, (

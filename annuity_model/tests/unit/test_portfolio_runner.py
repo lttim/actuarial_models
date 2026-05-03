@@ -8,14 +8,13 @@ import numpy as np
 import pytest
 
 import pricing_projection as sp
+import rila_projection as rp
 import term_projection as tp
 from inforce_io import load_policy_inputs_from_csv
 from portfolio import PolicyInput, Portfolio, RunScenario
 from portfolio_runner import run_portfolio
 from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
 from product_registry import ProductType
-
-import rila_projection as rp
 
 
 def _scenario() -> RunScenario:
@@ -124,7 +123,9 @@ def test_run_portfolio_baseline_alm_matches_direct_liability_path() -> None:
         initial_asset_market_value=aum,
     )
     np.testing.assert_allclose(res.alm_result.surplus, direct.surplus, rtol=0, atol=1e-6)
-    np.testing.assert_allclose(res.alm_result.funding_ratio, direct.funding_ratio, rtol=0, atol=1e-9)
+    np.testing.assert_allclose(
+        res.alm_result.funding_ratio, direct.funding_ratio, rtol=0, atol=1e-9
+    )
 
 
 def test_run_portfolio_two_spias_mixed_types() -> None:
@@ -140,6 +141,9 @@ def test_run_portfolio_two_spias_mixed_types() -> None:
     )
     res = run_portfolio(portfolio=pol, scenario=scen)
     assert len(res.policy_results) == 2
-    assert {pr.product_type for pr in res.policy_results} == {ProductType.SPIA, ProductType.TERM_LIFE}
+    assert {pr.product_type for pr in res.policy_results} == {
+        ProductType.SPIA,
+        ProductType.TERM_LIFE,
+    }
     assert len(res.rollups_by_product_type) == 2
     assert len(res.liability_path_total.expected_total_cashflows) >= 1

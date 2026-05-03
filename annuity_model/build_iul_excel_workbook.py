@@ -99,9 +99,14 @@ def iul_excel_spec_from_launcher(
     **_kw: object,
 ) -> IULExcelBuildSpec:
     return IULExcelBuildSpec(
-        contract=contract, yield_curve=yield_curve, mortality=mortality,
-        horizon_age=int(horizon_age), spread=float(spread), valuation_year=int(valuation_year),
-        expenses=expenses, yield_mode_label=str(yield_mode_label),
+        contract=contract,
+        yield_curve=yield_curve,
+        mortality=mortality,
+        horizon_age=int(horizon_age),
+        spread=float(spread),
+        valuation_year=int(valuation_year),
+        expenses=expenses,
+        yield_mode_label=str(yield_mode_label),
         mortality_mode_label=str(mortality_mode_label),
         expense_mode_label=str(expense_mode_label),
         expense_annual_inflation=float(expense_annual_inflation),
@@ -116,14 +121,18 @@ def build_iul_workbook_from_spec(
     out_path: str | Path | None = None,
 ) -> bytes:
     res = iul.price_iul_single_premium(
-        contract=spec.contract, yield_curve=spec.yield_curve, mortality=spec.mortality,
-        horizon_age=spec.horizon_age, spread=spec.spread,
+        contract=spec.contract,
+        yield_curve=spec.yield_curve,
+        mortality=spec.mortality,
+        horizon_age=spec.horizon_age,
+        spread=spec.spread,
         valuation_year=(
             spec.valuation_year
             if isinstance(spec.mortality, sp.MortalityTableRP2014MP2016)
             else None
         ),
-        expenses=spec.expenses, index_s0=float(spec.index_s0),
+        expenses=spec.expenses,
+        index_s0=float(spec.index_s0),
         index_levels_payment=np.asarray(spec.index_levels_payment, dtype=float),
         expense_annual_inflation=float(spec.expense_annual_inflation),
     )
@@ -177,7 +186,10 @@ def build_iul_workbook_from_spec(
         ("Mortality mode (documentation)", spec.mortality_mode_label),
         ("Expense mode (documentation)", spec.expense_mode_label),
     ]
-    write_inputs_sheet(ws_in, InputsSheetSpec(title="Indexed UL Inputs (matches model launcher / Python)", rows=rows))
+    write_inputs_sheet(
+        ws_in,
+        InputsSheetSpec(title="Indexed UL Inputs (matches model launcher / Python)", rows=rows),
+    )
     nm = (
         f"=MIN(MAX(1,ROUND(({_in_addr('B', _IN_ROW_HORIZON)}"
         f"-{_in_addr('B', _IN_ROW_ISSUE_AGE)})*{_in_addr('B', _IN_ROW_FREQ)},0)),"
@@ -187,10 +199,12 @@ def build_iul_workbook_from_spec(
     ws_in[f"B{_IN_ROW_NMONTHS}"] = nm
     ws_in[f"B{_IN_ROW_NMONTHS}"].number_format = "0"
 
-    ycdf = pd.DataFrame({
-        "maturity_years": np.asarray(spec.yield_curve.maturities_years, dtype=float),
-        "zero_rate": np.asarray(spec.yield_curve.zero_rates, dtype=float),
-    })
+    ycdf = pd.DataFrame(
+        {
+            "maturity_years": np.asarray(spec.yield_curve.maturities_years, dtype=float),
+            "zero_rate": np.asarray(spec.yield_curve.zero_rates, dtype=float),
+        }
+    )
     _, y_last_row = write_yield_curve_sheet(wb, ycdf)
 
     ws_mc_curve = wb.create_sheet(RECALC_MONTHLY_CURVE_SHEET)
@@ -269,53 +283,53 @@ def build_iul_workbook_from_spec(
     ws_pr["C2"] = f"={issue_age_ref}"
 
     hdr = (
-        "Month",          # A
-        "t_years",        # B
-        "AttainedAge",    # C
-        "SurvivalEnd",    # D
+        "Month",  # A
+        "t_years",  # B
+        "AttainedAge",  # C
+        "SurvivalEnd",  # D
         "SurvivalStart",  # E
-        "MonthDeathProb", # F
-        "qx_monthly",     # G
-        "IndexLevel_m",   # H
-        "SegCredit",      # I (Python literal)
-        "AV_end_PY",      # J (Python literal)
-        "DB_PY",          # K (Python literal)
-        "DeathCF",        # L (formula: K * F)
-        "",               # M
-        "",               # N
-        "DiscountFactor", # O
-        "",               # P
-        "ExpBenefitCF",   # Q
-        "ExpExpenseCF",   # R
-        "ExpTotalCF",     # S
-        "PVBenefitCF",    # T
-        "PVExpenseCF",    # U
-        "PVNetOutflow",   # V
-        "",               # W reserved for summary labels
-        "",               # X reserved for summary values
-        "",               # Y
-        "",               # Z
-        "Premium_XL",     # AA
+        "MonthDeathProb",  # F
+        "qx_monthly",  # G
+        "IndexLevel_m",  # H
+        "SegCredit",  # I (Python literal)
+        "AV_end_PY",  # J (Python literal)
+        "DB_PY",  # K (Python literal)
+        "DeathCF",  # L (formula: K * F)
+        "",  # M
+        "",  # N
+        "DiscountFactor",  # O
+        "",  # P
+        "ExpBenefitCF",  # Q
+        "ExpExpenseCF",  # R
+        "ExpTotalCF",  # S
+        "PVBenefitCF",  # T
+        "PVExpenseCF",  # U
+        "PVNetOutflow",  # V
+        "",  # W reserved for summary labels
+        "",  # X reserved for summary values
+        "",  # Y
+        "",  # Z
+        "Premium_XL",  # AA
         "Withdrawal_XL",  # AB
-        "LoanDraw_XL",    # AC
-        "LoanRepay_XL",   # AD
-        "SurrRate_XL",    # AE
-        "RawSegReturn_XL",# AF
-        "SegCredit_XL",   # AG
-        "AVBeforeCharge_XL", # AH
-        "GrossDB_XL",     # AI
-        "NAR_XL",         # AJ
-        "COI_XL",         # AK
-        "AV_end_XL",      # AL
-        "LoanInterest_XL",# AM
-        "LoanBalance_XL", # AN
-        "NetDB_XL",       # AO
+        "LoanDraw_XL",  # AC
+        "LoanRepay_XL",  # AD
+        "SurrRate_XL",  # AE
+        "RawSegReturn_XL",  # AF
+        "SegCredit_XL",  # AG
+        "AVBeforeCharge_XL",  # AH
+        "GrossDB_XL",  # AI
+        "NAR_XL",  # AJ
+        "COI_XL",  # AK
+        "AV_end_XL",  # AL
+        "LoanInterest_XL",  # AM
+        "LoanBalance_XL",  # AN
+        "NetDB_XL",  # AO
         "SurrCharge_XL",  # AP
-        "SurrValue_XL",   # AQ
-        "DeathCF_XL",     # AR
-        "PolicyAccessCF_XL", # AS
-        "ExpBenefitCF_XL",# AT
-        "PVBenefitCF_XL", # AU
+        "SurrValue_XL",  # AQ
+        "DeathCF_XL",  # AR
+        "PolicyAccessCF_XL",  # AS
+        "ExpBenefitCF_XL",  # AT
+        "PVBenefitCF_XL",  # AU
     )
     for c, h in enumerate(hdr, start=1):
         cell = ws_pr.cell(row=3, column=c, value=h if h else None)
@@ -370,7 +384,8 @@ def build_iul_workbook_from_spec(
         ws_pr.cell(row=r, column=6, value=f'=IF({a}="","",MAX(0,MIN(1,E{r}-D{r})))')
         ws_pr.cell(row=r, column=7, value=f'=IF({a}="","",IF(E{r}>0,(E{r}-D{r})/E{r},0))')
         ws_pr.cell(
-            row=r, column=8,
+            row=r,
+            column=8,
             value=f'=IF({a}="","",IFERROR(INDEX({SHEET_INDEX}!$B$2:$B$10000,MATCH({a},{SHEET_INDEX}!$A$2:$A$10000,0)),""))',
         )
         ws_pr.cell(row=r, column=9, value=float(seg_py))
@@ -378,11 +393,16 @@ def build_iul_workbook_from_spec(
         ws_pr.cell(row=r, column=11, value=float(db_py))
         ws_pr.cell(row=r, column=12, value=f'=IF({a}="",0,K{r}*F{r})')
         ws_pr.cell(
-            row=r, column=15,
+            row=r,
+            column=15,
             value=f'=IF({a}="","",IFERROR(INDEX({mc_ref},MATCH({a},{RECALC_MONTHLY_CURVE_SHEET}!$A:$A,0)),""))',
         )
         ws_pr.cell(row=r, column=17, value=f'=IF({a}="",0,L{r})')
-        ws_pr.cell(row=r, column=18, value=f'=IF({a}="",0,{exp_m_ref}*POWER(1+(POWER(1+{exp_inf_ref},1/12)-1),{a}-1)*E{r})')
+        ws_pr.cell(
+            row=r,
+            column=18,
+            value=f'=IF({a}="",0,{exp_m_ref}*POWER(1+(POWER(1+{exp_inf_ref},1/12)-1),{a}-1)*E{r})',
+        )
         ws_pr.cell(row=r, column=19, value=f'=IF({a}="",0,Q{r}+R{r})')
         ws_pr.cell(row=r, column=20, value=f'=IF({a}="",0,Q{r}*O{r})')
         ws_pr.cell(row=r, column=21, value=f'=IF({a}="",0,R{r}*O{r})')
@@ -394,7 +414,7 @@ def build_iul_workbook_from_spec(
             column=27,
             value=(
                 f'=IF({a}="",0,IF({a}=1,{sp_ref},0)'
-                f'+IFERROR(INDEX({sched_prem_col},MATCH({a},{sched_month_col},0)),0))'
+                f"+IFERROR(INDEX({sched_prem_col},MATCH({a},{sched_month_col},0)),0))"
             ),
         )
         ws_pr.cell(
@@ -422,9 +442,9 @@ def build_iul_workbook_from_spec(
             column=32,
             value=(
                 f'=IF({a}="","",IF(AND({a}>={int(spec.contract.segment_months)},'
-                f'MOD({a},{int(spec.contract.segment_months)})=0),'
-                f'IFERROR(INDEX({SHEET_INDEX}!$B$2:$B$10000,MATCH({a},{SHEET_INDEX}!$A$2:$A$10000,0))'
-                f'/INDEX({SHEET_INDEX}!$B$2:$B$10000,MATCH({a}-{int(spec.contract.segment_months)},{SHEET_INDEX}!$A$2:$A$10000,0))-1,0),0))'
+                f"MOD({a},{int(spec.contract.segment_months)})=0),"
+                f"IFERROR(INDEX({SHEET_INDEX}!$B$2:$B$10000,MATCH({a},{SHEET_INDEX}!$A$2:$A$10000,0))"
+                f"/INDEX({SHEET_INDEX}!$B$2:$B$10000,MATCH({a}-{int(spec.contract.segment_months)},{SHEET_INDEX}!$A$2:$A$10000,0))-1,0),0))"
             ),
         )
         ws_pr.cell(
@@ -432,11 +452,15 @@ def build_iul_workbook_from_spec(
             column=33,
             value=(
                 f'=IF({a}="","",IF(AND({a}>={int(spec.contract.segment_months)},'
-                f'MOD({a},{int(spec.contract.segment_months)})=0),'
-                f'MAX({floor_ref},MIN({cap_ref},{part_ref}*AF{r})),0))'
+                f"MOD({a},{int(spec.contract.segment_months)})=0),"
+                f"MAX({floor_ref},MIN({cap_ref},{part_ref}*AF{r})),0))"
             ),
         )
-        ws_pr.cell(row=r, column=34, value=f'=IF({a}="",0,MAX(0,({prev_av}+AA{r}*(1-{load_ref}))*(1+AG{r})))')
+        ws_pr.cell(
+            row=r,
+            column=34,
+            value=f'=IF({a}="",0,MAX(0,({prev_av}+AA{r}*(1-{load_ref}))*(1+AG{r})))',
+        )
         ws_pr.cell(
             row=r,
             column=35,
@@ -444,7 +468,11 @@ def build_iul_workbook_from_spec(
         )
         ws_pr.cell(row=r, column=36, value=f'=IF({a}="",0,MAX(0,AI{r}-AH{r}))')
         ws_pr.cell(row=r, column=37, value=f'=IF({a}="",0,G{r}*AJ{r})')
-        ws_pr.cell(row=r, column=38, value=f'=IF({a}="",0,MAX(0,AH{r}-AK{r}-{_in_addr("B", _IN_ROW_EXP_CHG)}-AB{r}))')
+        ws_pr.cell(
+            row=r,
+            column=38,
+            value=f'=IF({a}="",0,MAX(0,AH{r}-AK{r}-{_in_addr("B", _IN_ROW_EXP_CHG)}-AB{r}))',
+        )
         ws_pr.cell(row=r, column=39, value=f'=IF({a}="",0,{prev_loan}*{loan_rate_ref})')
         ws_pr.cell(
             row=r,
@@ -459,7 +487,9 @@ def build_iul_workbook_from_spec(
         ws_pr.cell(row=r, column=46, value=f'=IF({a}="",0,AR{r}+AS{r})')
         ws_pr.cell(row=r, column=47, value=f'=IF({a}="",0,AT{r}*O{r})')
 
-    money_cols = tuple(range(8, 13)) + tuple(range(17, 23)) + tuple(range(27, 31)) + tuple(range(34, 48))
+    money_cols = (
+        tuple(range(8, 13)) + tuple(range(17, 23)) + tuple(range(27, 31)) + tuple(range(34, 48))
+    )
     for r in range(first, last_cap_row + 1):
         for c in money_cols:
             ws_pr.cell(row=r, column=c).number_format = "#,##0.00"
@@ -472,8 +502,11 @@ def build_iul_workbook_from_spec(
             rows=(
                 (4, "PV benefits (formula mechanics)", f"=SUM(AU{first}:AU{last_cap_row})"),
                 (5, "PV expenses", f"=SUM(U{first}:U{last_cap_row})"),
-                (6, "Σ l_end · v (annuity-style factor)",
-                 f"=SUMPRODUCT(D{first}:D{last_cap_row},O{first}:O{last_cap_row})"),
+                (
+                    6,
+                    "Σ l_end · v (annuity-style factor)",
+                    f"=SUMPRODUCT(D{first}:D{last_cap_row},O{first}:O{last_cap_row})",
+                ),
                 (7, "PV total (claims + expenses)", "=X4+X5"),
                 (8, "Single premium (input)", f"={sp_ref}"),
                 (9, "Reserve at t=0", "=X7"),
@@ -485,18 +518,30 @@ def build_iul_workbook_from_spec(
     pv_e = float(np.sum(res.expected_expense_cashflows * res.discount_factors))
     pv_t = float(np.sum(res.expected_total_cashflows * res.discount_factors))
     snap_py = ExcelPythonSnapshot(
-        pv_benefit=pv_b, pv_monthly_expenses=pv_e, pv_monthly_total=pv_t,
-        single_premium=float(res.single_premium), annuity_factor=float(res.annuity_factor),
+        pv_benefit=pv_b,
+        pv_monthly_expenses=pv_e,
+        pv_monthly_total=pv_t,
+        single_premium=float(res.single_premium),
+        annuity_factor=float(res.annuity_factor),
     )
     iul_rows = [
         ("PV claims", pv_b, f"={LIABILITY_SHEET_NAME}!X4", "money"),
         ("PV expenses", pv_e, f"={LIABILITY_SHEET_NAME}!X5", "money"),
         ("PV total (claims + expenses)", pv_t, f"={LIABILITY_SHEET_NAME}!X7", "money"),
-        ("Single premium (input)", float(res.single_premium), f"={LIABILITY_SHEET_NAME}!X8", "money"),
+        (
+            "Single premium (input)",
+            float(res.single_premium),
+            f"={LIABILITY_SHEET_NAME}!X8",
+            "money",
+        ),
         ("Annuity factor", float(res.annuity_factor), f"={LIABILITY_SHEET_NAME}!X6", "factor"),
     ]
     write_model_check_sheet(
-        wb, snap_py, alm_layout=None, alm_snapshot=None, pricing_rows=iul_rows,
+        wb,
+        snap_py,
+        alm_layout=None,
+        alm_snapshot=None,
+        pricing_rows=iul_rows,
         sheet_title=f"Python snapshot vs Excel ({LIABILITY_SHEET_NAME})",
         subtitle=(
             "IUL: annual point-to-point crediting with editable planned premium, withdrawal, "

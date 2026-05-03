@@ -6,8 +6,8 @@ from typing import Any
 
 from pricing_run_form_state import RUN_KEY
 from product_registry import (
-    ProductType,
     _PRICING_METRIC_FORMATTERS,
+    ProductType,
     get_product_adapter,
     get_product_ui_config,
 )
@@ -17,7 +17,9 @@ indexed_ul_metric_formatter = _PRICING_METRIC_FORMATTERS[ProductType.INDEXED_UL]
 indexed_ul_ui_config = get_product_ui_config(ProductType.INDEXED_UL)
 
 
-def _monthly_amount_schedule(*, amount: float, start_month: int, end_month: int) -> tuple[float, ...]:
+def _monthly_amount_schedule(
+    *, amount: float, start_month: int, end_month: int
+) -> tuple[float, ...]:
     if amount <= 0.0 or end_month < start_month:
         return ()
     out = [0.0] * int(end_month)
@@ -38,47 +40,175 @@ def render_indexed_ul_pricing_controls(st_mod: Any, run_number_input_fn: Any) ->
     with core:
         i1, i2, i3, i4 = st_mod.columns(4)
         with i1:
-            run_number_input_fn("Face amount ($)", RUN_KEY.IUL_FACE_AMOUNT, default=250_000.0, min_value=1.0, step=10_000.0)
-            st_mod.selectbox("Smoker class", options=["nonsmoker", "smoker"], key=RUN_KEY.IUL_SMOKER_CLASS)
+            run_number_input_fn(
+                "Face amount ($)",
+                RUN_KEY.IUL_FACE_AMOUNT,
+                default=250_000.0,
+                min_value=1.0,
+                step=10_000.0,
+            )
+            st_mod.selectbox(
+                "Smoker class", options=["nonsmoker", "smoker"], key=RUN_KEY.IUL_SMOKER_CLASS
+            )
         with i2:
-            run_number_input_fn("Single premium ($)", RUN_KEY.IUL_SINGLE_PREMIUM, default=25_000.0, min_value=1.0, step=1_000.0)
-            run_number_input_fn("Premium load", RUN_KEY.IUL_PREMIUM_LOAD, default=0.06, min_value=0.0, max_value=0.5, format="%.4f")
+            run_number_input_fn(
+                "Single premium ($)",
+                RUN_KEY.IUL_SINGLE_PREMIUM,
+                default=25_000.0,
+                min_value=1.0,
+                step=1_000.0,
+            )
+            run_number_input_fn(
+                "Premium load",
+                RUN_KEY.IUL_PREMIUM_LOAD,
+                default=0.06,
+                min_value=0.0,
+                max_value=0.5,
+                format="%.4f",
+            )
         with i3:
-            run_number_input_fn("Monthly expense", RUN_KEY.IUL_MONTHLY_EXPENSE, default=7.50, min_value=0.0, step=0.50)
-            run_number_input_fn("Participation", RUN_KEY.IUL_PARTICIPATION, default=1.0, min_value=0.0, max_value=5.0, format="%.4f")
+            run_number_input_fn(
+                "Monthly expense",
+                RUN_KEY.IUL_MONTHLY_EXPENSE,
+                default=7.50,
+                min_value=0.0,
+                step=0.50,
+            )
+            run_number_input_fn(
+                "Participation",
+                RUN_KEY.IUL_PARTICIPATION,
+                default=1.0,
+                min_value=0.0,
+                max_value=5.0,
+                format="%.4f",
+            )
         with i4:
-            run_number_input_fn("Annual cap", RUN_KEY.IUL_CAP, default=0.10, min_value=-1.0, max_value=2.0, format="%.4f")
-            run_number_input_fn("Annual floor", RUN_KEY.IUL_FLOOR, default=0.0, min_value=-1.0, max_value=1.0, format="%.4f")
+            run_number_input_fn(
+                "Annual cap",
+                RUN_KEY.IUL_CAP,
+                default=0.10,
+                min_value=-1.0,
+                max_value=2.0,
+                format="%.4f",
+            )
+            run_number_input_fn(
+                "Annual floor",
+                RUN_KEY.IUL_FLOOR,
+                default=0.0,
+                min_value=-1.0,
+                max_value=1.0,
+                format="%.4f",
+            )
         p1, p2, p3, p4 = st_mod.columns(4)
         with p1:
-            st_mod.selectbox("Death benefit", options=["level_face", "return_of_av"], key=RUN_KEY.IUL_DEATH_BENEFIT_TYPE)
+            st_mod.selectbox(
+                "Death benefit",
+                options=["level_face", "return_of_av"],
+                key=RUN_KEY.IUL_DEATH_BENEFIT_TYPE,
+            )
         with p2:
-            run_number_input_fn("Planned premium", RUN_KEY.IUL_PLANNED_PREMIUM, default=0.0, min_value=0.0, step=100.0)
+            run_number_input_fn(
+                "Planned premium",
+                RUN_KEY.IUL_PLANNED_PREMIUM,
+                default=0.0,
+                min_value=0.0,
+                step=100.0,
+            )
         with p3:
-            run_number_input_fn("Premium mode months", RUN_KEY.IUL_PREMIUM_MODE_MONTHS, default=12, min_value=1, max_value=12, step=1)
+            run_number_input_fn(
+                "Premium mode months",
+                RUN_KEY.IUL_PREMIUM_MODE_MONTHS,
+                default=12,
+                min_value=1,
+                max_value=12,
+                step=1,
+            )
         with p4:
-            run_number_input_fn("Premium end month", RUN_KEY.IUL_PREMIUM_END_MONTH, default=240, min_value=1, max_value=1200, step=1)
+            run_number_input_fn(
+                "Premium end month",
+                RUN_KEY.IUL_PREMIUM_END_MONTH,
+                default=240,
+                min_value=1,
+                max_value=1200,
+                step=1,
+            )
     with access:
         a1, a2, a3, a4 = st_mod.columns(4)
         with a1:
-            run_number_input_fn("Monthly withdrawal", RUN_KEY.IUL_WITHDRAWAL_AMOUNT, default=0.0, min_value=0.0, step=100.0)
+            run_number_input_fn(
+                "Monthly withdrawal",
+                RUN_KEY.IUL_WITHDRAWAL_AMOUNT,
+                default=0.0,
+                min_value=0.0,
+                step=100.0,
+            )
         with a2:
-            run_number_input_fn("Start month", RUN_KEY.IUL_WITHDRAWAL_START, default=121, min_value=1, max_value=1200, step=1)
+            run_number_input_fn(
+                "Start month",
+                RUN_KEY.IUL_WITHDRAWAL_START,
+                default=121,
+                min_value=1,
+                max_value=1200,
+                step=1,
+            )
         with a3:
-            run_number_input_fn("End month", RUN_KEY.IUL_WITHDRAWAL_END, default=240, min_value=1, max_value=1200, step=1)
+            run_number_input_fn(
+                "End month",
+                RUN_KEY.IUL_WITHDRAWAL_END,
+                default=240,
+                min_value=1,
+                max_value=1200,
+                step=1,
+            )
         with a4:
-            run_number_input_fn("Surrender charge year 1", RUN_KEY.IUL_SURRENDER_CHARGE_Y1, default=0.07, min_value=0.0, max_value=1.0, format="%.4f")
-        run_number_input_fn("Surrender charge years", RUN_KEY.IUL_SURRENDER_CHARGE_YEARS, default=7, min_value=0, max_value=20, step=1)
+            run_number_input_fn(
+                "Surrender charge year 1",
+                RUN_KEY.IUL_SURRENDER_CHARGE_Y1,
+                default=0.07,
+                min_value=0.0,
+                max_value=1.0,
+                format="%.4f",
+            )
+        run_number_input_fn(
+            "Surrender charge years",
+            RUN_KEY.IUL_SURRENDER_CHARGE_YEARS,
+            default=7,
+            min_value=0,
+            max_value=20,
+            step=1,
+        )
     with loan:
         l1, l2, l3, l4 = st_mod.columns(4)
         with l1:
-            run_number_input_fn("Loan annual rate", RUN_KEY.IUL_LOAN_RATE, default=0.05, min_value=0.0, max_value=1.0, format="%.4f")
+            run_number_input_fn(
+                "Loan annual rate",
+                RUN_KEY.IUL_LOAN_RATE,
+                default=0.05,
+                min_value=0.0,
+                max_value=1.0,
+                format="%.4f",
+            )
         with l2:
-            run_number_input_fn("Monthly loan draw", RUN_KEY.IUL_LOAN_DRAW, default=0.0, min_value=0.0, step=100.0)
+            run_number_input_fn(
+                "Monthly loan draw", RUN_KEY.IUL_LOAN_DRAW, default=0.0, min_value=0.0, step=100.0
+            )
         with l3:
-            run_number_input_fn("Loan draw start", RUN_KEY.IUL_LOAN_DRAW_START, default=121, min_value=1, max_value=1200, step=1)
+            run_number_input_fn(
+                "Loan draw start",
+                RUN_KEY.IUL_LOAN_DRAW_START,
+                default=121,
+                min_value=1,
+                max_value=1200,
+                step=1,
+            )
         with l4:
-            run_number_input_fn("Monthly loan repayment", RUN_KEY.IUL_LOAN_REPAY, default=0.0, min_value=0.0, step=100.0)
+            run_number_input_fn(
+                "Monthly loan repayment",
+                RUN_KEY.IUL_LOAN_REPAY,
+                default=0.0,
+                min_value=0.0,
+                step=100.0,
+            )
 
 
 def build_indexed_ul_contract_from_session(
@@ -88,14 +218,19 @@ def build_indexed_ul_contract_from_session(
     sex: str,
 ):
     import iul_projection as iul_proj
-    from policy_features import LevelPremiumSchedule, LoanTerms, MonthlySchedule, SurrenderChargeSchedule
+    from policy_features import (
+        LevelPremiumSchedule,
+        LoanTerms,
+        MonthlySchedule,
+        SurrenderChargeSchedule,
+    )
 
     loan_draw_start = int(session_state.get(RUN_KEY.IUL_LOAN_DRAW_START, 121))
     loan_draw_end = int(session_state.get(RUN_KEY.IUL_LOAN_DRAW_END, loan_draw_start + 119))
     return iul_proj.IULContract(
         issue_age=int(issue_age),
         sex="male" if sex == "male" else "female",
-        smoker_class=str(session_state.get(RUN_KEY.IUL_SMOKER_CLASS, "nonsmoker")),  # type: ignore[arg-type]
+        smoker_class=str(session_state.get(RUN_KEY.IUL_SMOKER_CLASS, "nonsmoker")),
         face_amount=float(session_state.get(RUN_KEY.IUL_FACE_AMOUNT, 250_000.0)),
         single_premium=float(session_state.get(RUN_KEY.IUL_SINGLE_PREMIUM, 25_000.0)),
         premium_load_pct=float(session_state.get(RUN_KEY.IUL_PREMIUM_LOAD, 0.06)),
@@ -125,8 +260,12 @@ def build_indexed_ul_contract_from_session(
             repayments=MonthlySchedule(
                 _monthly_amount_schedule(
                     amount=float(session_state.get(RUN_KEY.IUL_LOAN_REPAY, 0.0)),
-                    start_month=int(session_state.get(RUN_KEY.IUL_LOAN_REPAY_START, loan_draw_end + 1)),
-                    end_month=int(session_state.get(RUN_KEY.IUL_LOAN_REPAY_END, loan_draw_end + 120)),
+                    start_month=int(
+                        session_state.get(RUN_KEY.IUL_LOAN_REPAY_START, loan_draw_end + 1)
+                    ),
+                    end_month=int(
+                        session_state.get(RUN_KEY.IUL_LOAN_REPAY_END, loan_draw_end + 120)
+                    ),
                 )
             ),
         ),
@@ -139,7 +278,7 @@ def build_indexed_ul_contract_from_session(
         participation=float(session_state.get(RUN_KEY.IUL_PARTICIPATION, 1.0)),
         cap=float(session_state.get(RUN_KEY.IUL_CAP, 0.10)),
         floor=float(session_state.get(RUN_KEY.IUL_FLOOR, 0.0)),
-        db_type=str(session_state.get(RUN_KEY.IUL_DEATH_BENEFIT_TYPE, "level_face")),  # type: ignore[arg-type]
+        db_type=str(session_state.get(RUN_KEY.IUL_DEATH_BENEFIT_TYPE, "level_face")),
     )
 
 

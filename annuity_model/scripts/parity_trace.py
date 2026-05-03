@@ -148,9 +148,7 @@ def _excel_states_via_libreoffice(
         expense_annual_inflation=0.0,
     )
     alm_snap = alm_excel_snapshot_from_result(py_alm, alm)
-    blob = build_workbook_from_spec(
-        spec, alm_snapshot=alm_snap, alm_assumptions=alm
-    )
+    blob = build_workbook_from_spec(spec, alm_snapshot=alm_snap, alm_assumptions=alm)
 
     recalculated = recalc_workbook(blob, timeout=180.0)
     addrs: list[str] = []
@@ -255,7 +253,7 @@ def _trace(horizon_months: int) -> list[dict[str, object]]:
             # Sentinel NaN -- callers see this in the diff_* columns and know
             # the Excel side did not contribute. Critically we DO NOT mirror
             # py_state, so a green trace cannot accidentally hide drift.
-            xl_state = {k: nan for k in py_state}
+            xl_state = dict.fromkeys(py_state, nan)
         rows.append(_row_for_month(m + 1, py_state, xl_state))
     return rows
 

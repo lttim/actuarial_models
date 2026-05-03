@@ -68,6 +68,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"pricing_run_form_state.py" = ["N801"]
 "tests/**/*.py" = ["B", "N802", "N803", "N806", "C408"]
 "scripts/**/*.py" = ["B"]
 "illustrate_pricing_projection.py" = ["B"]

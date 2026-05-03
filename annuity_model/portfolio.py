@@ -82,9 +82,9 @@ def compute_scalar_rollups_for_type(results: Sequence[PolicyResult]) -> ProductT
     for pr in results:
         p = pr.pricing
         if hasattr(p, "single_premium"):
-            premiums.append(float(getattr(p, "single_premium")))
+            premiums.append(float(p.single_premium))
         if hasattr(p, "expected_total_cashflows"):
-            cf_sums.append(float(np.sum(np.asarray(getattr(p, "expected_total_cashflows"), dtype=float))))
+            cf_sums.append(float(np.sum(np.asarray(p.expected_total_cashflows, dtype=float))))
     return ProductTypeRollupScalars(
         policy_count=n,
         sum_single_premium=float(sum(premiums)) if len(premiums) == n else None,

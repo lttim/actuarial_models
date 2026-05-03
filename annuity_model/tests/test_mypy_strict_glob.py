@@ -22,7 +22,6 @@ Fix: re-widen the glob in ``pyproject.toml``, do NOT skip this test.
 from __future__ import annotations
 
 import fnmatch
-import sys
 import tomllib
 from pathlib import Path
 
@@ -87,8 +86,6 @@ def _matches_any(name: str, patterns: list[str]) -> bool:
 
 @pytest.fixture(scope="module")
 def strict_patterns() -> list[str]:
-    if sys.version_info < (3, 11):
-        pytest.skip("tomllib requires Python 3.11+")
     return _load_strict_module_patterns()
 
 
@@ -130,9 +127,7 @@ def test_product_directory_is_nonempty() -> None:
 
 
 @pytest.mark.parametrize("submodule", PRODUCT_SUBMODULES)
-def test_per_product_glob_covers_all_products(
-    strict_patterns: list[str], submodule: str
-) -> None:
+def test_per_product_glob_covers_all_products(strict_patterns: list[str], submodule: str) -> None:
     """Every products/<name>/<submodule>.py must be matched by the glob."""
     discovered = _discover_product_subpackages()
     missing: list[str] = []

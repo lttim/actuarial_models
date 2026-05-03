@@ -11,28 +11,43 @@ import account_value as av
 def test_avconfig_validates_inputs():
     with pytest.raises(ValueError, match="initial_premium"):
         av.AVConfig(
-            initial_premium=-1.0, premium_load_pct=0.0, monthly_expense_charge=0.0,
-            db_type="level_face", face_amount=100.0,
+            initial_premium=-1.0,
+            premium_load_pct=0.0,
+            monthly_expense_charge=0.0,
+            db_type="level_face",
+            face_amount=100.0,
         )
     with pytest.raises(ValueError, match="premium_load_pct"):
         av.AVConfig(
-            initial_premium=100.0, premium_load_pct=1.0, monthly_expense_charge=0.0,
-            db_type="level_face", face_amount=100.0,
+            initial_premium=100.0,
+            premium_load_pct=1.0,
+            monthly_expense_charge=0.0,
+            db_type="level_face",
+            face_amount=100.0,
         )
     with pytest.raises(ValueError, match="monthly_expense_charge"):
         av.AVConfig(
-            initial_premium=100.0, premium_load_pct=0.0, monthly_expense_charge=-1.0,
-            db_type="level_face", face_amount=100.0,
+            initial_premium=100.0,
+            premium_load_pct=0.0,
+            monthly_expense_charge=-1.0,
+            db_type="level_face",
+            face_amount=100.0,
         )
     with pytest.raises(ValueError, match="db_type"):
         av.AVConfig(
-            initial_premium=100.0, premium_load_pct=0.0, monthly_expense_charge=0.0,
-            db_type="invalid", face_amount=100.0,  # type: ignore[arg-type]
+            initial_premium=100.0,
+            premium_load_pct=0.0,
+            monthly_expense_charge=0.0,
+            db_type="invalid",
+            face_amount=100.0,  # type: ignore[arg-type]
         )
     with pytest.raises(ValueError, match="face_amount"):
         av.AVConfig(
-            initial_premium=100.0, premium_load_pct=0.0, monthly_expense_charge=0.0,
-            db_type="level_face", face_amount=0.0,
+            initial_premium=100.0,
+            premium_load_pct=0.0,
+            monthly_expense_charge=0.0,
+            db_type="level_face",
+            face_amount=0.0,
         )
 
 
@@ -69,8 +84,10 @@ def test_evolve_av_premium_load_applied_once_at_month_zero():
     )
     n = 6
     e = av.evolve_account_value(
-        config=cfg, n_months=n,
-        monthly_credit_rate=np.zeros(n), monthly_coi_q=np.zeros(n),
+        config=cfg,
+        n_months=n,
+        monthly_credit_rate=np.zeros(n),
+        monthly_coi_q=np.zeros(n),
     )
     # With NAR > 0 but qx=0, COI is 0 so AV stays constant after the load.
     expected_av = 100.0 * 0.80
@@ -87,8 +104,10 @@ def test_evolve_av_coi_reduces_av_by_qx_times_nar():
     )
     qx = np.full(1, 0.001)
     e = av.evolve_account_value(
-        config=cfg, n_months=1,
-        monthly_credit_rate=np.zeros(1), monthly_coi_q=qx,
+        config=cfg,
+        n_months=1,
+        monthly_credit_rate=np.zeros(1),
+        monthly_coi_q=qx,
     )
     expected_nar = 100_000.0 - 10_000.0
     expected_coi = 0.001 * expected_nar
@@ -108,8 +127,10 @@ def test_evolve_av_terminates_when_av_runs_out():
     )
     n = 6
     e = av.evolve_account_value(
-        config=cfg, n_months=n,
-        monthly_credit_rate=np.zeros(n), monthly_coi_q=np.zeros(n),
+        config=cfg,
+        n_months=n,
+        monthly_credit_rate=np.zeros(n),
+        monthly_coi_q=np.zeros(n),
     )
     # Month 1: 100 - 50 = 50; Month 2: 50 - 50 = 0 -> terminate.
     assert e.account_value_end_month[0] == pytest.approx(50.0)
@@ -134,37 +155,51 @@ def test_evolve_av_av_never_negative():
     qx = rng.uniform(0.0, 0.05, size=n)
     cred = rng.uniform(-0.05, 0.05, size=n)
     e = av.evolve_account_value(
-        config=cfg, n_months=n,
-        monthly_credit_rate=cred, monthly_coi_q=qx,
+        config=cfg,
+        n_months=n,
+        monthly_credit_rate=cred,
+        monthly_coi_q=qx,
     )
     assert np.all(e.account_value_end_month >= 0.0)
 
 
 def test_evolve_av_validates_array_shapes():
     cfg = av.AVConfig(
-        initial_premium=1_000.0, premium_load_pct=0.0, monthly_expense_charge=0.0,
-        db_type="level_face", face_amount=10_000.0,
+        initial_premium=1_000.0,
+        premium_load_pct=0.0,
+        monthly_expense_charge=0.0,
+        db_type="level_face",
+        face_amount=10_000.0,
     )
     with pytest.raises(ValueError, match="monthly_credit_rate shape"):
         av.evolve_account_value(
-            config=cfg, n_months=12,
-            monthly_credit_rate=np.zeros(11), monthly_coi_q=np.zeros(12),
+            config=cfg,
+            n_months=12,
+            monthly_credit_rate=np.zeros(11),
+            monthly_coi_q=np.zeros(12),
         )
     with pytest.raises(ValueError, match="monthly_coi_q shape"):
         av.evolve_account_value(
-            config=cfg, n_months=12,
-            monthly_credit_rate=np.zeros(12), monthly_coi_q=np.zeros(13),
+            config=cfg,
+            n_months=12,
+            monthly_credit_rate=np.zeros(12),
+            monthly_coi_q=np.zeros(13),
         )
 
 
 def test_evolve_av_zero_months_returns_empty_arrays():
     cfg = av.AVConfig(
-        initial_premium=1_000.0, premium_load_pct=0.0, monthly_expense_charge=0.0,
-        db_type="level_face", face_amount=10_000.0,
+        initial_premium=1_000.0,
+        premium_load_pct=0.0,
+        monthly_expense_charge=0.0,
+        db_type="level_face",
+        face_amount=10_000.0,
     )
     e = av.evolve_account_value(
-        config=cfg, n_months=0,
-        monthly_credit_rate=np.zeros(0), monthly_coi_q=np.zeros(0),
+        config=cfg,
+        n_months=0,
+        monthly_credit_rate=np.zeros(0),
+        monthly_coi_q=np.zeros(0),
     )
     assert e.account_value_end_month.shape == (0,)
     assert e.coi_dollars.shape == (0,)

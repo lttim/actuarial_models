@@ -106,8 +106,7 @@ def _measure_actual(coverage_cmd: list[str]) -> float:
         return float(raw)
     except ValueError:
         print(
-            f"[ratchet] could not parse coverage output as float: {raw!r}; "
-            f"stderr:\n{proc.stderr}",
+            f"[ratchet] could not parse coverage output as float: {raw!r}; stderr:\n{proc.stderr}",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -122,9 +121,7 @@ def _rewrite_floor(new_floor: float) -> None:
     """
     text = PYPROJECT_PATH.read_text()
     new_line = f"fail_under = {new_floor:.1f}"
-    matches = [
-        line for line in text.splitlines() if line.startswith("fail_under")
-    ]
+    matches = [line for line in text.splitlines() if line.startswith("fail_under")]
     if len(matches) != 1:
         print(
             f"[ratchet] expected exactly one `fail_under = ...` line in "
