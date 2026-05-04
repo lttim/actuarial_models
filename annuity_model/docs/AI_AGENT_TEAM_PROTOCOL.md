@@ -122,6 +122,18 @@ The packet records:
 The orchestrator cannot claim completion for a multi-agent task until the
 packet is updated with final gates and unresolved risks.
 
+This evidence contract is enforced automatically:
+
+- local pre-commit runs `scripts/check_team_run_packet_evidence.py --staged`
+  for broad or high-risk staged changes and validates the completed
+  `.agent-team-runs/` packet;
+- PR CI runs the same checker against the PR diff and requires the PR body to
+  include a `Team Run Packet Evidence` excerpt, because local packet files are
+  intentionally gitignored.
+- gate deferrals must be explicit JSON evidence under `deferred_gate_results`
+  with `gate_id`, `reason`, and `next_validation`; missing gate evidence without
+  a documented deferral fails the checker.
+
 ## Completion Protocol
 
 Before completion:
@@ -132,7 +144,9 @@ Before completion:
    or tolerance-facing changes.
 3. Ensure every write-capable role’s work is integrated by the orchestrator.
 4. Record gate exit codes, review findings, and residual risk in the packet.
-5. Attach or summarize packet evidence in the final response or PR.
+5. Attach or summarize packet evidence in the final response or PR using these
+   headings: `Team Run Packet Evidence`, `Selected Roles`, `Validation Gates`,
+   `Review Findings`, `Unresolved Risks`, and `Final Signoff`.
 
 The four canonical gates in `annuity_model/AGENTS.md` remain mandatory where
 applicable. This protocol adds automatic staffing and evidence capture; it does

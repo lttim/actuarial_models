@@ -52,6 +52,13 @@ jobs:
           python annuity_model/scripts/check_test_update_required.py \
             "${{ github.event.pull_request.base.sha }}" \
             "${{ github.event.pull_request.head.sha }}"
+      - name: Enforce Team Run Packet evidence
+        if: github.event_name == 'pull_request'
+        run: |
+          python annuity_model/scripts/check_team_run_packet_evidence.py \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}" \
+            --github-event-path "$GITHUB_EVENT_PATH"
 
   test:
     name: tests (${{ matrix.os }} / py${{ matrix.python-version }})

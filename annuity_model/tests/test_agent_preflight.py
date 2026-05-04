@@ -10,6 +10,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import agent_preflight  # noqa: E402
 import agent_team_router as router  # noqa: E402
+import check_team_run_packet_evidence as packet_evidence  # noqa: E402
 
 
 def test_packet_markdown_contains_roles_gates_and_changed_files() -> None:
@@ -141,3 +142,205 @@ def test_main_json_dry_run_does_not_write_packet(
     payload = json.loads(capsys.readouterr().out)
     assert payload["plan"]["surfaces"] == ["docs_governance"]
     assert payload["gate_results"] == []
+
+
+def test_changed_files_are_normalized_from_annuity_cwd(monkeypatch) -> None:
+    args = type(
+        "Args",
+        (),
+        {
+            "changed_files": ["docs/AI_AGENT_PREFLIGHT.md", "../DOCUMENTATION_MAP.md"],
+            "base": None,
+            "head": None,
+            "staged": False,
+        },
+    )()
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+
+    changed = agent_preflight.resolve_changed_files(args)
+
+    assert changed == (
+        "DOCUMENTATION_MAP.md",
+        "annuity_model/docs/AI_AGENT_PREFLIGHT.md",
+    )
+
+
+def test_team_run_packet_evidence_not_required_for_low_risk_diff() -> None:
+    plan, errors = packet_evidence.evaluate_evidence(
+        ("annuity_model/tests/test_agent_preflight.py",)
+    )
+
+    assert plan.multi_agent_required is False
+    assert errors == []
+
+
+def test_team_run_packet_evidence_requires_local_packet_for_broad_diff(tmp_path: Path) -> None:
+    plan, errors = packet_evidence.evaluate_evidence(
+        (
+            "annuity_model/pricing_ui.py",
+            "annuity_model/ui/MIGRATION.md",
+            "annuity_model/tests/ui/test_apptest_full_workflow.py",
+            "annuity_model/scripts/agent_preflight.py",
+            "annuity_model/scripts/check_team_run_packet_evidence.py",
+            "annuity_model/tests/test_agent_preflight.py",
+        ),
+        packet_dir=tmp_path,
+    )
+
+    assert plan.multi_agent_required is True
+    assert any("No Team Run Packet JSON" in error for error in errors)
+
+
+def test_team_run_packet_evidence_accepts_completed_local_packet(tmp_path: Path) -> None:
+    changed_files = (
+        "annuity_model/pricing_ui.py",
+        "annuity_model/ui/MIGRATION.md",
+        "annuity_model/tests/ui/test_apptest_full_workflow.py",
+        "annuity_model/scripts/agent_preflight.py",
+        "annuity_model/scripts/check_team_run_packet_evidence.py",
+        "annuity_model/tests/test_agent_preflight.py",
+    )
+    plan = router.build_staffing_plan(changed_files)
+    packet_json = tmp_path / "packet.json"
+    packet_md = tmp_path / "packet.md"
+    packet_json.write_text(
+        json.dumps(
+            {
+                "plan": plan.to_dict(),
+                "gate_results": [
+                    {
+                        "gate_id": gate_id,
+                        "label": gate_id,
+                        "command": ["python", "-m", "pytest"],
+                        "cwd": "annuity_model",
+                        "exit_code": 0,
+                        "stdout_tail": "",
+                        "stderr_tail": "",
+                    }
+                    for gate_id in plan.gate_ids
+                ],
+            }
+        )
+    )
+    packet_md.write_text(
+        """# Team Run Packet
+
+## Per-Agent Outputs
+
+- Validation Engineer: focused checks passed.
+
+## Review Findings
+
+- No unresolved findings.
+
+## Orchestrator Integration Summary
+
+- Evidence integrated.
+
+## Final Signoff
+
+- COMPLETE.
+"""
+    )
+
+    _plan, errors = packet_evidence.evaluate_evidence(changed_files, packet_json=packet_json)
+
+    assert errors == []
+
+
+def test_team_run_packet_evidence_accepts_documented_gate_deferral(tmp_path: Path) -> None:
+    changed_files = (
+        "annuity_model/scripts/agent_preflight.py",
+        "annuity_model/scripts/check_team_run_packet_evidence.py",
+        "annuity_model/tests/test_agent_preflight.py",
+        "annuity_model/docs/AI_AGENT_PREFLIGHT.md",
+        "annuity_model/docs/AI_AGENT_TEAM_PROTOCOL.md",
+        ".pre-commit-config.yaml",
+    )
+    plan = router.build_staffing_plan(changed_files)
+    packet_json = tmp_path / "packet.json"
+    packet_md = tmp_path / "packet.md"
+    packet_json.write_text(
+        json.dumps(
+            {
+                "plan": plan.to_dict(),
+                "gate_results": [
+                    {
+                        "gate_id": gate_id,
+                        "label": gate_id,
+                        "command": ["python", "-m", "pytest"],
+                        "cwd": "annuity_model",
+                        "exit_code": 0,
+                        "stdout_tail": "",
+                        "stderr_tail": "",
+                    }
+                    for gate_id in plan.gate_ids
+                    if gate_id != "full_pytest"
+                ],
+                "deferred_gate_results": [
+                    {
+                        "gate_id": "full_pytest",
+                        "reason": "Full regression intentionally deferred for a larger follow-up chunk.",
+                        "next_validation": "Chunk 3 full package migration validation.",
+                    }
+                ],
+            }
+        )
+    )
+    packet_md.write_text(
+        """# Team Run Packet
+
+## Per-Agent Outputs
+
+- Validation Engineer: focused checks passed.
+
+## Review Findings
+
+- No unresolved findings.
+
+## Orchestrator Integration Summary
+
+- Evidence integrated; full pytest deferral is documented.
+
+## Final Signoff
+
+- COMPLETE.
+"""
+    )
+
+    _plan, errors = packet_evidence.evaluate_evidence(changed_files, packet_json=packet_json)
+
+    assert errors == []
+
+
+def test_team_run_packet_evidence_accepts_pr_body_excerpt() -> None:
+    changed_files = (
+        "annuity_model/pricing_ui.py",
+        "annuity_model/ui/MIGRATION.md",
+        "annuity_model/tests/ui/test_apptest_full_workflow.py",
+        "annuity_model/scripts/agent_preflight.py",
+        "annuity_model/scripts/check_team_run_packet_evidence.py",
+        "annuity_model/tests/test_agent_preflight.py",
+    )
+    plan = router.build_staffing_plan(changed_files)
+    body = f"""## Team Run Packet Evidence
+
+## Selected Roles
+{chr(10).join(role.display_name for role in plan.roles)}
+
+## Validation Gates
+{chr(10).join(plan.gate_ids)}
+
+## Review Findings
+No unresolved findings.
+
+## Unresolved Risks
+None for this scoped change.
+
+## Final Signoff
+COMPLETE.
+"""
+
+    _plan, errors = packet_evidence.evaluate_evidence(changed_files, pr_body=body)
+
+    assert errors == []

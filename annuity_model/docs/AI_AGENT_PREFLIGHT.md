@@ -52,7 +52,7 @@ to bend.
 | Workbook-builder dispatch | [`product_excel.py`](../product_excel.py) | Plug-in registry; `register_builder`. |
 | Static Excel-formula validator | [`excel_workbook_validator.py`](../excel_workbook_validator.py) | All builders MUST call `validate_workbook_or_raise(wb)` before `wb.save(...)`. |
 | Autonomous AI team staffing | [`docs/AI_AGENT_TEAM_PROTOCOL.md`](AI_AGENT_TEAM_PROTOCOL.md) + [`scripts/agent_team_router.py`](../scripts/agent_team_router.py) | The orchestrator automatically selects core/dynamic specialist roles from changed files and task traits. |
-| Team Run Packet / preflight evidence | [`scripts/agent_preflight.py`](../scripts/agent_preflight.py) | Writes `.agent-team-runs/` packets and optionally runs selected gates for the current diff. |
+| Team Run Packet / preflight evidence | [`scripts/agent_preflight.py`](../scripts/agent_preflight.py) + [`scripts/check_team_run_packet_evidence.py`](../scripts/check_team_run_packet_evidence.py) | Writes `.agent-team-runs/` packets, optionally runs selected gates, and blocks broad/high-risk changes without completed staffing/gate/signoff evidence. |
 | Adding a new product (full walkthrough) | [`README.md`](../README.md) -- "Adding a new product" | The `scripts/scaffold_product.py` CLI generates step 4's boilerplate. |
 | CI workflow definitions | [`.github/workflows/`](../../.github/workflows/) | `parity-gate.yml` is always-on and listed in branch protection. |
 | Code-ownership routing | [`.github/CODEOWNERS`](../../.github/CODEOWNERS) and [`docs/CODEOWNERS_RATIONALE.md`](CODEOWNERS_RATIONALE.md) | Editing parity-critical files requires the listed reviewer. |
@@ -75,6 +75,17 @@ Before completion on the final diff, add `--run-gates` when the selected gate
 set is appropriate for the task and environment. The router does not replace
 the branch rules below; it staffs the agents and records the evidence needed to
 prove they were followed.
+
+For broad or high-risk changes, the final packet is not optional. The local
+pre-commit hook and PR CI run `scripts/check_team_run_packet_evidence.py`.
+Locally, it validates the completed `.agent-team-runs/` packet for the staged
+diff. In CI, ignored packet files are unavailable, so the PR body must include
+a `Team Run Packet Evidence` excerpt with selected roles, validation gates,
+review findings, unresolved risks, and a `COMPLETE` final signoff.
+If a gate is intentionally deferred because a later staged chunk will run a
+larger regression sweep, the packet JSON must record that gate under
+`deferred_gate_results` with both `reason` and `next_validation`; silent gate
+omissions are treated as incomplete evidence.
 
 ```
 START

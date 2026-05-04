@@ -73,8 +73,41 @@ def _git_changed_files(*, base: str | None, head: str | None, staged: bool) -> t
         return tuple(sorted(tracked | untracked))
 
 
+def _normalize_repo_path(path: str) -> str:
+    """Return a stable repo-relative path for CLI supplied changed files."""
+    raw = Path(path)
+    root_relative_prefixes = {
+        ".devcontainer",
+        ".github",
+        "actuarial_parity_kit",
+        "annuity_model",
+    }
+    root_relative_files = {
+        ".pre-commit-config.yaml",
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "DOCUMENTATION_MAP.md",
+        "Dockerfile",
+        "Justfile",
+        "PROJECT_DEVELOPMENT_GUIDE.md",
+        "README.md",
+    }
+    if raw.is_absolute():
+        candidate = raw
+    elif raw.parts and (
+        raw.parts[0] in root_relative_prefixes or raw.parts[0] in root_relative_files
+    ):
+        candidate = REPO_ROOT / raw
+    else:
+        candidate = Path.cwd() / raw
+    try:
+        return candidate.resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return path.replace("\\", "/")
+
+
 def resolve_changed_files(args: argparse.Namespace) -> tuple[str, ...]:
-    explicit = tuple(sorted({p for p in args.changed_files if p}))
+    explicit = tuple(sorted({_normalize_repo_path(p) for p in args.changed_files if p}))
     if explicit:
         return explicit
     return _git_changed_files(base=args.base, head=args.head, staged=args.staged)

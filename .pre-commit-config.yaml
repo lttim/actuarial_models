@@ -164,3 +164,10 @@ repos:
         language: system
         pass_filenames: false
         files: ^annuity_model/.*\.py$
+
+      - id: team-run-packet-evidence
+        name: broad/high-risk changes require Team Run Packet evidence
+        entry: bash -c 'PY="./annuity_model/.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" annuity_model/scripts/check_team_run_packet_evidence.py --staged'
+        language: system
+        pass_filenames: false
+        files: ^(annuity_model/.*|\.github/.*|AGENTS\.md|DOCUMENTATION_MAP\.md|PROJECT_DEVELOPMENT_GUIDE\.md)$
