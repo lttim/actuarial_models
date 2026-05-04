@@ -65,8 +65,9 @@ from __future__ import annotations
 import importlib
 import pkgutil
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 # Type aliases kept very loose at this layer because the source registries
@@ -240,6 +241,74 @@ def registered_product_types() -> tuple[Any, ...]:
     return tuple(_DEFINITIONS)
 
 
+def product_definitions_by_type() -> Mapping[Any, ProductDefinition]:
+    """Read-only canonical ProductDefinition view keyed by product type.
+
+    This is the compatibility seam for legacy registry consumers during the
+    migration to ``ProductDefinition`` as the source of truth. Callers that
+    only need a product-indexed view should prefer this immutable mapping
+    over reaching into the private legacy dictionaries.
+    """
+    discover_products()
+    return MappingProxyType(dict(_DEFINITIONS))
+
+
+def product_adapters_by_type() -> Mapping[Any, Any]:
+    """Read-only adapter compatibility view derived from definitions."""
+    return MappingProxyType(
+        {
+            product_type: definition.adapter
+            for product_type, definition in product_definitions_by_type().items()
+        }
+    )
+
+
+def workbook_builders_by_type() -> Mapping[Any, WorkbookBuilder]:
+    """Read-only workbook-builder compatibility view derived from definitions."""
+    return MappingProxyType(
+        {
+            product_type: definition.builder
+            for product_type, definition in product_definitions_by_type().items()
+        }
+    )
+
+
+def workbook_builder_spec_types_by_type() -> Mapping[Any, type]:
+    """Read-only workbook spec-type compatibility view derived from definitions."""
+    return MappingProxyType(
+        {
+            product_type: definition.builder_spec_type
+            for product_type, definition in product_definitions_by_type().items()
+        }
+    )
+
+
+def pricing_metric_formatters_by_type() -> Mapping[Any, PricingMetricFormatter]:
+    """Read-only pricing-metric compatibility view derived from definitions."""
+    return MappingProxyType(
+        {
+            product_type: definition.metric_formatter
+            for product_type, definition in product_definitions_by_type().items()
+        }
+    )
+
+
+def liability_path_converters_by_result_type_name() -> Mapping[str, LiabilityPathConverter]:
+    """Read-only liability converter view keyed like ``liability_dispatch``.
+
+    ``liability_dispatch`` routes on ``type(result).__name__``. Deriving this
+    mapping from ``ProductDefinition`` lets tests and migration code compare
+    the canonical view to the legacy dispatch registry without importing the
+    private dispatch dictionary.
+    """
+    return MappingProxyType(
+        {
+            definition.result_type.__name__: definition.liability_path_converter
+            for definition in iter_product_definitions()
+        }
+    )
+
+
 __all__ = [
     "LiabilityPathConverter",
     "PricingMetricFormatter",
@@ -248,6 +317,12 @@ __all__ = [
     "discover_products",
     "get_product_definition",
     "iter_product_definitions",
+    "liability_path_converters_by_result_type_name",
+    "pricing_metric_formatters_by_type",
+    "product_adapters_by_type",
+    "product_definitions_by_type",
     "register_product",
     "registered_product_types",
+    "workbook_builder_spec_types_by_type",
+    "workbook_builders_by_type",
 ]

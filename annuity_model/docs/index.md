@@ -17,7 +17,8 @@ must be disclosed in run/export evidence. Rollout narrative:
 * **Need the full file inventory for all docs in the repo?** Read
   [Documentation map](../../DOCUMENTATION_MAP.md).
 * **AI agent starting cold?** Read [AI_AGENT_PREFLIGHT](AI_AGENT_PREFLIGHT.md)
-  before editing code.
+  before editing code. For autonomous multi-agent work, also read
+  [AI_AGENT_TEAM_PROTOCOL](AI_AGENT_TEAM_PROTOCOL.md).
 * **Adding a product?** The walkthrough lives in
   [annuity_model/README.md](../README.md) (“Adding a new product”).
 * **Debugging a parity break?** Open
@@ -73,6 +74,7 @@ CI enforces all of these:
   [CODEOWNERS rationale](CODEOWNERS_RATIONALE.md),
   [model inventory](model_inventory.md),
   [assumption governance](assumption_governance.md),
+  [AI agent team protocol](AI_AGENT_TEAM_PROTOCOL.md),
   [gap register](platform_gap_register.md),
   [independent challenge activation](independent_challenge_activation.md)
 * Roadmaps: [actuarial fidelity backlog](actuarial_fidelity_backlog.md),

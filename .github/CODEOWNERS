@@ -87,6 +87,10 @@
 # Cursor session behaves. Treat as load-bearing.
 /AGENTS.md                                      @lttim
 /annuity_model/AGENTS.md                        @lttim
+/annuity_model/docs/AI_AGENT_PREFLIGHT.md       @lttim
+/annuity_model/docs/AI_AGENT_TEAM_PROTOCOL.md   @lttim
+/annuity_model/scripts/agent_preflight.py       @lttim
+/annuity_model/scripts/agent_team_router.py     @lttim
 /annuity_model/.cursor/                         @lttim
 /annuity_model/.cursorrules                     @lttim
 

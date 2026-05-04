@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, cast
 
 import pricing_projection as sp
@@ -262,6 +263,31 @@ def registered_builders() -> tuple[ProductType, ...]:
     registered workbook builder, and vice versa.
     """
     return tuple(_BUILDER_REGISTRY)
+
+
+def workbook_builders_by_type() -> dict[ProductType, ProductWorkbookBuilder]:
+    """Read-only-ish compatibility copy of the legacy builder registry.
+
+    New migration code should prefer ``products.workbook_builders_by_type()``,
+    which is derived from ``ProductDefinition``. Returning a copy preserves
+    existing registry encapsulation while giving invariant tests a public view.
+    """
+    return dict(_BUILDER_REGISTRY)
+
+
+def workbook_builder_spec_types_by_type() -> dict[ProductType, type | None]:
+    """Compatibility copy of the dispatcher spec-type registry."""
+    return dict(_BUILDER_SPEC_TYPES)
+
+
+def workbook_builder_registry_view() -> MappingProxyType[ProductType, ProductWorkbookBuilder]:
+    """Immutable legacy builder registry view for tests and migration tooling."""
+    return MappingProxyType(dict(_BUILDER_REGISTRY))
+
+
+def workbook_builder_spec_type_view() -> MappingProxyType[ProductType, type | None]:
+    """Immutable legacy spec-type registry view for tests and migration tooling."""
+    return MappingProxyType(dict(_BUILDER_SPEC_TYPES))
 
 
 def build_product_workbook(

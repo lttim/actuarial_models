@@ -36,6 +36,8 @@ BEHAVIOR_GLOBS = (
     "annuity_model/crediting.py",
     "annuity_model/lapse.py",
     "annuity_model/data_registry.py",
+    "annuity_model/scripts/agent_preflight.py",
+    "annuity_model/scripts/agent_team_router.py",
     "annuity_model/products/**/*.py",
     "annuity_model/ui/**/*.py",
 )

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
 from typing import Any, Protocol, TypeAlias
 
 import numpy as np
@@ -213,9 +214,10 @@ def validate_run_inputs(product_type: ProductType, state: Mapping[str, Any]) -> 
             f"issue_age ({int(issue_age)}); otherwise the projection horizon is empty."
         )
 
-    extra = _PRODUCT_VALIDATORS.get(product_type)
-    if extra is not None:
-        errors.extend(extra(state))
+    validator = _PRODUCT_VALIDATORS.get(product_type)
+    if validator is not None:
+        extra_errors = validator(state)
+        errors.extend(extra_errors)
 
     return tuple(errors)
 
@@ -1124,6 +1126,16 @@ def get_product_adapter(product_type: ProductType) -> ProductAdapter:
     return adapter
 
 
+def product_adapters_by_type() -> Mapping[ProductType, ProductAdapter]:
+    """Read-only legacy adapter registry view.
+
+    New code should prefer ``products.product_adapters_by_type()``, which is
+    derived from ``ProductDefinition``. This view remains for compatibility
+    checks and migration tests that compare the canonical and legacy wires.
+    """
+    return MappingProxyType(dict(_PRODUCT_ADAPTERS))
+
+
 def implemented_product_types() -> tuple[ProductType, ...]:
     """Return the tuple of product types with a registered adapter.
 
@@ -1292,6 +1304,18 @@ def get_pricing_metrics(product_type: ProductType, result: Any) -> tuple[Pricing
             f"add an entry in product_registry._PRICING_METRIC_FORMATTERS."
         )
     return formatter(result)
+
+
+def pricing_metric_formatters_by_type() -> Mapping[
+    ProductType, Callable[[Any], tuple[PricingMetric, ...]]
+]:
+    """Read-only legacy metric-formatter registry view.
+
+    ProductDefinition-derived views are canonical for migration work; this
+    compatibility view lets tests prove the legacy private registry has not
+    drifted while existing callers are preserved.
+    """
+    return MappingProxyType(dict(_PRICING_METRIC_FORMATTERS))
 
 
 def get_product_ui_config(product_type: ProductType) -> ProductUIConfig:

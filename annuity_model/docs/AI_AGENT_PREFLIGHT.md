@@ -8,7 +8,7 @@ then [`AGENTS.md`](../AGENTS.md) for the canonical four-gate commands,
 and the per-task runbooks under [`docs/runbooks/`](runbooks/).
 
 This file is the **single entry point** an autonomous agent should read
-*before* proposing any code change. It does three things, in order:
+*before* proposing any code change. It does four things, in order:
 
 1. Tells the agent **which canonical doc owns each rule**, so there is no
    ambiguity about which file is the source of truth.
@@ -20,6 +20,11 @@ This file is the **single entry point** an autonomous agent should read
    to be run) before claiming a task is done -- mirrored verbatim from
    `AGENTS.md` so the agent never has to fetch a second file just to
    know what to run.
+4. Routes multi-agent work through
+   [`AI_AGENT_TEAM_PROTOCOL.md`](AI_AGENT_TEAM_PROTOCOL.md),
+   `scripts/agent_team_router.py`, and `scripts/agent_preflight.py` so
+   validators, builders, reviewers, and docs stewards are staffed
+   automatically when the task warrants it.
 
 If anything in this doc disagrees with `AGENTS.md`, **`AGENTS.md` wins**
 (it is the human-facing source of truth and the one the parity-kit
@@ -46,6 +51,8 @@ to bend.
 | ALM dispatch (pricing-result -> liability-path) | [`liability_dispatch.py`](../liability_dispatch.py) | Plug-in registry; `register_liability_path_converter`. |
 | Workbook-builder dispatch | [`product_excel.py`](../product_excel.py) | Plug-in registry; `register_builder`. |
 | Static Excel-formula validator | [`excel_workbook_validator.py`](../excel_workbook_validator.py) | All builders MUST call `validate_workbook_or_raise(wb)` before `wb.save(...)`. |
+| Autonomous AI team staffing | [`docs/AI_AGENT_TEAM_PROTOCOL.md`](AI_AGENT_TEAM_PROTOCOL.md) + [`scripts/agent_team_router.py`](../scripts/agent_team_router.py) | The orchestrator automatically selects core/dynamic specialist roles from changed files and task traits. |
+| Team Run Packet / preflight evidence | [`scripts/agent_preflight.py`](../scripts/agent_preflight.py) | Writes `.agent-team-runs/` packets and optionally runs selected gates for the current diff. |
 | Adding a new product (full walkthrough) | [`README.md`](../README.md) -- "Adding a new product" | The `scripts/scaffold_product.py` CLI generates step 4's boilerplate. |
 | CI workflow definitions | [`.github/workflows/`](../../.github/workflows/) | `parity-gate.yml` is always-on and listed in branch protection. |
 | Code-ownership routing | [`.github/CODEOWNERS`](../../.github/CODEOWNERS) and [`docs/CODEOWNERS_RATIONALE.md`](CODEOWNERS_RATIONALE.md) | Editing parity-critical files requires the listed reviewer. |
@@ -56,6 +63,18 @@ to bend.
 
 Pick the **lowest** matching node and follow only that branch. If two
 nodes appear to apply, pick the more restrictive (calculation > UI > docs).
+
+Before implementation, run the team router/preflight so staffing is automatic
+and evidence is captured:
+
+```bash
+python scripts/agent_preflight.py --objective "<task>" --write-packet
+```
+
+Before completion on the final diff, add `--run-gates` when the selected gate
+set is appropriate for the task and environment. The router does not replace
+the branch rules below; it staffs the agents and records the evidence needed to
+prove they were followed.
 
 ```
 START

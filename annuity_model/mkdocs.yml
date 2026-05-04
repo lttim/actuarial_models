@@ -95,6 +95,7 @@ nav:
       - Launcher double-click: runbooks/launcher_double_click.md
       - Release: runbooks/release.md
   - Governance:
+      - AI agent team protocol: AI_AGENT_TEAM_PROTOCOL.md
       - CHANGELOG: CHANGELOG.md
       - Model change log: model_change_log.md
       - CODEOWNERS rationale: CODEOWNERS_RATIONALE.md

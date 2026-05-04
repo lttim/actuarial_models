@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import ast
 import re
-import subprocess
-import xml.etree.ElementTree as ET
+import subprocess  # nosec B404 - dashboard runs fixed local pytest commands only.
+import defusedxml.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -96,7 +96,7 @@ def _collect_nodeids(pytest_args: list[str] | None = None) -> tuple[list[str], s
     if py is None:
         return [], py_err or "No Python interpreter available for pytest."
     cmd = [py, "-m", "pytest", "--collect-only", "-q", *(pytest_args or [str(ROOT / "tests")])]
-    proc = subprocess.run(
+    proc = subprocess.run(  # nosec B603 - command is constructed from local interpreter + pytest args.
         cmd,
         cwd=str(ROOT),
         capture_output=True,
@@ -166,7 +166,7 @@ def run_pytest_junit(pytest_args: list[str] | None = None) -> tuple[int, str]:
         "-o",
         "junit_family=xunit2",
     ]
-    proc = subprocess.run(
+    proc = subprocess.run(  # nosec B603 - command is constructed from local interpreter + pytest args.
         cmd,
         cwd=str(ROOT),
         capture_output=True,

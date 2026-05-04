@@ -6,7 +6,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, NamedTuple
-from xml.etree import ElementTree as ET
+import defusedxml.ElementTree as ET
 
 import numpy as np
 import pandas as pd
@@ -1287,7 +1287,8 @@ def build_workbook(out_path: Path | None = None) -> Path:
     )
     target = Path(out_path) if out_path is not None else OUT_XLSX
     result = build_workbook_from_spec(spec, out_path=target)
-    assert isinstance(result, Path)
+    if not isinstance(result, Path):
+        raise TypeError(f"Expected build_workbook_from_spec to return Path, got {type(result)!r}.")
     return result
 
 

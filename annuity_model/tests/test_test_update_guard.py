@@ -32,3 +32,24 @@ def test_guard_passes_when_behavior_and_tests_change_together() -> None:
     assert result.ok
     assert result.behavior_files == ("annuity_model/portfolio_runner.py",)
     assert result.test_files == ("annuity_model/tests/parity/test_portfolio_golden.py",)
+
+
+def test_agent_team_control_plane_changes_require_tests() -> None:
+    result = evaluate_changed_files(["annuity_model/scripts/agent_team_router.py"])
+
+    assert not result.ok
+    assert result.behavior_files == ("annuity_model/scripts/agent_team_router.py",)
+    assert result.test_files == ()
+
+
+def test_agent_team_control_plane_passes_with_tests() -> None:
+    result = evaluate_changed_files(
+        [
+            "annuity_model/scripts/agent_preflight.py",
+            "annuity_model/tests/test_agent_preflight.py",
+        ]
+    )
+
+    assert result.ok
+    assert result.behavior_files == ("annuity_model/scripts/agent_preflight.py",)
+    assert result.test_files == ("annuity_model/tests/test_agent_preflight.py",)

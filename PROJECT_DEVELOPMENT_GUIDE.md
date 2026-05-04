@@ -37,13 +37,14 @@ For a complete file-by-file doc inventory, see `DOCUMENTATION_MAP.md`.
 ### AI onboarding (platform-agnostic)
 
 1. `annuity_model/docs/AI_AGENT_PREFLIGHT.md` (decision tree + source-of-truth map)
-2. `annuity_model/AGENTS.md` (canonical completion gates and product-critical rules)
-3. Root and product rule files:
+2. `annuity_model/docs/AI_AGENT_TEAM_PROTOCOL.md` (autonomous multi-agent staffing and Team Run Packet contract)
+3. `annuity_model/AGENTS.md` (canonical completion gates and product-critical rules)
+4. Root and product rule files:
    - `.cursor/rules/actuary-sme-protocol.mdc`
    - `.cursor/rules/handoff-recall.mdc`
    - `annuity_model/.cursor/rules/actuarial-parity.mdc`
    - `annuity_model/.cursor/rules/excel-formula-safety.mdc`
-4. Relevant runbook under `annuity_model/docs/runbooks/`
+5. Relevant runbook under `annuity_model/docs/runbooks/`
 
 If two docs appear inconsistent, resolve in this order:
 
@@ -73,6 +74,8 @@ Development is controlled by layered safeguards. A change is acceptable only whe
    - Rendered contract consistency: `annuity_model/scripts/render_parity_contract.py --check`
 5. **Ownership and review routing**
    - CODEOWNERS path protections with rationale in `annuity_model/docs/CODEOWNERS_RATIONALE.md`
+   - Autonomous staffing via `annuity_model/scripts/agent_team_router.py`
+   - Team Run Packets via `annuity_model/scripts/agent_preflight.py`
 6. **Actuarial judgment loop**
    - Structured Actuary SME review orchestration in `.cursor/rules/actuary-sme-protocol.mdc`
    - SME rubric in `annuity_model/.cursor/skills/actuary-sme/SKILL.md`
@@ -111,6 +114,14 @@ This repository uses Cursor-native rule/skill files, but the operating intent is
 
 - Cursor "subagent" maps to any delegated specialist execution model (parallel worker, reviewer agent, tool-running child task).
 - The control requirement is invariant: delegated reviews must remain readonly for judgment roles, and parent flow applies fixes with full traceability.
+- For autonomous development, the orchestrator first runs
+  `python scripts/agent_preflight.py --objective "<task>" --write-packet`
+  from `annuity_model/`. This selects core and dynamic specialist roles,
+  records owned paths and authority, and creates a Team Run Packet under
+  `.agent-team-runs/`.
+- Specialist agents may recommend more help, but only the orchestrator staffs
+  new agents and updates the packet. Write-capable agents receive scoped
+  ownership; review/judgment agents remain read-only.
 
 ## 6) Canonical completion protocol (all platforms)
 
@@ -124,6 +135,10 @@ Before claiming task completion, run (or provide evidence from CI of) the canoni
 Plus applicable supersets, e.g. portfolio acceptance (`just portfolio-acceptance`) when portfolio surfaces are touched.
 
 For CALCULATION or TOLERANCE changes, run the Actuary SME review flow and keep verdict artifacts traceable.
+
+For multi-agent work, keep the Team Run Packet traceable as well. It is the
+integration evidence that explains which specialists were staffed, what each
+owned, which gates ran, and what residual risks remain.
 
 ## 7) Session continuity and handoffs
 

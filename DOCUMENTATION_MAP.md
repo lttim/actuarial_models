@@ -44,6 +44,7 @@ Complete catalog of tracked documentation in this repository, with one-line purp
 
 - `annuity_model/docs/index.md` — entry index for contracts, runbooks, governance docs, and roadmaps.
 - `annuity_model/docs/AI_AGENT_PREFLIGHT.md` — AI decision tree and source-of-truth map before edits.
+- `annuity_model/docs/AI_AGENT_TEAM_PROTOCOL.md` — autonomous multi-agent staffing, role authority, and Team Run Packet protocol.
 
 ## Contracts, specs, and release gates
 

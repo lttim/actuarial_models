@@ -25,17 +25,28 @@ import product_excel as pe
 from liability_dispatch import liability_path_for, registered_typenames
 from liability_layouts import LIABILITY_LAYOUTS
 from product_registry import (
-    _PRICING_METRIC_FORMATTERS,
     ProductType,
     get_product_adapter,
     implemented_product_types,
+)
+from product_registry import (
+    pricing_metric_formatters_by_type as legacy_pricing_metric_formatters_by_type,
+)
+from product_registry import (
+    product_adapters_by_type as legacy_product_adapters_by_type,
 )
 from products import (
     ProductDefinition,
     discover_products,
     get_product_definition,
     iter_product_definitions,
+    liability_path_converters_by_result_type_name,
+    pricing_metric_formatters_by_type,
+    product_adapters_by_type,
+    product_definitions_by_type,
     registered_product_types,
+    workbook_builder_spec_types_by_type,
+    workbook_builders_by_type,
 )
 
 pytestmark = [pytest.mark.invariant]
@@ -88,6 +99,47 @@ def test_no_orphan_definitions() -> None:
     )
 
 
+def test_product_definition_compatibility_views_are_canonical_and_read_only() -> None:
+    """Compatibility maps must be derived from ProductDefinition, not parallel wires."""
+    definitions = product_definitions_by_type()
+    adapters = product_adapters_by_type()
+    builders = workbook_builders_by_type()
+    spec_types = workbook_builder_spec_types_by_type()
+    metric_formatters = pricing_metric_formatters_by_type()
+    converters = liability_path_converters_by_result_type_name()
+
+    assert set(definitions) == set(registered_product_types())
+    assert set(adapters) == set(definitions)
+    assert set(builders) == set(definitions)
+    assert set(spec_types) == set(definitions)
+    assert set(metric_formatters) == set(definitions)
+    assert set(converters) == {
+        definition.result_type.__name__ for definition in definitions.values()
+    }
+
+    spia = definitions[ProductType.SPIA]
+    assert adapters[ProductType.SPIA] is spia.adapter
+    assert builders[ProductType.SPIA] is spia.builder
+    assert spec_types[ProductType.SPIA] is spia.builder_spec_type
+    assert metric_formatters[ProductType.SPIA] is spia.metric_formatter
+    assert converters[spia.result_type.__name__] is spia.liability_path_converter
+
+    with pytest.raises(TypeError):
+        definitions[ProductType.SPIA] = spia  # type: ignore[index]
+
+
+def test_product_definition_views_match_public_legacy_views() -> None:
+    """Legacy public compatibility views must stay aligned with canonical definitions."""
+    assert dict(product_adapters_by_type()) == dict(legacy_product_adapters_by_type())
+    assert dict(workbook_builders_by_type()) == dict(pe.workbook_builders_by_type())
+    assert dict(workbook_builder_spec_types_by_type()) == dict(
+        pe.workbook_builder_spec_types_by_type()
+    )
+    assert dict(pricing_metric_formatters_by_type()) == dict(
+        legacy_pricing_metric_formatters_by_type()
+    )
+
+
 @pytest.mark.parametrize("product_type", list(ProductType))
 def test_definition_fields_match_legacy_registries(product_type: ProductType) -> None:
     """For every implemented product, every field of ProductDefinition
@@ -112,11 +164,13 @@ def test_definition_fields_match_legacy_registries(product_type: ProductType) ->
         f"products/{product_type.value}.py must reuse "
         "get_product_adapter(...) instead of constructing a parallel adapter."
     )
-    assert definition.builder is pe._BUILDER_REGISTRY[product_type], (
+    assert definition.builder is pe.workbook_builders_by_type()[product_type], (
         f"{product_type.value}: ProductDefinition.builder drifted from "
         "product_excel._BUILDER_REGISTRY."
     )
-    assert definition.metric_formatter is _PRICING_METRIC_FORMATTERS[product_type], (
+    assert (
+        definition.metric_formatter is legacy_pricing_metric_formatters_by_type()[product_type]
+    ), (
         f"{product_type.value}: ProductDefinition.metric_formatter drifted from "
         "product_registry._PRICING_METRIC_FORMATTERS."
     )
@@ -154,7 +208,7 @@ def test_builder_spec_type_matches_product_excel_spec_types(
     if product_type not in implemented_product_types():
         return
     definition = get_product_definition(product_type)
-    expected = pe._BUILDER_SPEC_TYPES[product_type]
+    expected = pe.workbook_builder_spec_types_by_type()[product_type]
     assert definition.builder_spec_type is expected, (
         f"{product_type.value}: ProductDefinition.builder_spec_type "
         f"({definition.builder_spec_type.__name__}) does not match "

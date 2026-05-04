@@ -19,6 +19,38 @@ Quick reference:
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+from types import ModuleType
+
+# Transitional import bootstrap ------------------------------------------------
+#
+# The runtime still contains legacy flat imports such as ``import pricing_projection``.
+# When this package is imported from the repository root, those sibling modules
+# are not on ``sys.path`` by default.  Add this package directory explicitly so
+# the existing launchers, tests, and Streamlit entrypoints keep their current
+# behavior until the larger src-layout migration can rewrite the imports.
+_PACKAGE_DIR = Path(__file__).resolve().parent
+_PACKAGE_DIR_STR = str(_PACKAGE_DIR)
+if _PACKAGE_DIR_STR not in sys.path:
+    sys.path.insert(0, _PACKAGE_DIR_STR)
+
+
+def _alias_legacy_module(flat_name: str) -> None:
+    """Expose a loaded legacy flat module under ``annuity_model.<name>`` too."""
+    module = sys.modules.get(flat_name)
+    if isinstance(module, ModuleType):
+        sys.modules.setdefault(f"{__name__}.{flat_name}", module)
+
+
+def _alias_legacy_prefix(flat_prefix: str) -> None:
+    """Expose loaded legacy subpackage modules under the package namespace."""
+    package_prefix = f"{__name__}.{flat_prefix}"
+    for loaded_name, module in list(sys.modules.items()):
+        if loaded_name == flat_prefix or loaded_name.startswith(f"{flat_prefix}."):
+            suffix = loaded_name[len(flat_prefix) :]
+            sys.modules.setdefault(f"{package_prefix}{suffix}", module)
+
 # Logging -----------------------------------------------------------------
 from _logging import configure_logging, get_logger
 
@@ -100,6 +132,23 @@ from term_projection import (
     liability_path_from_term_projection,
     price_term_life_level_monthly,
 )
+
+for _flat_module_name in (
+    "_logging",
+    "excel_workbook_validator",
+    "liability_aggregation",
+    "liability_layouts",
+    "portfolio",
+    "portfolio_runner",
+    "pricing_projection",
+    "product_excel",
+    "product_registry",
+    "rila_projection",
+    "term_projection",
+):
+    _alias_legacy_module(_flat_module_name)
+_alias_legacy_prefix("products")
+del _flat_module_name
 
 __all__ = [
     "PolicyInput",

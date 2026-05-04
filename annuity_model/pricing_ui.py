@@ -37,11 +37,20 @@ from openpyxl import load_workbook
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+REPO_ROOT = ROOT.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import pricing_projection as sp
 import rila_projection as rp
 import term_projection as tp
 from alm_excel_ladder import ALM_ENGINE_SHEET
+from annuity_model.ui.app_shell import configure_pricing_page, render_sidebar_shell
+from annuity_model.ui.navigation import SECTION_LABELS as _NAV_SECTION_LABELS
+from annuity_model.ui.navigation import SECTION_ORDER as _NAV_SECTION_ORDER
+from annuity_model.ui.navigation import section_options
+from annuity_model.ui.pages.overview import dynamic_overview_features
+from annuity_model.ui.pages.overview import render_overview as _render_overview
 from assumption_provenance import provenance_rows_from_pricing_state
 from build_portfolio_excel_workbook import build_portfolio_workbook_bytes
 from build_pricing_excel_workbook import (
@@ -65,11 +74,7 @@ from inforce_io import load_policy_inputs_from_csv
 from liability_aggregation import padded_cashflows_on_portfolio_grid
 from parity_constants import MODELCHECK_TOL
 from portfolio import PolicyInput, Portfolio, PortfolioResult, RunScenario
-from portfolio_config import (
-    portfolio_disabled_explanation_markdown,
-    portfolio_sidebar_visible,
-    portfolio_v1_enabled,
-)
+from portfolio_config import portfolio_sidebar_visible
 from portfolio_runner import run_portfolio
 from portfolio_summary import portfolio_result_to_summary_dict
 from pricing_run_form_state import (
@@ -567,51 +572,10 @@ MortalityMode = Literal[
 YieldMode = Literal["flat", "zero_csv", "par_bootstrap"]
 ExpenseMode = Literal["csv", "manual"]
 
-SECTION_LABELS: dict[str, str] = {
-    "overview": "Overview",
-    "run": "Pricing Run",
-    "portfolio": "Portfolio (multi-policy)",
-    "workbench": "Pricing Workbench",
-    "alm": "ALM",
-    "what_if": "What-if Analysis",
-    "experience": "Experience Study",
-    "excel_replicator": "Excel Replicator",
-    "tests": "Unit Tests",
-}
-SECTION_ORDER: list[str] = [
-    "overview",
-    "run",
-    "workbench",
-    "alm",
-    "what_if",
-    "experience",
-    "excel_replicator",
-    "tests",
-]
-
-
-def _dynamic_overview_features() -> list[str]:
-    options = list(product_options_for_ui())
-    available_products = ", ".join(product_label(p) for p in options) if options else "None"
-    mc_products = [
-        product_label(p) for p in options if get_product_capabilities(p).supports_monte_carlo
-    ]
-    econ_products = [
-        product_label(p) for p in options if get_product_capabilities(p).supports_economic_scenario
-    ]
-    return [
-        f"Supported product run types: {available_products}.",
-        "Run-time pricing dispatch is centralized in the product registry adapters.",
-        f"Economic scenario controls enabled for: {', '.join(econ_products) if econ_products else 'None'}.",
-        f"Monte Carlo pricing enabled for: {', '.join(mc_products) if mc_products else 'None'}.",
-        "Yield curve sources: flat rate, zero-curve CSV, or par-yield CSV bootstrapped to zeros.",
-        "Mortality sources are product-scoped and configured by registry defaults/options.",
-        "ALM tab supports Treasury ladder projection, reinvestment/disinvestment policy controls, and KPI output tied to the active pricing run.",
-        "What-if analysis provides before/after/impact views across pricing and ALM dimensions.",
-        "Excel replicator export includes parity-oriented workbook output with optional MC and ALM snapshots.",
-        "Embedded unit-test dashboard is available from the Unit Tests section.",
-    ]
-
+# Compatibility aliases while app-shell/page rendering moves into ``ui`` modules.
+SECTION_LABELS: dict[str, str] = _NAV_SECTION_LABELS
+SECTION_ORDER: list[str] = list(_NAV_SECTION_ORDER)
+_dynamic_overview_features = dynamic_overview_features
 
 def _seed_run_form_state_from_last_inputs() -> None:
     meta = st.session_state.get("pricing_meta") or {}
@@ -764,28 +728,6 @@ def _build_mortality(
         RUN_KEY.MP_OUT: mp_out_csv,
     }
     return build_mortality_from_seeds(seeds, product_type=product_type, sex=sex, repo_root=ROOT)
-
-
-def _render_overview() -> None:
-    st.header("Model overview")
-    st.markdown(
-        "This workspace runs the pricing and projection engine with product adapters, "
-        "scenario analysis, and Excel parity checks."
-    )
-    st.caption(
-        "Overview content is generated from the product registry and shared section metadata "
-        "to reduce documentation drift after model updates."
-    )
-
-    st.subheader("Current feature set")
-    for i, feat in enumerate(_dynamic_overview_features(), start=1):
-        st.markdown(f"{i}. {feat}")
-
-    st.subheader("Workspace sections")
-    section_labels = [SECTION_LABELS[k] for k in SECTION_ORDER if k != "overview"]
-    st.markdown(
-        "Use the sidebar to navigate: " + " | ".join(f"**{name}**" for name in section_labels) + "."
-    )
 
 
 def _result_dataframe(
@@ -5393,9 +5335,7 @@ def _render_alm_section() -> None:
 
 
 def _sidebar_section_options() -> list[str]:
-    if portfolio_sidebar_visible(st.session_state):
-        return [*SECTION_ORDER[:2], "portfolio", *SECTION_ORDER[2:]]
-    return list(SECTION_ORDER)
+    return section_options(include_portfolio=portfolio_sidebar_visible(st.session_state))
 
 
 def _portfolio_row_prefix(row_id: str) -> str:
@@ -6027,32 +5967,9 @@ def _render_portfolio_section() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Pricing Demo", layout="wide")
+    configure_pricing_page()
     with st.sidebar:
-        st.title("Pricing Demo")
-        if portfolio_v1_enabled():
-            st.session_state.pop(PORTFOLIO_KEY.UI_FORCE_SIDEBAR, None)
-            st.caption(
-                "Batch / multi-policy: set **Section** (below) to **Portfolio (multi-policy)**."
-            )
-        else:
-            with st.expander("Portfolio section is off — why?", expanded=False):
-                st.markdown(portfolio_disabled_explanation_markdown())
-                st.caption(
-                    "Optional: show the Portfolio page in **Section** for this browser session "
-                    "only (Streamlit). CLI `portfolio-run` follows the same enablement rules."
-                )
-                st.checkbox(
-                    "Show Portfolio (multi-policy) in Section list",
-                    key=PORTFOLIO_KEY.UI_FORCE_SIDEBAR,
-                )
-        page = st.radio(
-            "Section",
-            options=_sidebar_section_options(),
-            format_func=lambda x: SECTION_LABELS[x],
-        )
-        st.divider()
-        st.caption(f"Project root: `{ROOT}`")
+        page = render_sidebar_shell(project_root=ROOT)
 
         st.subheader("Diagnostics export")
         # Diagnostics should be fully self-contained for offline review/debugging.

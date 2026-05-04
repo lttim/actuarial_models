@@ -46,6 +46,11 @@ that exercises all four locally.
 - [ ] **End-to-end smoke**: `cd annuity_model && python scripts/deep_smoke.py` -- exit 0
 - [ ] **Tolerance docs in sync**: `cd annuity_model && python scripts/render_parity_contract.py --check` -- exit 0
 
+## Autonomous AI-team evidence
+
+- [ ] If AI agents implemented this PR, `cd annuity_model && python scripts/agent_preflight.py --objective "<task>" --write-packet` was run and the Team Run Packet was summarized here.
+- [ ] If the change used multiple agents, the packet identifies selected roles, owned paths, review findings, gates run, unresolved risks, and orchestrator signoff.
+
 ## Excel safety (only if Excel-generating code changed)
 
 - [ ] Regenerated workbook validates and `ModelCheck` links to the expected liability summary rows

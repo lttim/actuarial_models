@@ -57,6 +57,9 @@ explicitly so reviewers see them flagged as parity/UI critical:
 |-----------------------------------------------|---------------------------------------------------------------------------|
 | `AGENTS.md` (root)                            | Load-bearing for every Cursor / coding-agent session.                     |
 | `annuity_model/AGENTS.md`                     | Same, scoped to the package.                                              |
+| `annuity_model/docs/AI_AGENT_TEAM_PROTOCOL.md` | Defines autonomous multi-agent authority, staffing, and evidence rules.   |
+| `annuity_model/scripts/agent_preflight.py`    | Writes Team Run Packets and may run selected completion gates.            |
+| `annuity_model/scripts/agent_team_router.py`  | Selects specialist roles and gates for autonomous agent work.             |
 | `annuity_model/.cursor/`                      | The `.mdc` rules that constrain agent behaviour around parity and Excel.  |
 | `annuity_model/.cursorrules`                  | Legacy file, still consulted by some agents.                              |
 

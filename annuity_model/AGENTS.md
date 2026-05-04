@@ -15,7 +15,10 @@ reviews/subagents, regressions, and governance workflow), see
 > rules an autonomous agent must follow on this repo. This file
 > (`AGENTS.md`) remains the canonical owner of the four-gate list below;
 > the pre-flight doc just routes agents to the right runbook before they
-> get there.
+> get there. For autonomous multi-agent work, also read
+> [`docs/AI_AGENT_TEAM_PROTOCOL.md`](docs/AI_AGENT_TEAM_PROTOCOL.md) and run
+> `python scripts/agent_preflight.py --objective "<task>" --write-packet`
+> before implementation so staffing and evidence are recorded.
 
 ## Non-negotiable parity requirement
 

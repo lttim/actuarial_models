@@ -100,6 +100,17 @@ preflight:
     @echo "or a natural-language 'actuary review' request -- when the"
     @echo "session edited any calculation / tolerance file."
 
+# Autonomous AI-team staffing preflight. This does not replace `just preflight`;
+# it creates a Team Run Packet and selects the specialist roles/gates that an
+# orchestrator agent should use for the current diff.
+agent-preflight objective="":
+    cd annuity_model && python scripts/agent_preflight.py --objective "{{objective}}" --write-packet
+
+# Same as `agent-preflight`, but also runs the selected gates and records their
+# exit codes in the packet. Use near completion after the final diff is ready.
+agent-preflight-run objective="":
+    cd annuity_model && python scripts/agent_preflight.py --objective "{{objective}}" --write-packet --run-gates
+
 # Portfolio end-to-end acceptance (extends preflight; requires portfolio flag
 # for CLI / deep_smoke portfolio step). Add as a required status check when
 # branch protection is updated for this workflow.
