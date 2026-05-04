@@ -11,7 +11,9 @@ does not reference non-tracked markdown files.
 from __future__ import annotations
 
 import re
-import subprocess
+
+# Reviewed: documentation map validation invokes a fixed local git command with shell=False.
+import subprocess  # nosec B404
 from pathlib import Path
 
 MAP_PATH = Path("DOCUMENTATION_MAP.md")
@@ -19,7 +21,8 @@ PATH_PATTERN = re.compile(r"`([^`]+\.md)`")
 
 
 def _tracked_markdown_files(repo_root: Path) -> set[str]:
-    out = subprocess.check_output(
+    # Reviewed: fixed git command vector; partial path is acceptable for local developer tooling.
+    out = subprocess.check_output(  # nosec B603 B607
         ["git", "ls-files", "*.md"],
         cwd=repo_root,
         text=True,

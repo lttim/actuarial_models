@@ -577,6 +577,7 @@ SECTION_LABELS: dict[str, str] = _NAV_SECTION_LABELS
 SECTION_ORDER: list[str] = list(_NAV_SECTION_ORDER)
 _dynamic_overview_features = dynamic_overview_features
 
+
 def _seed_run_form_state_from_last_inputs() -> None:
     meta = st.session_state.get("pricing_meta") or {}
     saved_inputs = st.session_state.get("pricing_run_inputs") or {}
@@ -4380,8 +4381,11 @@ def _render_alm_section() -> None:
         try:
             for i, wi in enumerate(np.asarray(pending_alloc, dtype=float)):
                 st.session_state[f"alm_alloc_{i}"] = float(wi * 100.0)
-        except Exception:
-            pass
+        except (TypeError, ValueError) as exc:
+            st.session_state["alm_opt_notice"] = {
+                "level": "warning",
+                "message": f"Optimized allocation could not be applied: {exc}",
+            }
     opt_notice = st.session_state.pop("alm_opt_notice", None)
     if isinstance(opt_notice, dict):
         msg = str(opt_notice.get("message", ""))

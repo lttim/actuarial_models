@@ -1,12 +1,10 @@
 # UI decomposition — migration map
 
-> **Status (2026-04, post P1+P2 hardening sweep):** still gated. The
+> **Status (current inventory):** still gated. The
 > hardening roadmap conditioned the per-page split on
-> `pricing_ui.py < 1.5k LOC after P1/P2 extractions`. Today's count
-> (run `wc -l pricing_ui.py`) is **4,467 LOC** -- shrinkage from the
-> 4,118 reference figure below was offset by P0 Term-widget wiring
-> (`term_years`, `premium_mode`, `benefit_timing`) and assorted
-> hardening additions.
+> `pricing_ui.py < 1.5k LOC after P1/P2 extractions`. The current count
+> (run `wc -l annuity_model/pricing_ui.py` from the repository root) is
+> **6,158 LOC**, so the monolith remains above the migration threshold.
 >
 > **Prerequisite enabler delivered:** Step 3 of the migration rules
 > below ("session-state audit script") is now live at
@@ -19,9 +17,9 @@
 > the audit script's `--fail-on-cross-page --allow-cross-page ...`
 > flags are designed for use as a CI gate during the migration.
 
-`pricing_ui.py` is currently 4,118 LOC across 49 top-level functions. It is
-also the only place where Streamlit `st.session_state` keys are minted, so a
-naive split would silently break what-if/excel-replicator state plumbing.
+`pricing_ui.py` is still the UI monolith and the main place where Streamlit
+`st.session_state` keys are minted, so a naive split would silently break
+what-if/excel-replicator state plumbing.
 
 This package (`annuity_model/ui/`) is the **target** structure for the
 decomposition planned in Phase 2 of the hardening roadmap. The goal is to

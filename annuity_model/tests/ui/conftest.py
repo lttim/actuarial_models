@@ -55,12 +55,16 @@ def streamlit_apptest_module():
     return AppTest
 
 
-def load_pricing_ui(AppTest, default_timeout: int = 60):
+def load_pricing_ui(AppTest, default_timeout: int = 120):
     """Load ``pricing_ui.py`` and return the AppTest instance after one run.
 
     Raises immediately if the initial render raised an exception; that
     is a hard failure of the smoke contract regardless of which product
     the test ultimately exercises.
+
+    The default timeout is intentionally above Streamlit's 60s default because
+    the full coverage gate instruments workbook-building paths and can push a
+    legitimate pricing-click rerun just past 60s on local machines.
     """
     app_path = ROOT / "pricing_ui.py"
     at = AppTest.from_file(str(app_path), default_timeout=default_timeout)

@@ -13,7 +13,9 @@ pytest files under `annuity_model/tests/`.
 from __future__ import annotations
 
 import fnmatch
-import subprocess
+
+# Reviewed: PR guard invokes fixed local git command vectors with shell=False.
+import subprocess  # nosec B404
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,7 +67,8 @@ def _git_changed_files(base_sha: str | None, head_sha: str | None) -> list[str]:
         cmd = ["git", "diff", "--name-only", f"{base_sha}..{head_sha}"]
     else:
         cmd = ["git", "diff", "--cached", "--name-only"]
-    out = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)
+    # Reviewed: fixed git command vector; refs are CI/developer supplied and shell=False.
+    out = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)  # nosec B603
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 

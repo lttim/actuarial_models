@@ -56,6 +56,7 @@ Complete catalog of tracked documentation in this repository, with one-line purp
 - `annuity_model/docs/portfolio_runner_spec.md` — multi-policy portfolio runner behavior/spec definition.
 - `annuity_model/docs/parity_test_checklist.md` — merge/release parity checklist.
 - `annuity_model/docs/release_assumption_waiver.md` — waiver template when placeholder assumptions are used.
+- `annuity_model/.release/assumption_waiver.md` — active release waiver evidence for placeholder assumptions.
 
 ## Governance and controls documentation
 

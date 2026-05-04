@@ -35,7 +35,8 @@ before deps are installed) and uses only the standard library.
 
 from __future__ import annotations
 
-import subprocess
+# Reviewed: CI guard invokes a fixed local git command with shell=False.
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
 
@@ -52,7 +53,8 @@ def _changed_files(base_ref: str, head_ref: str) -> set[str]:
     that misses files added on main after the PR branched.
     """
     try:
-        out = subprocess.check_output(
+        # Reviewed: fixed git command vector; refs are CI/developer supplied and shell=False.
+        out = subprocess.check_output(  # nosec B603 B607
             ["git", "diff", "--name-only", f"{base_ref}...{head_ref}"],
             text=True,
         )

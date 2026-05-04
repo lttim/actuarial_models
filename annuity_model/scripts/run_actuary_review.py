@@ -44,7 +44,9 @@ import argparse
 import datetime as _dt
 import json
 import re
-import subprocess
+
+# Reviewed: evidence collection invokes fixed local git command vectors with shell=False.
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
 
@@ -134,7 +136,8 @@ _PRODUCT_PATH_PATTERNS: tuple[tuple[str, str], ...] = (
 def _git(*args: str) -> str:
     """Run a git subcommand from the repo root and return stdout."""
     try:
-        result = subprocess.run(
+        # Reviewed: fixed git executable with repo-controlled call sites; shell=False.
+        result = subprocess.run(  # nosec B603 B607
             ["git", *args],
             cwd=_REPO_ROOT,
             capture_output=True,

@@ -21,7 +21,9 @@ import argparse
 import datetime as _dt
 import json
 import os
-import subprocess
+
+# Reviewed: this local orchestration tool invokes fixed git/gate command vectors with shell=False.
+import subprocess  # nosec B404
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -49,18 +51,24 @@ def _git_changed_files(*, base: str | None, head: str | None, staged: bool) -> t
         raise ValueError("Provide both --base and --head, or neither.")
     if base and head:
         cmd = ["git", "diff", "--name-only", f"{base}..{head}"]
-        out = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)
+        # Reviewed: fixed git command vector; refs are developer/CI supplied and shell=False.
+        out = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)  # nosec B603
         return tuple(sorted(line.strip() for line in out.splitlines() if line.strip()))
     elif staged:
         cmd = ["git", "diff", "--cached", "--name-only"]
-        out = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)
+        # Reviewed: fixed git command vector for local staged files; shell=False.
+        out = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)  # nosec B603
         return tuple(sorted(line.strip() for line in out.splitlines() if line.strip()))
     else:
         cmd = ["git", "diff", "--name-only", "HEAD"]
-        out = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)
+        # Reviewed: fixed git command vector for local working tree discovery; shell=False.
+        out = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)  # nosec B603
         tracked = {line.strip() for line in out.splitlines() if line.strip()}
         untracked_cmd = ["git", "ls-files", "--others", "--exclude-standard"]
-        untracked_out = subprocess.check_output(untracked_cmd, cwd=REPO_ROOT, text=True)
+        # Reviewed: fixed git command vector for local untracked file discovery; shell=False.
+        untracked_out = subprocess.check_output(  # nosec B603
+            untracked_cmd, cwd=REPO_ROOT, text=True
+        )
         untracked = {line.strip() for line in untracked_out.splitlines() if line.strip()}
         return tuple(sorted(tracked | untracked))
 
@@ -244,7 +252,8 @@ def run_gate(spec: GateSpec, changed_files: tuple[str, ...]) -> GateResult:
     env = os.environ.copy()
     env.update(spec.env)
     command = _expand_command(spec.command, changed_files)
-    proc = subprocess.run(
+    # Reviewed: gate specs are repo-defined local validation commands run with shell=False.
+    proc = subprocess.run(  # nosec B603
         command,
         cwd=cwd,
         env=env,

@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import ast
 import re
-import subprocess  # nosec B404 - dashboard runs fixed local pytest commands only.
-import defusedxml.ElementTree as ET
+
+# Reviewed: dashboard runs fixed local pytest commands only.
+import subprocess  # nosec B404
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
+from defusedxml import ElementTree
 
 from pytest_python import select_pytest_interpreter
 
@@ -96,7 +98,8 @@ def _collect_nodeids(pytest_args: list[str] | None = None) -> tuple[list[str], s
     if py is None:
         return [], py_err or "No Python interpreter available for pytest."
     cmd = [py, "-m", "pytest", "--collect-only", "-q", *(pytest_args or [str(ROOT / "tests")])]
-    proc = subprocess.run(  # nosec B603 - command is constructed from local interpreter + pytest args.
+    # Reviewed: command is constructed from local interpreter + pytest args.
+    proc = subprocess.run(  # nosec B603
         cmd,
         cwd=str(ROOT),
         capture_output=True,
@@ -166,7 +169,8 @@ def run_pytest_junit(pytest_args: list[str] | None = None) -> tuple[int, str]:
         "-o",
         "junit_family=xunit2",
     ]
-    proc = subprocess.run(  # nosec B603 - command is constructed from local interpreter + pytest args.
+    # Reviewed: command is constructed from local interpreter + pytest args.
+    proc = subprocess.run(  # nosec B603
         cmd,
         cwd=str(ROOT),
         capture_output=True,
@@ -187,7 +191,7 @@ def _base_test_name(name: str) -> str:
     return name[:bracket] if bracket != -1 else name
 
 
-def _nodeid_from_junit_case(tc: ET.Element) -> str:
+def _nodeid_from_junit_case(tc: ElementTree.Element) -> str:
     file_attr = tc.get("file")
     name = tc.get("name") or ""
     if file_attr:
@@ -213,8 +217,8 @@ def parse_junit_results() -> dict[str, dict[str, Any]]:
     if not JUNIT_PATH.is_file():
         return {}
     try:
-        tree = ET.parse(JUNIT_PATH)
-    except ET.ParseError:
+        tree = ElementTree.parse(JUNIT_PATH)
+    except ElementTree.ParseError:
         return {}
     root = tree.getroot()
 

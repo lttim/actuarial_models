@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
+
+# Reviewed: local pytest helpers run explicit interpreter probes with shell=False.
+import subprocess  # nosec B404
 import sys
 import tomllib
 from pathlib import Path
@@ -43,7 +45,8 @@ def project_venv_python(anchor: Path) -> Path | None:
 
 
 def interpreter_meets_minimum(py: str | Path, major: int, minor: int) -> bool:
-    proc = subprocess.run(
+    # Reviewed: command uses a resolved local interpreter and fixed inline version probe.
+    proc = subprocess.run(  # nosec B603
         [
             str(py),
             "-c",

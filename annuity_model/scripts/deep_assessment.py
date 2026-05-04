@@ -9,7 +9,9 @@ changes.
 from __future__ import annotations
 
 import argparse
-import subprocess
+
+# Reviewed: local assessment runner invokes repo-defined validation commands with shell=False.
+import subprocess  # nosec B404
 import sys
 import time
 from dataclasses import dataclass
@@ -32,7 +34,8 @@ def _run_step(step: Step) -> None:
     print(f"[deep-assessment] cwd={step.cwd}")
     print("[deep-assessment] $ " + " ".join(step.command))
     started = time.monotonic()
-    proc = subprocess.run(step.command, cwd=step.cwd, check=False)
+    # Reviewed: commands are constructed from this script's fixed step list and sys.executable.
+    proc = subprocess.run(step.command, cwd=step.cwd, check=False)  # nosec B603
     elapsed = time.monotonic() - started
     if proc.returncode != 0:
         raise SystemExit(

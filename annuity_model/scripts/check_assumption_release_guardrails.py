@@ -18,7 +18,6 @@ if str(_REPO_ROOT) not in sys.path:
 
 from data_registry import REGISTRY
 
-
 REQUIRED_WAIVER_FIELDS = (
     "Release version",
     "Date",
@@ -90,8 +89,7 @@ def validate_waiver_file(
             effective_today = today or dt.datetime.now(dt.UTC).date()
             if expiry < effective_today:
                 errors.append(
-                    f"waiver expired on {expiry.isoformat()} "
-                    f"(today {effective_today.isoformat()})"
+                    f"waiver expired on {expiry.isoformat()} (today {effective_today.isoformat()})"
                 )
     return errors
 

@@ -5,7 +5,6 @@ from pathlib import Path
 
 from scripts.check_assumption_release_guardrails import validate_waiver_file
 
-
 FLAGGED = [
     "expenses_assumptions_us_placeholders (expenses/us_placeholders)",
     "cso_2017_ult_male_nonsmoker_qx (mortality/cso_2017_ult)",

@@ -51,6 +51,7 @@ def _alias_legacy_prefix(flat_prefix: str) -> None:
             suffix = loaded_name[len(flat_prefix) :]
             sys.modules.setdefault(f"{package_prefix}{suffix}", module)
 
+
 # Logging -----------------------------------------------------------------
 from _logging import configure_logging, get_logger
 

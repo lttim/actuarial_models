@@ -48,7 +48,9 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
+
+# Reviewed: local mutmut gate invokes a fixed command vector after PATH presence check.
+import subprocess  # nosec B404
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -175,7 +177,8 @@ def _run_mutmut() -> None:
     if shutil.which("mutmut") is None:
         print("[mutmut-gate] `mutmut` binary not on PATH", file=sys.stderr)
         sys.exit(2)
-    proc = subprocess.run(
+    # Reviewed: fixed local mutmut command vector; partial path is acceptable for dev tooling.
+    proc = subprocess.run(  # nosec B603 B607
         ["mutmut", "run"],
         cwd=REPO_ROOT,
         check=False,

@@ -6,10 +6,10 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, NamedTuple
-import defusedxml.ElementTree as ET
 
 import numpy as np
 import pandas as pd
+from defusedxml import ElementTree
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, Reference
 from openpyxl.styles import Alignment, Font
@@ -1081,7 +1081,7 @@ def inject_alm_projection_formula_cached_values(
             and marker2 in raw
             and marker3 in raw
         ):
-            root = ET.fromstring(raw)
+            root = ElementTree.fromstring(raw)
             for row in root.iter(q("row")):
                 for c in row.findall(q("c")):
                     ref = c.get("r")
@@ -1089,9 +1089,9 @@ def inject_alm_projection_formula_cached_values(
                         continue
                     v_el = c.find(q("v"))
                     if v_el is None:
-                        v_el = ET.SubElement(c, q("v"))
+                        v_el = ElementTree.SubElement(c, q("v"))
                     v_el.text = updates[ref]
-            raw = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+            raw = ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
         zout_f.writestr(item, raw)
     zin.close()
     zout_f.close()

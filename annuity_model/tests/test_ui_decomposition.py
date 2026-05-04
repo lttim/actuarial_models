@@ -63,7 +63,9 @@ def test_pricing_ui_delegates_overview_and_shell_to_ui_modules() -> None:
         if isinstance(node, ast.ImportFrom) and node.module is not None
     }
     function_names = {
-        node.name for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
 
     assert "annuity_model.ui.app_shell" in imported_modules

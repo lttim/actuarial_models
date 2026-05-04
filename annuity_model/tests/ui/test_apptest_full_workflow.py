@@ -200,6 +200,12 @@ def test_each_sidebar_section_renders_without_exception(
     at = load_pricing_ui(AppTest)
     _navigate_to_section(at, section)
     assert_no_exceptions(at, context=f"render '{section}' section without prior pricing run")
+    if section == "excel_replicator":
+        empty_state_messages = [info.value for info in at.info]
+        assert (
+            "Run pricing first in the Pricing Run section to populate the Excel Replicator."
+            in empty_state_messages
+        )
 
 
 # ---------------------------------------------------------------------------

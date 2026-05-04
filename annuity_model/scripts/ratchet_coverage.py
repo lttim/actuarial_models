@@ -40,7 +40,9 @@ Exit codes
 from __future__ import annotations
 
 import argparse
-import subprocess
+
+# Reviewed: coverage ratchet invokes caller-selected local coverage command with shell=False.
+import subprocess  # nosec B404
 import sys
 import tomllib
 from pathlib import Path
@@ -84,7 +86,8 @@ def _measure_actual(coverage_cmd: list[str]) -> float:
     matter how low coverage drops.
     """
     try:
-        proc = subprocess.run(
+        # Reviewed: local coverage command vector is extended with fixed report arguments.
+        proc = subprocess.run(  # nosec B603
             [*coverage_cmd, "report", "--format=total", "--fail-under=0"],
             check=False,
             capture_output=True,
