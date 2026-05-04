@@ -10,8 +10,8 @@ pytest-html==4.2.0
 # formatting (black-compatible output, no double-formatter conflict).
 # When bumping ruff or mypy, also bump the matching `rev:` in
 # .pre-commit-config.yaml so local pre-commit and CI use the same checker.
-ruff==0.15.11
-mypy==1.20.1
+ruff==0.15.12
+mypy==1.20.2
 
 # Documentation site (mkdocs --serve / GitHub Pages deploy)
 mkdocs==1.6.1
@@ -20,7 +20,7 @@ mkdocstrings[python]==1.0.4
 pymdown-extensions==10.21.2
 
 # Property tests + perf gates + mutation pilot (P4)
-hypothesis==6.152.1
+hypothesis==6.152.4
 pytest-benchmark==5.2.3
 pytest-cov==7.1.0
 mutmut==3.5.0
