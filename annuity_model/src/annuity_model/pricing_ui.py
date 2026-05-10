@@ -38,7 +38,10 @@ from annuity_model import pricing_projection as sp
 from annuity_model import rila_projection as rp
 from annuity_model import term_projection as tp
 from annuity_model.alm_excel_ladder import ALM_ENGINE_SHEET
-from annuity_model.assumption_provenance import provenance_rows_from_pricing_state
+from annuity_model.assumption_provenance import (
+    assumption_evidence_summary,
+    provenance_rows_from_pricing_state,
+)
 from annuity_model.build_portfolio_excel_workbook import build_portfolio_workbook_bytes
 from annuity_model.build_pricing_excel_workbook import (
     ALM_ENGINE_FIELD_GUIDE_SHEET,
@@ -108,7 +111,7 @@ from annuity_model.products.rila.ui import (
     build_rila_contract_from_session,
     render_rila_pricing_controls,
 )
-from annuity_model.run_ledger import pricing_run_summary
+from annuity_model.run_ledger import default_ledger_path, pricing_run_summary, record_pricing_run
 from annuity_model.scenario_catalog import PricingScenario, list_pricing_scenarios
 from annuity_model.test_dashboard import render_unit_tests_page
 from annuity_model.ui.app_shell import configure_pricing_page, render_sidebar_shell
@@ -207,6 +210,7 @@ def _refresh_pricing_excel_workbook_in_session() -> None:
             mc_snapshot=mc_snap,
             alm_snapshot=alm_snap,
             alm_assumptions=alm_asm if isinstance(alm_asm, sp.ALMAssumptions) else None,
+            run_summary=st.session_state.get("pricing_run_summary"),
         )
         st.session_state["pricing_xlsx_has_mc"] = mc_snap is not None
         st.session_state["pricing_xlsx_has_alm"] = alm_snap is not None
@@ -1337,6 +1341,51 @@ def _active_provenance_rows() -> list[dict[str, Any]]:
     )
 
 
+def _default_pricing_provenance_rows() -> list[dict[str, Any]]:
+    return provenance_rows_from_pricing_state(
+        pricing_meta={
+            "yield_mode": "par_bootstrap",
+            "mortality_mode": "rp2014_mp2016",
+            "expense_mode": "csv",
+        },
+        pricing_run_inputs={},
+        pricing_excel_context={},
+    )
+
+
+def _portfolio_provenance_rows() -> list[dict[str, Any]]:
+    rows = _active_provenance_rows()
+    return rows if rows else _default_pricing_provenance_rows()
+
+
+def _record_summary_to_ledger(
+    summary: dict[str, Any],
+    *,
+    state_prefix: str,
+) -> dict[str, Any] | None:
+    ledger_path = default_ledger_path(PROJECT_ROOT)
+    try:
+        stored = record_pricing_run(ledger_path, summary)
+    except Exception as exc:  # noqa: BLE001 -- evidence persistence must not hide pricing output
+        st.session_state[f"{state_prefix}_ledger_error"] = f"{type(exc).__name__}: {exc}"
+        st.session_state.pop(f"{state_prefix}_ledger_path", None)
+        st.session_state.pop(f"{state_prefix}_ledger_record", None)
+        return None
+    st.session_state[f"{state_prefix}_ledger_path"] = str(ledger_path)
+    st.session_state[f"{state_prefix}_ledger_record"] = stored
+    st.session_state.pop(f"{state_prefix}_ledger_error", None)
+    return stored
+
+
+def _render_ledger_status(state_prefix: str) -> None:
+    ledger_error = st.session_state.get(f"{state_prefix}_ledger_error")
+    ledger_path = st.session_state.get(f"{state_prefix}_ledger_path")
+    if ledger_error:
+        st.warning(f"Run ledger persistence failed: {ledger_error}")
+    elif ledger_path:
+        st.caption(f"Run ledger recorded: `{ledger_path}`")
+
+
 def _render_assumption_provenance_panel() -> None:
     rows = _active_provenance_rows()
     if not rows:
@@ -1367,6 +1416,12 @@ def _render_assumption_provenance_panel() -> None:
         st.warning(
             "One or more assumptions are provisional or waiver-controlled. This is visible by design for demo governance."
         )
+    evidence = assumption_evidence_summary(rows)
+    st.caption(
+        "Assumption evidence status: "
+        f"{evidence['waiver_status']} "
+        f"({len(evidence['waiver_required_artifacts'])} waiver-controlled artifact(s))."
+    )
 
 
 def _build_current_pricing_run_summary(*, scenario_id: str = "base") -> dict[str, Any] | None:
@@ -1375,15 +1430,60 @@ def _build_current_pricing_run_summary(*, scenario_id: str = "base") -> dict[str
     if res is None:
         return None
     product_raw = str(meta.get("product_type", ProductType.SPIA.value))
-    run_id = f"pricing-{int(st.session_state.get('pricing_run_id', 0)):04d}"
+    run_id = str(
+        st.session_state.get("pricing_run_ledger_run_id")
+        or f"pricing-{int(st.session_state.get('pricing_run_id', 0)):04d}"
+    )
+    rows = _active_provenance_rows()
+    evidence = assumption_evidence_summary(rows)
     return pricing_run_summary(
         run_id=run_id,
         product=product_raw,
         scenario_id=scenario_id,
-        assumption_artifacts=_active_provenance_rows(),
+        assumption_artifacts=rows,
         input_payload=st.session_state.get("pricing_run_inputs") or {},
         output_metrics=_pricing_metrics_dict(res),
         parity_status="ModelCheck snapshot prepared",
+        validation_status="workbook_validated",
+        waiver_status=str(evidence["waiver_status"]),
+        assumption_evidence=evidence,
+        metadata={"source": "streamlit_pricing_run"},
+    )
+
+
+def _build_portfolio_run_summary(
+    res: PortfolioResult,
+    *,
+    scenario_id: str = "portfolio_base",
+    source: str,
+) -> dict[str, Any]:
+    run_id = str(
+        st.session_state.get("portfolio_run_ledger_run_id")
+        or f"portfolio-{int(st.session_state.get(PORTFOLIO_KEY.RUN_ID, 0)):04d}"
+    )
+    rows = _portfolio_provenance_rows()
+    evidence = assumption_evidence_summary(rows)
+    summary_payload = portfolio_result_to_summary_dict(res)
+    product_counts = {
+        pt.value: scal.policy_count for pt, scal in res.product_type_scalar_rollups.items()
+    }
+    return pricing_run_summary(
+        run_id=run_id,
+        product="portfolio",
+        scenario_id=scenario_id,
+        assumption_artifacts=rows,
+        input_payload={
+            "source": source,
+            "upload_name": st.session_state.get(PORTFOLIO_KEY.UPLOAD_NAME),
+            "n_policies": len(res.policy_results),
+            "product_counts": product_counts,
+        },
+        output_metrics=summary_payload,
+        parity_status="Portfolio workbook ModelCheck prepared",
+        validation_status="workbook_validated",
+        waiver_status=str(evidence["waiver_status"]),
+        assumption_evidence=evidence,
+        metadata={"source": f"streamlit_{source}"},
     )
 
 
@@ -3577,6 +3677,9 @@ def _render_run_and_results() -> None:
             st.session_state["pricing_contract"] = contract
             st.session_state["pricing_product_type"] = selected_product.value
             st.session_state["pricing_run_id"] = int(st.session_state.get("pricing_run_id", 0)) + 1
+            st.session_state["pricing_run_ledger_run_id"] = (
+                f"pricing-{int(st.session_state['pricing_run_id']):04d}-{uuid.uuid4().hex[:12]}"
+            )
             st.session_state["pricing_err"] = None
             st.session_state["pricing_meta"] = {
                 "product_type": selected_product.value,
@@ -3685,11 +3788,15 @@ def _render_run_and_results() -> None:
                 st.session_state.pop("pricing_mc", None)
                 st.session_state.pop("pricing_mc_params", None)
 
-            # --- Excel workbook (built after MC so MC_Summary sheet can be included) ---
-            _refresh_pricing_excel_workbook_in_session()
             st.session_state["pricing_run_summary"] = _build_current_pricing_run_summary(
                 scenario_id="base"
             )
+            _record_summary_to_ledger(
+                st.session_state["pricing_run_summary"],
+                state_prefix="pricing_run",
+            )
+            # --- Excel workbook (built after MC so MC_Summary + run evidence can be included) ---
+            _refresh_pricing_excel_workbook_in_session()
         except Exception as e:
             _clear_dependent_state_on_pricing_change()
             st.session_state["pricing_err"] = f"{type(e).__name__}: {e}"
@@ -3704,6 +3811,10 @@ def _render_run_and_results() -> None:
             st.session_state.pop("pricing_xlsx_has_mc", None)
             st.session_state.pop("pricing_xlsx_has_alm", None)
             st.session_state.pop("pricing_run_summary", None)
+            st.session_state.pop("pricing_run_ledger_run_id", None)
+            st.session_state.pop("pricing_run_ledger_path", None)
+            st.session_state.pop("pricing_run_ledger_record", None)
+            st.session_state.pop("pricing_run_ledger_error", None)
 
     err = st.session_state.get("pricing_err")
     res = st.session_state.get("pricing_res")
@@ -3733,7 +3844,8 @@ def _render_run_and_results() -> None:
         )
         with st.expander("Assumption provenance", expanded=False):
             _render_assumption_provenance_panel()
-        with st.expander("Run summary / replay fingerprint", expanded=False):
+        with st.expander("Run ledger / replay fingerprint", expanded=False):
+            _render_ledger_status("pricing_run")
             st.json(st.session_state.get("pricing_run_summary") or {}, expanded=False)
         mc_res = st.session_state.get("pricing_mc")
         if mc_res is not None:
@@ -5899,7 +6011,18 @@ def _render_portfolio_section() -> None:
                         st.session_state[PORTFOLIO_KEY.RUN_ID] = (
                             int(st.session_state.get(PORTFOLIO_KEY.RUN_ID, 0)) + 1
                         )
+                        st.session_state["portfolio_run_ledger_run_id"] = (
+                            f"portfolio-{int(st.session_state[PORTFOLIO_KEY.RUN_ID]):04d}-{uuid.uuid4().hex[:12]}"
+                        )
                         st.session_state[PORTFOLIO_KEY.UPLOAD_NAME] = "scratch_table.csv"
+                        st.session_state["portfolio_run_summary"] = _build_portfolio_run_summary(
+                            res,
+                            source="scratch_table",
+                        )
+                        _record_summary_to_ledger(
+                            st.session_state["portfolio_run_summary"],
+                            state_prefix="portfolio_run",
+                        )
                         st.success("Portfolio pricing completed (from table).")
                         if alm_skip_msg:
                             st.warning(alm_skip_msg)
@@ -5925,7 +6048,18 @@ def _render_portfolio_section() -> None:
                 st.session_state[PORTFOLIO_KEY.RUN_ID] = (
                     int(st.session_state.get(PORTFOLIO_KEY.RUN_ID, 0)) + 1
                 )
+                st.session_state["portfolio_run_ledger_run_id"] = (
+                    f"portfolio-{int(st.session_state[PORTFOLIO_KEY.RUN_ID]):04d}-{uuid.uuid4().hex[:12]}"
+                )
                 st.session_state[PORTFOLIO_KEY.UPLOAD_NAME] = getattr(up, "name", "inforce.csv")
+                st.session_state["portfolio_run_summary"] = _build_portfolio_run_summary(
+                    res,
+                    source="csv_upload",
+                )
+                _record_summary_to_ledger(
+                    st.session_state["portfolio_run_summary"],
+                    state_prefix="portfolio_run",
+                )
                 st.success("Portfolio pricing completed.")
                 if alm_skip_msg:
                     st.warning(alm_skip_msg)
@@ -5936,6 +6070,10 @@ def _render_portfolio_section() -> None:
     if res is not None:
         summ = portfolio_result_to_summary_dict(res)
         st.json(summ, expanded=False)
+        _render_ledger_status("portfolio_run")
+        if st.session_state.get("portfolio_run_summary") is not None:
+            with st.expander("Portfolio run ledger / assumption evidence", expanded=False):
+                st.json(st.session_state["portfolio_run_summary"], expanded=False)
         scen_last = st.session_state.get(PORTFOLIO_KEY.LAST_SCENARIO)
         expenses_last = scen_last.expenses if isinstance(scen_last, RunScenario) else None
         _render_portfolio_liability_projection_chart(res)
@@ -5966,7 +6104,10 @@ def _render_portfolio_section() -> None:
                         "single_premium": float(sp) if sp is not None else None,
                     }
                 )
-        xlsx = build_portfolio_workbook_bytes(res)
+        xlsx = build_portfolio_workbook_bytes(
+            res,
+            run_summary=st.session_state.get("portfolio_run_summary"),
+        )
         st.download_button(
             "Download portfolio workbook",
             data=xlsx,

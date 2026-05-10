@@ -29,6 +29,7 @@ def _summary(run_id: str = "pricing-0001", *, product: str = "spia") -> dict[str
         output_paths=["/tmp/demo.xlsx"],
         validation_status="passed",
         waiver_status="not_required",
+        assumption_evidence={"waiver_status": "not_required", "artifact_count": 1},
         model_version="demo-v1",
         git_commit="abcdef0",
         metadata={"source": "unit-test"},
@@ -53,6 +54,7 @@ def test_pricing_run_summary_keeps_existing_shape_and_optional_audit_fields() ->
     enriched = _summary()
     assert enriched["output_paths"] == ["/tmp/demo.xlsx"]
     assert enriched["validation_status"] == "passed"
+    assert enriched["assumption_evidence"]["artifact_count"] == 1
     assert enriched["metadata"] == {"source": "unit-test"}
 
 

@@ -37,6 +37,7 @@ def pricing_run_summary(
     output_paths: list[str] | None = None,
     validation_status: str | None = None,
     waiver_status: str | None = None,
+    assumption_evidence: Mapping[str, Any] | None = None,
     model_version: str | None = None,
     git_commit: str | None = None,
     metadata: Mapping[str, Any] | None = None,
@@ -58,6 +59,8 @@ def pricing_run_summary(
         summary["validation_status"] = validation_status
     if waiver_status is not None:
         summary["waiver_status"] = waiver_status
+    if assumption_evidence is not None:
+        summary["assumption_evidence"] = dict(assumption_evidence)
     if model_version is not None:
         summary["model_version"] = model_version
     if git_commit is not None:
@@ -274,6 +277,8 @@ def _normalize_summary(summary: Mapping[str, Any]) -> dict[str, Any]:
         normalized["output_paths"] = [str(path) for path in normalized["output_paths"]]
     if "metadata" in normalized:
         normalized["metadata"] = dict(normalized["metadata"])
+    if "assumption_evidence" in normalized:
+        normalized["assumption_evidence"] = dict(normalized["assumption_evidence"])
     return normalized
 
 

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import io
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from openpyxl import Workbook
@@ -14,6 +16,7 @@ from annuity_model.excel_workbook_validator import validate_workbook_or_raise
 from annuity_model.liability_dispatch import liability_path_for
 from annuity_model.portfolio import PortfolioResult, ProductTypeRollupScalars
 from annuity_model.product_registry import ProductType
+from annuity_model.workbook_run_evidence import write_run_evidence_sheets
 
 
 def _sorted_product_types(rollups: dict[ProductType, object]) -> tuple[ProductType, ...]:
@@ -36,7 +39,11 @@ def _policy_cf_rows(policy_results: list[object], n_months: int) -> list[list[fl
     return rows
 
 
-def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
+def build_portfolio_workbook_bytes(
+    res: PortfolioResult,
+    *,
+    run_summary: Mapping[str, Any] | None = None,
+) -> bytes:
     """Create an .xlsx with ``PolicyCashflows`` grid, formula-linked ``LiabilityAggregate`` total, and ``ModelCheck``."""
     wb = Workbook()
     # --- Inputs ---
@@ -188,15 +195,21 @@ def build_portfolio_workbook_bytes(res: PortfolioResult) -> bytes:
         "ALM is not embedded here (v1); run ALM from the app or CLI on the aggregate path."
     )
 
+    write_run_evidence_sheets(wb, run_summary)
     validate_workbook_or_raise(wb)
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
 
 
-def build_portfolio_workbook_to_path(res: PortfolioResult, out_path: str | Path) -> Path:
+def build_portfolio_workbook_to_path(
+    res: PortfolioResult,
+    out_path: str | Path,
+    *,
+    run_summary: Mapping[str, Any] | None = None,
+) -> Path:
     p = Path(out_path)
-    p.write_bytes(build_portfolio_workbook_bytes(res))
+    p.write_bytes(build_portfolio_workbook_bytes(res, run_summary=run_summary))
     return p
 
 

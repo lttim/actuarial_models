@@ -106,7 +106,7 @@ def test_diagnostics_payload_builder_covers_pricing_and_empty_optional_sections(
         sys.path.insert(0, str(SRC_ROOT))
     from annuity_model.ui.diagnostics import (  # noqa: PLC0415
         DiagnosticsBuilders,
-        MissingDiagnosticsInput,
+        MissingDiagnosticsInputError,
         build_diagnostics_payload,
     )
 
@@ -130,7 +130,7 @@ def test_diagnostics_payload_builder_covers_pricing_and_empty_optional_sections(
 
     try:
         build_diagnostics_payload({}, builders=builders)
-    except MissingDiagnosticsInput:
+    except MissingDiagnosticsInputError:
         pass
     else:
         raise AssertionError("missing pricing inputs should block diagnostics payload")
@@ -141,6 +141,7 @@ def test_diagnostics_payload_builder_covers_pricing_and_empty_optional_sections(
             "pricing_contract": "contract",
             "pricing_run_id": "run-1",
             "pricing_meta": {"product_type": "spia"},
+            "pricing_run_ledger_path": "/tmp/run_ledger.sqlite3",
             "pricing_excel_context": {
                 "yield_curve": "curve",
                 "mortality": "mortality",
@@ -154,6 +155,7 @@ def test_diagnostics_payload_builder_covers_pricing_and_empty_optional_sections(
 
     assert payload["exported_at_utc"] == "2026-05-10T12:00:00Z"
     assert payload["pricing"]["include_full"] is True
+    assert payload["run_ledger"]["path"] == "/tmp/run_ledger.sqlite3"
     assert payload["pricing_inputs"]["yield_curve"] == {"yield_curve": "curve"}
     assert math.isnan(payload["pricing_inputs"]["expenses"]["premium_expense_rate"])
     assert payload["assumption_provenance"] == [{"source": "fixture"}]

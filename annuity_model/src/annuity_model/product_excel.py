@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast
@@ -32,6 +32,7 @@ from annuity_model.build_va_excel_workbook import VAExcelBuildSpec, build_va_wor
 from annuity_model.build_vul_excel_workbook import VULExcelBuildSpec, build_vul_workbook_from_spec
 from annuity_model.build_wl_excel_workbook import WLExcelBuildSpec, build_wl_workbook_from_spec
 from annuity_model.product_registry import ProductType
+from annuity_model.workbook_run_evidence import add_run_evidence_to_workbook_bytes
 
 # Per-product workbook builder. The signature accepts the union of all
 # kwargs the dispatcher might pass; individual builders pull what they need
@@ -309,6 +310,7 @@ def build_product_workbook(
     mc_snapshot: MCExcelSnapshot | None = None,
     alm_snapshot: ALMExcelSnapshot | None = None,
     alm_assumptions: sp.ALMAssumptions | None = None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     from annuity_model.products import get_product_definition
 
@@ -326,7 +328,7 @@ def build_product_workbook(
             f"{product_type.value} workbook builder requires {expected_spec.__name__}, "
             f"got {type(spec).__name__}."
         )
-    return builder(
+    raw = builder(
         spec=spec,
         out_path=out_path,
         python_snapshot=python_snapshot,
@@ -334,3 +336,4 @@ def build_product_workbook(
         alm_snapshot=alm_snapshot,
         alm_assumptions=alm_assumptions,
     )
+    return add_run_evidence_to_workbook_bytes(raw, run_summary)

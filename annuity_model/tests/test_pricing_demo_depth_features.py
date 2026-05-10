@@ -4,6 +4,7 @@ import numpy as np
 
 from annuity_model.assumption_provenance import (
     approvals_as_dicts,
+    assumption_evidence_summary,
     provenance_rows_from_pricing_state,
 )
 from annuity_model.dynamic_lapse import (
@@ -46,6 +47,9 @@ def test_assumption_provenance_surfaces_registry_and_governance_metadata() -> No
     assert "treasury_zero_curve" in names
     assert "rp2014_male_healthy_annuitant_qx" in names
     assert all("status" in r for r in rows)
+    evidence = assumption_evidence_summary(rows)
+    assert evidence["waiver_status"] == "waiver_present"
+    assert "expenses_assumptions_us_placeholders" in evidence["waiver_required_artifacts"]
 
 
 def test_run_summary_hash_is_stable_and_changes_with_inputs() -> None:

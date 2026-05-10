@@ -10,7 +10,9 @@ from typing import Any
 from annuity_model.data_registry import REGISTRY, DataArtifact
 
 ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = ROOT.parents[1]
 APPROVALS_PATH = ROOT / "data" / "assumptions" / "assumption_approvals.json"
+WAIVER_PATH = PROJECT_ROOT / ".release" / "assumption_waiver.md"
 _BY_NAME: dict[str, DataArtifact] = {a.name: a for a in REGISTRY}
 
 
@@ -214,8 +216,32 @@ def approvals_as_dicts() -> list[dict[str, Any]]:
     return [asdict(a) for a in _load_approvals().values()]
 
 
+def assumption_evidence_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return waiver status and artifact counts for ledger/workbook evidence."""
+    waiver_required = [
+        row
+        for row in rows
+        if bool(row.get("requires_waiver_for_release"))
+        or str(row.get("status", "")).lower() in {"provisional", "unregistered"}
+    ]
+    if waiver_required:
+        waiver_status = "waiver_present" if WAIVER_PATH.is_file() else "waiver_missing"
+    else:
+        waiver_status = "not_required"
+    return {
+        "waiver_status": waiver_status,
+        "waiver_path": str(WAIVER_PATH),
+        "waiver_present": WAIVER_PATH.is_file(),
+        "waiver_required_artifacts": [
+            str(row.get("artifact_name", "")) for row in waiver_required if row.get("artifact_name")
+        ],
+        "artifact_count": len(rows),
+    }
+
+
 __all__ = [
     "AssumptionApproval",
+    "assumption_evidence_summary",
     "approvals_as_dicts",
     "provenance_rows_from_pricing_state",
 ]

@@ -648,5 +648,28 @@ def test_portfolio_workbook_passes_strict_validation() -> None:
     sex = "female" if str(policies[0].contract.sex).lower() == "female" else "male"
     scen = run_scenario_for_portfolio_policies({}, policies, sex=sex, repo_root=ANN_MODEL_ROOT)
     res = run_portfolio(portfolio=Portfolio(policies=policies), scenario=scen)
-    raw = build_portfolio_workbook_bytes(res)
+    run_summary = {
+        "run_id": "portfolio-test-0001",
+        "product": "portfolio",
+        "scenario_id": "portfolio_base",
+        "created_at": "2026-05-10T00:00:00Z",
+        "input_hash": "abc",
+        "parity_status": "prepared",
+        "waiver_status": "waiver_present",
+        "assumption_artifacts": [
+            {
+                "role": "Expenses",
+                "mode": "csv",
+                "artifact_name": "expenses_assumptions_us_placeholders",
+                "status": "provisional",
+                "requires_waiver_for_release": True,
+            }
+        ],
+        "output_metrics": {"n_policies": len(res.policy_results)},
+    }
+    raw = build_portfolio_workbook_bytes(res, run_summary=run_summary)
     _validate_xlsx_bytes(raw)
+    wb = load_workbook(io.BytesIO(raw), data_only=False)
+    assert "RunLedger" in wb.sheetnames
+    assert "AssumptionEvidence" in wb.sheetnames
+    assert wb["RunLedger"]["B3"].value == "portfolio-test-0001"

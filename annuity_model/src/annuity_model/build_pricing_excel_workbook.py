@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import math
 import zipfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
@@ -21,6 +22,7 @@ from annuity_model.alm_excel_ladder import ALM_ENGINE_SHEET, write_alm_engine_sh
 from annuity_model.recalc_excel_shared import (
     write_monthly_curve_logdf as _write_monthly_curve_logdf_sheet,
 )
+from annuity_model.workbook_run_evidence import write_run_evidence_sheets
 
 BASE_DIR = Path(__file__).resolve().parent
 OUT_XLSX = BASE_DIR / "pricing_projection_model.xlsx"
@@ -1110,6 +1112,7 @@ def build_workbook_from_spec(
     alm_assumptions: sp.ALMAssumptions | None = None,
     alm_engine_step_months: int = ALM_ENGINE_STEP_MONTHS,
     alm_excel_path_month_cap: int | None = ALM_EXCEL_PATH_MONTH_CAP,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> Path | bytes:
     """
     Write a workbook to `out_path`. If `out_path` is None, return the file as bytes (for downloads).
@@ -1202,6 +1205,7 @@ def build_workbook_from_spec(
     if mc_snapshot is not None:
         _write_mc_summary_sheet(wb, mc_snapshot)
 
+    write_run_evidence_sheets(wb, run_summary)
     _prune_blank_default_worksheets(wb)
 
     from annuity_model.excel_workbook_validator import validate_workbook_or_raise

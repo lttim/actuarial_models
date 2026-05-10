@@ -80,6 +80,4 @@ def render_product_readiness_summary(st_mod: Any) -> None:
     """Render a compact readiness inventory for the overview page."""
     st_mod.subheader("Product readiness")
     for status in product_statuses():
-        st_mod.markdown(
-            f"- **{status.display_name}**: " + " · ".join(badges_for_status(status))
-        )
+        st_mod.markdown(f"- **{status.display_name}**: " + " · ".join(badges_for_status(status)))

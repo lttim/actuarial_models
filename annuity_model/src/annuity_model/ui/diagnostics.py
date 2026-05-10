@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-class MissingDiagnosticsInput(RuntimeError):
+class MissingDiagnosticsInputError(RuntimeError):
     """Raised when no pricing run is available for diagnostics export."""
 
 
@@ -34,9 +34,7 @@ def _expense_assumptions_to_dict(expense: Any) -> dict[str, float]:
     return {
         "policy_expense_dollars": float(getattr(expense, "policy_expense_dollars", float("nan"))),
         "premium_expense_rate": float(getattr(expense, "premium_expense_rate", float("nan"))),
-        "monthly_expense_dollars": float(
-            getattr(expense, "monthly_expense_dollars", float("nan"))
-        ),
+        "monthly_expense_dollars": float(getattr(expense, "monthly_expense_dollars", float("nan"))),
     }
 
 
@@ -56,7 +54,7 @@ def build_diagnostics_payload(
     pricing_res = state.get("pricing_res")
     pricing_contract = state.get("pricing_contract")
     if pricing_res is None or pricing_contract is None:
-        raise MissingDiagnosticsInput("Run Pricing Run first to populate diagnostics.")
+        raise MissingDiagnosticsInputError("Run Pricing Run first to populate diagnostics.")
 
     pricing_excel_context = state.get("pricing_excel_context") or {}
     ctx_yc = pricing_excel_context.get("yield_curve")
@@ -70,6 +68,11 @@ def build_diagnostics_payload(
         "pricing_meta": state.get("pricing_meta") or {},
         "pricing_run_inputs": state.get("pricing_run_inputs") or {},
         "pricing_run_summary": state.get("pricing_run_summary") or {},
+        "run_ledger": {
+            "path": state.get("pricing_run_ledger_path"),
+            "error": state.get("pricing_run_ledger_error"),
+            "record": state.get("pricing_run_ledger_record"),
+        },
         "assumption_provenance": builders.active_provenance_rows(),
         "pricing": builders.pricing_result_to_dict(
             pricing_res,
@@ -105,11 +108,7 @@ def build_diagnostics_payload(
     if builders.is_alm_result(alm_last) and alm_run_id == current_pricing_run_id:
         payload["alm"] = builders.alm_result_to_dict(
             alm_last,
-            (
-                alm_last_assumptions
-                if builders.is_alm_assumptions(alm_last_assumptions)
-                else None
-            ),
+            (alm_last_assumptions if builders.is_alm_assumptions(alm_last_assumptions) else None),
             include_buckets=include_alm_buckets,
             include_full=include_full_paths,
         )
@@ -155,10 +154,7 @@ def _populate_what_if_payload(
         whatif_run_id != current_pricing_run_id
         or what_if_shocked_res is None
         or what_if_base_res is None
-        or (
-            what_if_need_mc
-            and (what_if_baseline_mc is None or what_if_shocked_mc is None)
-        )
+        or (what_if_need_mc and (what_if_baseline_mc is None or what_if_shocked_mc is None))
     ):
         return
 
@@ -211,7 +207,7 @@ def render_diagnostics_export_sidebar(
                 builders=builders,
                 exported_at_utc=prepared_at,
             )
-        except MissingDiagnosticsInput as exc:
+        except MissingDiagnosticsInputError as exc:
             st_mod.warning(str(exc))
         else:
             session_state["diagnostics_json_bytes"] = json.dumps(

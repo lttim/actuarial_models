@@ -357,6 +357,13 @@ def test_run_pricing_button_populates_session_result(
         f"{product_label} run did not write pricing_meta; the metadata "
         "panel and the Excel Replicator both depend on it."
     )
+    ledger_path = _session_get(at, "pricing_run_ledger_path")
+    ledger_record = _session_get(at, "pricing_run_ledger_record")
+    assert ledger_path and Path(str(ledger_path)).is_file(), (
+        f"{product_label} pricing run did not persist the default SQLite run ledger."
+    )
+    assert isinstance(ledger_record, dict)
+    assert ledger_record["waiver_status"] in {"not_required", "waiver_present"}
 
 
 # ---------------------------------------------------------------------------
@@ -569,7 +576,15 @@ def test_portfolio_section_upload_run_and_workbook(
     wf_ms = [w for w in at.multiselect if str(w.key).startswith("portfolio_wf_series_")]
     assert wf_ms, "portfolio waterfall multiselect missing"
 
-    xlsx = build_portfolio_workbook_bytes(pres)
+    portfolio_summary = _session_get(at, "portfolio_run_summary")
+    portfolio_ledger_path = _session_get(at, "portfolio_run_ledger_path")
+    assert isinstance(portfolio_summary, dict), "portfolio_run_summary not populated"
+    assert portfolio_ledger_path and Path(str(portfolio_ledger_path)).is_file()
+    assert portfolio_summary["waiver_status"] in {"not_required", "waiver_present"}
+
+    xlsx = build_portfolio_workbook_bytes(pres, run_summary=portfolio_summary)
     wb = load_workbook(io.BytesIO(bytes(xlsx)), data_only=False)
+    assert "RunLedger" in wb.sheetnames
+    assert "AssumptionEvidence" in wb.sheetnames
     issues = validate_workbook(wb, strict=True)
     assert issues == [], f"portfolio workbook failed validation: {issues[:5]}"
