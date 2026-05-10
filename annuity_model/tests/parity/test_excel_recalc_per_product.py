@@ -53,23 +53,23 @@ import numpy as np
 import pytest
 from openpyxl import load_workbook
 
-import pricing_projection as sp
-import rila_projection as rp
-import term_projection as tp
-from build_pricing_excel_workbook import (
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model import term_projection as tp
+from annuity_model.build_pricing_excel_workbook import (
     ExcelPythonSnapshot,
     build_workbook_from_spec,
     excel_spec_from_launcher,
 )
-from build_rila_excel_workbook import (
+from annuity_model.build_rila_excel_workbook import (
     build_rila_workbook_from_spec,
     rila_excel_spec_from_launcher,
 )
-from build_term_excel_workbook import (
+from annuity_model.build_term_excel_workbook import (
     build_term_workbook_from_spec,
     term_excel_spec_from_launcher,
 )
-from parity_constants import MODELCHECK_TOL, RILA_PV_TOL, TERM_MODELCHECK_TOL
+from annuity_model.parity_constants import MODELCHECK_TOL, RILA_PV_TOL, TERM_MODELCHECK_TOL
 
 pytestmark = [pytest.mark.parity]
 
@@ -320,12 +320,12 @@ def _make_rila_case() -> ProductRecalcCase:
 
 def _make_myga_case() -> ProductRecalcCase:
     """MYGA: 5y workbook with deterministic accumulation."""
-    import myga_projection as my
-    from build_myga_excel_workbook import (
+    from annuity_model import myga_projection as my
+    from annuity_model.build_myga_excel_workbook import (
         build_myga_workbook_from_spec,
         myga_excel_spec_from_launcher,
     )
-    from parity_constants import MYGA_PV_TOL
+    from annuity_model.parity_constants import MYGA_PV_TOL
 
     contract = my.MYGAContract(
         issue_age=60,
@@ -382,12 +382,12 @@ def _make_myga_case() -> ProductRecalcCase:
 
 
 def _make_fia_case() -> ProductRecalcCase:
-    import fia_projection as fp
-    from build_fia_excel_workbook import (
+    from annuity_model import fia_projection as fp
+    from annuity_model.build_fia_excel_workbook import (
         build_fia_workbook_from_spec,
         fia_excel_spec_from_launcher,
     )
-    from parity_constants import FIA_PV_TOL
+    from annuity_model.parity_constants import FIA_PV_TOL
 
     contract = fp.FIAContract(
         issue_age=60,
@@ -458,12 +458,12 @@ def _make_fia_case() -> ProductRecalcCase:
 
 
 def _make_va_case() -> ProductRecalcCase:
-    import va_projection as va
-    from build_va_excel_workbook import (
+    from annuity_model import va_projection as va
+    from annuity_model.build_va_excel_workbook import (
         build_va_workbook_from_spec,
         va_excel_spec_from_launcher,
     )
-    from parity_constants import VA_PV_TOL
+    from annuity_model.parity_constants import VA_PV_TOL
 
     contract = va.VAContract(
         issue_age=55,
@@ -527,12 +527,12 @@ def _make_va_case() -> ProductRecalcCase:
 
 
 def _make_wl_case() -> ProductRecalcCase:
-    import wl_projection as wl
-    from build_wl_excel_workbook import (
+    from annuity_model import wl_projection as wl
+    from annuity_model.build_wl_excel_workbook import (
         build_wl_workbook_from_spec,
         wl_excel_spec_from_launcher,
     )
-    from parity_constants import WL_PV_TOL
+    from annuity_model.parity_constants import WL_PV_TOL
 
     contract = wl.WLContract(
         issue_age=45,
@@ -588,12 +588,12 @@ def _make_wl_case() -> ProductRecalcCase:
 
 
 def _make_ul_case() -> ProductRecalcCase:
-    import ul_projection as ul_proj
-    from build_ul_excel_workbook import (
+    from annuity_model import ul_projection as ul_proj
+    from annuity_model.build_ul_excel_workbook import (
         build_ul_workbook_from_spec,
         ul_excel_spec_from_launcher,
     )
-    from parity_constants import UL_PV_TOL
+    from annuity_model.parity_constants import UL_PV_TOL
 
     contract = ul_proj.ULContract(
         issue_age=45,
@@ -649,12 +649,12 @@ def _make_ul_case() -> ProductRecalcCase:
 
 
 def _make_iul_case() -> ProductRecalcCase:
-    import iul_projection as iul_proj
-    from build_iul_excel_workbook import (
+    from annuity_model import iul_projection as iul_proj
+    from annuity_model.build_iul_excel_workbook import (
         build_iul_workbook_from_spec,
         iul_excel_spec_from_launcher,
     )
-    from parity_constants import IUL_PV_TOL
+    from annuity_model.parity_constants import IUL_PV_TOL
 
     contract = iul_proj.IULContract(
         issue_age=45,
@@ -725,12 +725,12 @@ def _make_iul_case() -> ProductRecalcCase:
 
 
 def _make_vul_case() -> ProductRecalcCase:
-    import vul_projection as vul_proj
-    from build_vul_excel_workbook import (
+    from annuity_model import vul_projection as vul_proj
+    from annuity_model.build_vul_excel_workbook import (
         build_vul_workbook_from_spec,
         vul_excel_spec_from_launcher,
     )
-    from parity_constants import VUL_PV_TOL
+    from annuity_model.parity_constants import VUL_PV_TOL
 
     contract = vul_proj.VULContract(
         issue_age=45,
@@ -934,7 +934,7 @@ def test_every_implemented_product_has_a_recalc_case() -> None:
     for it. Without this guard, a new product could ship to users
     without a single Python<->Excel parity assertion.
     """
-    from product_registry import implemented_product_types
+    from annuity_model.product_registry import implemented_product_types
 
     missing = [p.value for p in implemented_product_types() if p.value not in _CASE_BUILDERS]
     assert not missing, (

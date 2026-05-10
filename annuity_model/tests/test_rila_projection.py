@@ -3,9 +3,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import pricing_projection as sp
-import rila_projection as rp
-from policy_features import (
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model.policy_features import (
     GLWBRider,
     MonthlySchedule,
     SegmentAllocation,

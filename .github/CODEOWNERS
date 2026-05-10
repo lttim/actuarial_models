@@ -31,23 +31,23 @@
 # Any change to engine math, ALM ladder, or the Excel formula validator MUST
 # be reviewed by an actuarial owner. Documented in
 # annuity_model/docs/CODEOWNERS_RATIONALE.md (added in Phase 3).
-/annuity_model/pricing_projection.py            @lttim
-/annuity_model/term_projection.py               @lttim
-/annuity_model/rila_projection.py               @lttim
-/annuity_model/alm_excel_ladder.py              @lttim
-/annuity_model/excel_workbook_validator.py      @lttim
-/annuity_model/product_registry.py              @lttim
-/annuity_model/parity_constants.py              @lttim
+/annuity_model/src/annuity_model/pricing_projection.py            @lttim
+/annuity_model/src/annuity_model/term_projection.py               @lttim
+/annuity_model/src/annuity_model/rila_projection.py               @lttim
+/annuity_model/src/annuity_model/alm_excel_ladder.py              @lttim
+/annuity_model/src/annuity_model/excel_workbook_validator.py      @lttim
+/annuity_model/src/annuity_model/product_registry.py              @lttim
+/annuity_model/src/annuity_model/parity_constants.py              @lttim
 # TODO(second-owner): once @lttim/actuarial-reviewers exists, append it to
 # every parity-critical line above so branch protection actually requires
 # a second actuarial signoff on engine / ladder / validator changes.
 
 # Excel builders write the workbook structure that the validator gates.
-/annuity_model/build_pricing_excel_workbook.py  @lttim
-/annuity_model/build_term_excel_workbook.py     @lttim
-/annuity_model/build_rila_excel_workbook.py     @lttim
-/annuity_model/recalc_excel_shared.py           @lttim
-/annuity_model/product_excel.py                 @lttim
+/annuity_model/src/annuity_model/build_pricing_excel_workbook.py  @lttim
+/annuity_model/src/annuity_model/build_term_excel_workbook.py     @lttim
+/annuity_model/src/annuity_model/build_rila_excel_workbook.py     @lttim
+/annuity_model/src/annuity_model/recalc_excel_shared.py           @lttim
+/annuity_model/src/annuity_model/product_excel.py                 @lttim
 
 # --- Load-bearing internals (P0 hardening 2026-04) ---
 # These files were previously only covered by the catch-all `*` rule above
@@ -55,14 +55,14 @@
 # them can break parity, the UI, or the dispatch surface. Promoting them
 # to explicit lines means a CODEOWNERS-required review before merge and a
 # clear signal to reviewers that these paths are load-bearing.
-/annuity_model/liability_layouts.py             @lttim
-/annuity_model/liability_dispatch.py            @lttim
-/annuity_model/data_registry.py                 @lttim
-/annuity_model/pricing_ui.py                    @lttim
-/annuity_model/streamlit_app.py                 @lttim
-/annuity_model/pricing_run_form_state.py        @lttim
-/annuity_model/_logging.py                      @lttim
-/annuity_model/_observability.py                @lttim
+/annuity_model/src/annuity_model/liability_layouts.py             @lttim
+/annuity_model/src/annuity_model/liability_dispatch.py            @lttim
+/annuity_model/src/annuity_model/data_registry.py                 @lttim
+/annuity_model/src/annuity_model/pricing_ui.py                    @lttim
+/streamlit_app.py                               @lttim
+/annuity_model/src/annuity_model/pricing_run_form_state.py        @lttim
+/annuity_model/src/annuity_model/_logging.py                      @lttim
+/annuity_model/src/annuity_model/_observability.py                @lttim
 
 # Parity contracts and the parity test suite are the model's public guarantees.
 # Tightening or relaxing tolerances always needs an actuarial sign-off.

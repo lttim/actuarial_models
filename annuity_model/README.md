@@ -12,38 +12,23 @@ landed in the seven-product rollout
 
 ```
 annuity_model/
-├── __init__.py                    # public API surface (import from here)
-├── parity_constants.py            # single source of truth for tolerances
-├── _logging.py                    # structured logging
-├── liability_dispatch.py          # ProductType -> liability path conversion
-├── liability_layouts.py           # Excel column-letter registry per product
-├── product_registry.py            # ProductAdapter Protocol + dispatch
-├── excel_workbook_validator.py    # static formula validator (67 fns, AST-free)
-├── excel_builder_helpers.py       # shared builder utilities (public)
-├── pricing_projection.py          # SPIA pricing + ALM core engine
-├── term_projection.py             # Term Life pricing engine
-├── rila_projection.py             # RILA pricing engine
-├── myga_projection.py             # MYGA engine (Phase 1)
-├── fia_projection.py              # FIA engine (Phase 2)
-├── va_projection.py               # Variable Annuity engine (Phase 3)
-├── wl_projection.py               # Whole Life single-premium engine (Phase 4)
-├── ul_projection.py               # Universal Life single-premium engine (Phase 5)
-├── iul_projection.py              # Indexed UL engine (Phase 6)
-├── vul_projection.py              # Variable UL engine (Phase 7)
-├── lapse.py                       # static lapse / persistency framework (Phase 0)
-├── crediting.py                   # crediting strategies (RILA / FIA / IUL)
-├── account_value.py               # UL/IUL/VUL monthly AV cycle
-├── mortality_2017_cso.py          # 2017 CSO Ultimate placeholder loader
-├── actuarial_benchmarks.py        # per-product band constants
-├── alm_excel_ladder.py            # Excel ALM_Engine sheet generator
-├── build_*_excel_workbook.py      # 10 per-product workbook builders
-├── product_excel.py               # build_product_workbook dispatcher
-├── pricing_ui.py                  # Streamlit app (legacy monolith; see ui/MIGRATION.md)
-├── ui/                            # decomposition target for pricing_ui.py
-├── products/                      # per-product subpackages (10 of them)
-├── data/
-│   ├── mortality/cso_2017_ult/    # synthetic CSO 2017 Ultimate placeholder
-│   └── ...
+├── src/annuity_model/             # installable package
+│   ├── __init__.py                # public API surface (import from here)
+│   ├── parity_constants.py        # single source of truth for tolerances
+│   ├── _logging.py                # structured logging
+│   ├── liability_dispatch.py      # ProductType -> liability path conversion
+│   ├── liability_layouts.py       # Excel column-letter registry per product
+│   ├── product_registry.py        # ProductAdapter Protocol + dispatch
+│   ├── excel_workbook_validator.py
+│   ├── excel_builder_helpers.py
+│   ├── *_projection.py            # 10 product engines + ALM support
+│   ├── alm_excel_ladder.py
+│   ├── build_*_excel_workbook.py  # 10 per-product workbook builders
+│   ├── product_excel.py           # build_product_workbook dispatcher
+│   ├── pricing_ui.py              # Streamlit app (legacy monolith; see ui/MIGRATION.md)
+│   ├── ui/                        # decomposition target for pricing_ui.py
+│   ├── products/                  # per-product subpackages (10 of them)
+│   └── data/                      # packaged mortality, curves, scenarios
 ├── scripts/
 │   ├── deep_smoke.py              # end-to-end smoke (10 products, full validate)
 │   ├── parity_trace.py            # python-vs-excel CSV trace for parity debug
@@ -129,33 +114,36 @@ flowchart TD
 
 ## Adding a new product (FIA, VA-GLWB, ...) -- the 5-step walkthrough
 
-1. **Engine + adapter:** create `annuity_model/<product>_projection.py`
+1. **Engine + adapter:** create `annuity_model/src/annuity_model/<product>_projection.py`
    exposing `<Product>Contract`, `price_<product>(...)`, and a
    `liability_path_from_<product>_projection(...)` function. At module bottom,
    register the converter:
 
    ```python
-   from liability_dispatch import register_liability_path_converter
+   from annuity_model.liability_dispatch import register_liability_path_converter
    register_liability_path_converter("MyProductProjectionResult", liability_path_from_my_product_projection)
    ```
 
 2. **Excel builder + layout:** create
-   `annuity_model/build_<product>_excel_workbook.py`. Add the column letters to
+   `annuity_model/src/annuity_model/build_<product>_excel_workbook.py`. Add the column letters to
    `LIABILITY_LAYOUTS` in `liability_layouts.py` (this is the registry, not a
    new file). Use `liability_layout_for("<product_code>")` everywhere instead
    of hard-coded letters.
 
-3. **Register in `product_registry.py`:** add a new `ProductType` enum value, a
-   `ProductAdapter` instance, and add it to the `_PRODUCT_ADAPTERS` /
-   `_PRICING_METRIC_FORMATTERS` dicts.
+3. **Register the enum and adapter seed:** add a new `ProductType` enum value and a
+   `ProductAdapter` implementation in `src/annuity_model/product_registry.py`.
+   Public adapter, metric, capability, mortality, UI, validator, builder, and
+   liability dispatch views are derived from `ProductDefinition`, not from new
+   public dicts.
 
-4. **Publish a unified `ProductDefinition`:** create
-   `annuity_model/products/<name>/{__init__.py, schema.py, engine.py, excel.py, ui.py}`
-   following the SPIA template. The four submodules are re-export shims over
-   the legacy modules; `__init__.py` calls `register_product(ProductDefinition(...))`.
+4. **Publish the canonical `ProductDefinition`:** create
+   `annuity_model/src/annuity_model/products/<name>/{__init__.py, schema.py, engine.py, excel.py, ui.py}`
+   following the SPIA template. The four submodules may start as re-export shims
+   over legacy modules; `__init__.py` calls `register_product(ProductDefinition(...))`
+   with the complete platform wire set.
    The meta-tests in `tests/test_products_registry.py` and
-   `tests/test_products_subpackage_shims.py` enforce that the legacy registries
-   and the unified view stay bijective.
+   `tests/test_products_subpackage_shims.py` enforce that compatibility views
+   stay derived from this canonical record.
 
 5. **Add a parity test under `tests/parity/test_<product>_parity.py`** -- copy
    `test_term_parity.py` as a template. Import tolerances from
@@ -176,7 +164,7 @@ python -m pytest tests/parity -q
 python -m pytest -q
 
 # Static Excel validator on a generated workbook
-python -c "from excel_workbook_validator import validate_workbook_or_raise; \
+python -c "from annuity_model.excel_workbook_validator import validate_workbook_or_raise; \
            import openpyxl; validate_workbook_or_raise(openpyxl.load_workbook('SPIA.xlsx'))"
 
 # End-to-end smoke (every product in deep_smoke + full validator)
@@ -196,9 +184,9 @@ python scripts/parity_trace.py --steps 60 --output traces/spia.csv
 * Every `wb.save(...)` call site is preceded by `validate_workbook_or_raise(wb)`
   (P4 will add an AST meta-test).
 * RILA liability column is `M`; SPIA / Term liability column is `S`. Source of
-  truth: `LIABILITY_LAYOUTS` in `liability_layouts.py`.
+  truth: `LIABILITY_LAYOUTS` in `src/annuity_model/liability_layouts.py`.
 * Tolerance tables in `docs/model_parity_contract.md` and
-  `docs/rila_parity_contract.md` are generated from `parity_constants.py`.
+  `docs/rila_parity_contract.md` are generated from `src/annuity_model/parity_constants.py`.
 
 ## Where to look first
 

@@ -31,9 +31,9 @@ from __future__ import annotations
 
 import pytest
 
-import data_registry
-import pricing_projection as sp
-from data_registry import REGISTRY, DataArtifact
+from annuity_model import data_registry
+from annuity_model import pricing_projection as sp
+from annuity_model.data_registry import REGISTRY, DataArtifact
 
 pytestmark = [pytest.mark.invariant]
 

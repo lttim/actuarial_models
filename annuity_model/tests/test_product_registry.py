@@ -3,11 +3,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import pricing_projection as sp
-import rila_projection as rp
-import term_projection as tp
-from build_pricing_excel_workbook import excel_spec_from_launcher
-from product_registry import (
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model import term_projection as tp
+from annuity_model.build_pricing_excel_workbook import excel_spec_from_launcher
+from annuity_model.product_registry import (
     ProductType,
     get_mortality_mode_label,
     get_pricing_metrics,

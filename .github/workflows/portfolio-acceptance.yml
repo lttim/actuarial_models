@@ -34,6 +34,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.lock -r requirements-dev.txt
+          pip install --no-build-isolation -e .
       - name: "[ring7] Parity gate"
         run: python -m pytest tests/parity -q
       - name: "[ring7] Full test suite"
@@ -51,7 +52,7 @@ jobs:
       - name: "[ring7] CLI golden summary JSON"
         run: |
           rm -rf .smoke/portfolio_acceptance_ci
-          python -m cli portfolio-run \
+          python -m annuity_model.cli portfolio-run \
             --inforce tests/data/inforce/example_v1/inforce.csv \
             --out .smoke/portfolio_acceptance_ci/
           python -c "import json, pathlib; e=json.loads(pathlib.Path('tests/data/inforce/example_v1/expected_summary.json').read_text()); g=json.loads(pathlib.Path('.smoke/portfolio_acceptance_ci/portfolio_summary.json').read_text()); assert e==g"

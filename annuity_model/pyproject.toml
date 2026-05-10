@@ -1,23 +1,11 @@
 # pyproject.toml -- annuity_model
-# Phase 1 of the hardening roadmap: tool configuration only.
 #
-# P5 Wave 3.3 status (2026-04): DEFERRED -- the buildable-wheel +
-# [project.scripts] + src/ MOVE bundle is too entangled to land in a
-# single commit without breaking imports. The current layout has
-# pyproject.toml AND __init__.py both inside annuity_model/, which is
-# neither standard flat nor src/. Restructuring requires either moving
-# pyproject up to repo root (and reworking the actuarial_parity_kit
-# co-tenant) or moving every .py into src/annuity_model/ and rewriting
-# ~100 bare imports across the codebase + tests + scripts. See
-# annuity_model/docs/CHANGELOG.md "[Unreleased] -> Deferred" for the
-# Wave 3.3 migration runbook.
-#
-# Transitional package importability (2026-05): `import annuity_model` works
-# from both the repository root and annuity_model/ cwd via the package
-# bootstrap in __init__.py and the cwd-only annuity_model.py shim. This is
-# intentionally smaller than the full src/ move: legacy flat imports remain
-# supported until the history-preserving git mv + import rewrite can land as
-# its own high-risk migration.
+# Chunk 3 (2026-05): standard src/ layout. Runtime code lives under
+# `src/annuity_model`; tests and scripts import it through the package name.
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 # Single source of truth for the minimum supported Python version.
@@ -30,11 +18,51 @@
 name = "annuity_model"
 version = "0.0.0"
 requires-python = ">=3.11"
+dependencies = [
+    "numpy==2.4.4",
+    "pandas==3.0.2",
+    "pyarrow==23.0.1",
+    "altair==6.0.0",
+    "streamlit==1.56.0",
+    "matplotlib==3.10.8",
+    "openpyxl==3.1.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "setuptools==80.9.0",
+    "wheel==0.45.1",
+    "pytest==9.0.3",
+    "pytest-html==4.2.0",
+    "ruff==0.15.11",
+    "mypy==1.20.1",
+    "mkdocs==1.6.1",
+    "mkdocs-material==9.7.6",
+    "mkdocstrings[python]==1.0.4",
+    "pymdown-extensions==10.21.2",
+    "hypothesis==6.152.1",
+    "pytest-benchmark==5.2.3",
+    "pytest-cov==7.1.0",
+    "mutmut==3.5.0",
+    "pip-audit==2.10.0",
+    "bandit==1.9.4",
+]
+
+[project.scripts]
+annuity-portfolio = "annuity_model.cli:main"
+annuity-pricing-ui = "annuity_model.launchers:pricing_ui"
+annuity-test-dashboard = "annuity_model.launchers:test_dashboard"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+annuity_model = ["data/**/*.csv", "data/**/*.json", "data/**/*.md"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["."]
+src = ["src"]
 extend-exclude = [
     ".venv",
     ".smoke",
@@ -71,28 +99,15 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"pricing_run_form_state.py" = ["N801"]
+"src/annuity_model/pricing_run_form_state.py" = ["N801"]
 "tests/**/*.py" = ["B", "N802", "N803", "N806", "C408"]
 "scripts/**/*.py" = ["B"]
-"illustrate_pricing_projection.py" = ["B"]
-"test_dashboard.py" = ["SIM105"]
+"src/annuity_model/illustrate_pricing_projection.py" = ["B"]
+"src/annuity_model/test_dashboard.py" = ["SIM105"]
 
 [tool.ruff.lint.isort]
 known-first-party = [
-    "pricing_projection",
-    "term_projection",
-    "rila_projection",
-    "alm_excel_ladder",
-    "build_pricing_excel_workbook",
-    "build_rila_excel_workbook",
-    "build_term_excel_workbook",
-    "excel_workbook_validator",
-    "product_registry",
-    "product_excel",
-    "recalc_excel_shared",
-    "pricing_run_form_state",
-    "pricing_ui",
-    "test_dashboard",
+    "annuity_model",
 ]
 
 # [tool.black] removed 2026-04 -- ruff-format is the single formatter.
@@ -145,21 +160,21 @@ exclude = [
 [[tool.mypy.overrides]]
 module = [
     # --- Calculation engines (Python source-of-truth) ---
-    "pricing_projection",
-    "term_projection",
-    "rila_projection",
+    "annuity_model.pricing_projection",
+    "annuity_model.term_projection",
+    "annuity_model.rila_projection",
     # --- Excel formula generation + workbook builders ---
-    "alm_excel_ladder",
-    "build_pricing_excel_workbook",
-    "build_term_excel_workbook",
-    "build_rila_excel_workbook",
-    "excel_builder_helpers",
-    "excel_workbook_validator",
+    "annuity_model.alm_excel_ladder",
+    "annuity_model.build_pricing_excel_workbook",
+    "annuity_model.build_term_excel_workbook",
+    "annuity_model.build_rila_excel_workbook",
+    "annuity_model.excel_builder_helpers",
+    "annuity_model.excel_workbook_validator",
     # --- Product registries + dispatch ---
-    "product_registry",
-    "product_excel",
-    "liability_dispatch",
-    "liability_layouts",
+    "annuity_model.product_registry",
+    "annuity_model.product_excel",
+    "annuity_model.liability_dispatch",
+    "annuity_model.liability_layouts",
 ]
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
@@ -176,12 +191,12 @@ no_implicit_reexport = true
 # pattern keeps them strict without further pyproject churn.
 [[tool.mypy.overrides]]
 module = [
-    "products",
-    "products.*",
-    "products.*.engine",
-    "products.*.excel",
-    "products.*.schema",
-    "products.*.ui",
+    "annuity_model.products",
+    "annuity_model.products.*",
+    "annuity_model.products.*.engine",
+    "annuity_model.products.*.excel",
+    "annuity_model.products.*.schema",
+    "annuity_model.products.*.ui",
 ]
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
@@ -199,16 +214,16 @@ no_implicit_reexport = true
 
 [tool.coverage.run]
 branch = true
-source = ["."]
+source = ["src/annuity_model"]
 omit = [
     ".venv/*",
     ".smoke/*",
     "tests/*",
     "scripts/*",
     "reports/*",
-    "illustrate_pricing_projection.py",
-    "generate_sp500_scenario_csv.py",
-    "test_dashboard.py",
+    "src/annuity_model/illustrate_pricing_projection.py",
+    "src/annuity_model/generate_sp500_scenario_csv.py",
+    "src/annuity_model/test_dashboard.py",
 ]
 parallel = false
 

@@ -73,8 +73,9 @@ repos:
     hooks:
       - id: mypy
         name: mypy (parity-critical core)
-        # Match (1) the load-bearing flat modules and (2) every per-product
-        # subpackage shim under annuity_model/products/<name>/. The actual
+        # Match (1) the load-bearing package modules and (2) every per-product
+        # subpackage shim under annuity_model/src/annuity_model/products/<name>/.
+        # The actual
         # strict-mode rules live in annuity_model/pyproject.toml under the
         # `[[tool.mypy.overrides]]` blocks (one for hand-curated core, one
         # for the products.*.<submodule> glob). Adding a new product no
@@ -83,7 +84,7 @@ repos:
         # the two halves in sync.
         files: |
           (?x)^annuity_model/(
-              (pricing_projection
+              src/annuity_model/(pricing_projection
                |term_projection
                |rila_projection
                |alm_excel_ladder
@@ -96,10 +97,11 @@ repos:
                |product_excel
                |liability_dispatch
                |liability_layouts)\.py
-              |products/[^/]+/(engine|excel|schema|ui|__init__)\.py
+              |src/annuity_model/products/[^/]+/(engine|excel|schema|ui|__init__)\.py
           )$
         args:
           - "--config-file=annuity_model/pyproject.toml"
+          - "--follow-imports=silent"
         additional_dependencies:
           - numpy>=2.0
           - pandas-stubs
@@ -118,24 +120,24 @@ repos:
     hooks:
       - id: import-smoke-validator
         name: import smoke - excel_workbook_validator
-        entry: bash -c 'PY="./annuity_model/.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" -c "import sys; sys.path.insert(0, \"annuity_model\"); from excel_workbook_validator import validate_workbook_or_raise"'
+        entry: bash -c 'PY="./annuity_model/.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" -c "import sys; sys.path.insert(0, \"annuity_model/src\"); from annuity_model.excel_workbook_validator import validate_workbook_or_raise"'
         language: system
         pass_filenames: false
-        files: ^annuity_model/excel_workbook_validator\.py$
+        files: ^annuity_model/src/annuity_model/excel_workbook_validator\.py$
 
       - id: import-smoke-engines
         name: import smoke - engines
-        entry: bash -c 'PY="./annuity_model/.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" -c "import sys; sys.path.insert(0, \"annuity_model\"); import pricing_projection, term_projection, rila_projection, product_registry, product_excel"'
+        entry: bash -c 'PY="./annuity_model/.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" -c "import sys; sys.path.insert(0, \"annuity_model/src\"); import annuity_model.pricing_projection, annuity_model.term_projection, annuity_model.rila_projection, annuity_model.product_registry, annuity_model.product_excel"'
         language: system
         pass_filenames: false
-        files: ^annuity_model/(pricing_projection|term_projection|rila_projection|product_registry|product_excel|build_.*_excel_workbook|alm_excel_ladder|recalc_excel_shared)\.py$
+        files: ^annuity_model/src/annuity_model/(pricing_projection|term_projection|rila_projection|product_registry|product_excel|build_.*_excel_workbook|alm_excel_ladder|recalc_excel_shared)\.py$
 
       - id: render-parity-contract-check
         name: parity-contract docs in sync with parity_constants.py
         entry: bash -c 'PY="./annuity_model/.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" annuity_model/scripts/render_parity_contract.py --check'
         language: system
         pass_filenames: false
-        files: ^annuity_model/(parity_constants\.py|scripts/render_parity_contract\.py|docs/(model|rila)_parity_contract\.md)$
+        files: ^annuity_model/(src/annuity_model/parity_constants\.py|scripts/render_parity_contract\.py|docs/(model|rila)_parity_contract\.md)$
 
       # Locks the launcher contract: anyone touching pyproject.toml or one of
       # the launchers gets the launcher invariants test re-run before commit.
@@ -149,7 +151,7 @@ repos:
         entry: bash -c 'cd annuity_model && PY="./.venv/bin/python"; [ -x "$PY" ] || PY="python3"; "$PY" -m pytest tests/test_launcher_invariants.py -q'
         language: system
         pass_filenames: false
-        files: ^(annuity_model/(pyproject\.toml|run_pricing_ui\.(sh|command|bat)|tests/test_launcher_invariants\.py))$
+        files: ^(annuity_model/(pyproject\.toml|run_pricing_ui\.(sh|command|bat)|run_test_dashboard\.(sh|bat)|src/annuity_model/launchers\.py|tests/test_launcher_invariants\.py))$
 
       - id: documentation-map-inventory
         name: docs inventory map is in sync

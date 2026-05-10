@@ -65,7 +65,7 @@ ExcelWorkbookValidationError
 
 4. **Re-run validator manually with the workbook in hand:**
    ```python
-   from excel_workbook_validator import validate_workbook
+from annuity_model.excel_workbook_validator import validate_workbook
    issues = validate_workbook(wb)
    for issue in issues:
        print(issue)

@@ -5,7 +5,7 @@ import sqlite3
 
 import pytest
 
-from run_ledger import (
+from annuity_model.run_ledger import (
     SCHEMA_VERSION,
     SQLiteRunLedger,
     default_ledger_path,

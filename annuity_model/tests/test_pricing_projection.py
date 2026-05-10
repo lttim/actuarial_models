@@ -9,9 +9,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import pricing_projection as sp
-import rila_projection as rp
-import term_projection as tp
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model import term_projection as tp
 
 # --- Monte Carlo first principles ---
 

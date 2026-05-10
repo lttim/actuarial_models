@@ -10,7 +10,7 @@ test is green. These checks lock the launcher contract in place:
   2. Each launcher prefers the project ``.venv`` before falling back to system
      Python -- otherwise a stale interpreter (e.g. macOS-bundled 3.9) silently
      picks up stray site-packages and runs the app to a hard crash.
-  3. Each launcher import-smokes ``pricing_ui`` (not just ``streamlit``) so a
+  3. Each launcher import-smokes ``annuity_model.pricing_ui`` (not just ``streamlit``) so a
      code-level regression that breaks module load is caught before Streamlit
      is launched and Terminal closes the window.
   4. The bash launcher's ``--self-check`` mode actually works on this machine
@@ -115,7 +115,7 @@ def test_test_dashboard_batch_min_python_matches_pyproject() -> None:
 TEST_DASH_SHELL_REQUIRED_CLAUSES = {
     "prefers project venv": r"\./\.venv/bin/python",
     "version guard": r"sys\.version_info\[:2\]\s*>=\s*required",
-    "imports test_dashboard": r"import test_dashboard",
+    "imports test_dashboard": r"import annuity_model\.test_dashboard",
     "self-check mode": r"--self-check",
 }
 
@@ -129,7 +129,7 @@ def test_test_dashboard_shell_has_required_clause(label: str, pattern: str) -> N
 TEST_DASH_BATCH_REQUIRED_CLAUSES = {
     "prefers project venv": r"\.venv\\Scripts\\python\.exe",
     "version guard": r"sys\.version_info\[:2\]\s*>=\s*\(%MIN_PY_MAJOR%,\s*%MIN_PY_MINOR%\)",
-    "imports test_dashboard": r"import test_dashboard",
+    "imports test_dashboard": r"import annuity_model\.test_dashboard",
     "self-check mode": r"--self-check",
 }
 
@@ -149,7 +149,7 @@ def test_test_dashboard_batch_has_required_clause(label: str, pattern: str) -> N
 SHELL_REQUIRED_CLAUSES = {
     "prefers project venv": r'-x\s+"\./\.venv/bin/python"',
     "version guard": r"sys\.version_info\[:2\]\s*>=\s*required",
-    "imports pricing_ui (not just streamlit)": r'"\$PY"\s+-c\s+"import pricing_ui"',
+    "imports pricing_ui (not just streamlit)": r'"\$PY"\s+-c\s+"import annuity_model\.pricing_ui"',
     "self-check mode": r'"\$\{1:-\}"\s*==\s*"--self-check"',
     "refuses pip into system python": r"PEP 668",
 }
@@ -167,7 +167,7 @@ def test_shell_launcher_has_required_clause(label: str, pattern: str) -> None:
 BATCH_REQUIRED_CLAUSES = {
     "prefers project venv": r"\.venv\\Scripts\\python\.exe",
     "version guard": r"sys\.version_info\[:2\]\s*>=\s*\(%MIN_PY_MAJOR%,\s*%MIN_PY_MINOR%\)",
-    "imports pricing_ui (not just streamlit)": r"import pricing_ui",
+    "imports pricing_ui (not just streamlit)": r"import annuity_model\.pricing_ui",
     "self-check mode": r"--self-check",
 }
 
@@ -278,4 +278,4 @@ def test_pricing_ui_imports_under_supported_python() -> None:
         f"Test interpreter is {sys.version_info[:2]}; project requires >= "
         f"{(major, minor)}. CI matrix should not run unsupported versions."
     )
-    import pricing_ui  # noqa: F401
+    from annuity_model import pricing_ui  # noqa: F401

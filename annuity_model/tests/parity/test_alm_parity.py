@@ -26,14 +26,15 @@ import pytest
 ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-import pricing_projection as sp
-from parity_constants import TOL_DF, TOL_DOLLAR, TOL_TENOR
 from tests.parity.excel_formula_sim import (
     EXCEL_DISINVEST_EPSILON,
     EXCEL_DISINVEST_THRESHOLD,
     excel_disinvest_shortest_first,
     excel_reinvest_pro_rata,
 )
+
+from annuity_model import pricing_projection as sp
+from annuity_model.parity_constants import TOL_DF, TOL_DOLLAR, TOL_TENOR
 
 pytestmark = [pytest.mark.parity, pytest.mark.product_spia]
 

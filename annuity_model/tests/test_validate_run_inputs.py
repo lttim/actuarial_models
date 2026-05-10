@@ -10,18 +10,16 @@ The test suite covers:
 1. The cross-product invariants (issue_age + horizon_age presence and
    ordering).
 2. Empty-tuple return for a well-formed minimal input dict.
-3. The per-product validator hook is consulted when registered.
+3. Per-product validators are selected from canonical ProductDefinition
+   records.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from product_registry import (
-    _PRODUCT_VALIDATORS,
-    ProductType,
-    validate_run_inputs,
-)
+from annuity_model.product_registry import ProductType, validate_run_inputs
+from annuity_model.products import product_validators_by_type
 
 pytestmark = [pytest.mark.invariant]
 
@@ -60,24 +58,16 @@ def test_horizon_below_issue_is_reported() -> None:
     assert any("must be strictly greater than" in e for e in errors)
 
 
-def test_per_product_validator_hook_is_consulted() -> None:
-    """Registering a temporary validator under TERM_LIFE must surface its
-    error string. Cleanup leaves the registry empty so other tests are
-    unaffected."""
-    sentinel = "term-only constraint failed: cap < floor"
-
-    def _term_validator(state):
-        return [sentinel]
-
-    _PRODUCT_VALIDATORS[ProductType.TERM_LIFE] = _term_validator
-    try:
-        errors = validate_run_inputs(
-            ProductType.TERM_LIFE,
-            {"issue_age": 35, "horizon_age": 60},
-        )
-        assert sentinel in errors
-    finally:
-        _PRODUCT_VALIDATORS.pop(ProductType.TERM_LIFE, None)
+def test_per_product_validator_from_product_definition_is_consulted() -> None:
+    errors = validate_run_inputs(
+        ProductType.MYGA,
+        {
+            "issue_age": 35,
+            "horizon_age": 60,
+            "myga_declared_rate": 2.0,
+        },
+    )
+    assert any("myga_declared_rate" in e for e in errors)
 
 
 def test_validators_registry_matches_seven_product_rollout() -> None:
@@ -95,8 +85,8 @@ def test_validators_registry_matches_seven_product_rollout() -> None:
         ProductType.INDEXED_UL,
         ProductType.VARIABLE_UL,
     }
-    assert set(_PRODUCT_VALIDATORS) == expected_with_validator, (
-        "_PRODUCT_VALIDATORS drifted from the seven-product set. "
+    assert set(product_validators_by_type()) == expected_with_validator, (
+        "ProductDefinition.validator drifted from the seven-product set. "
         "If you add or remove a per-product validator, update this test "
         "AND add a focused unit test that exercises the new validator."
     )

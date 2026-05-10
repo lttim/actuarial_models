@@ -20,7 +20,7 @@ def test_cli_portfolio_run_matches_expected_summary(tmp_path: Path) -> None:
     cmd = [
         sys.executable,
         "-m",
-        "cli",
+        "annuity_model.cli",
         "portfolio-run",
         "--inforce",
         str(INFORCE),
@@ -29,7 +29,7 @@ def test_cli_portfolio_run_matches_expected_summary(tmp_path: Path) -> None:
     ]
     env = {
         **__import__("os").environ,
-        "PYTHONPATH": str(ROOT),
+        "PYTHONPATH": str(ROOT / "src"),
         "ANNUITY_MODEL_PORTFOLIO_V1": "1",
     }
     subprocess.run(cmd, check=True, cwd=str(ROOT), env=env)

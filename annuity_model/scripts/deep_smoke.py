@@ -18,66 +18,67 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+SRC_ROOT = REPO_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 import numpy as np
 from openpyxl import load_workbook
 
-import fia_projection as fp
-import iul_projection as iul
-import myga_projection as my
-import pricing_projection as sp
-import rila_projection as rp
-import term_projection as tp
-import ul_projection as ul
-import va_projection as va
-import vul_projection as vul
-import wl_projection as wl
-from build_fia_excel_workbook import (
+from annuity_model import fia_projection as fp
+from annuity_model import iul_projection as iul
+from annuity_model import myga_projection as my
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model import term_projection as tp
+from annuity_model import ul_projection as ul
+from annuity_model import va_projection as va
+from annuity_model import vul_projection as vul
+from annuity_model import wl_projection as wl
+from annuity_model.build_fia_excel_workbook import (
     build_fia_workbook_from_spec,
     fia_excel_spec_from_launcher,
 )
-from build_iul_excel_workbook import (
+from annuity_model.build_iul_excel_workbook import (
     build_iul_workbook_from_spec,
     iul_excel_spec_from_launcher,
 )
-from build_myga_excel_workbook import (
+from annuity_model.build_myga_excel_workbook import (
     build_myga_workbook_from_spec,
     myga_excel_spec_from_launcher,
 )
-from build_pricing_excel_workbook import (
+from annuity_model.build_pricing_excel_workbook import (
     ExcelPythonSnapshot,
     alm_excel_snapshot_from_result,
     build_workbook_from_spec,
     excel_spec_from_launcher,
 )
-from build_rila_excel_workbook import (
+from annuity_model.build_rila_excel_workbook import (
     build_rila_workbook_from_spec,
     rila_excel_spec_from_launcher,
 )
-from build_term_excel_workbook import (
+from annuity_model.build_term_excel_workbook import (
     build_term_workbook_from_spec,
     term_excel_spec_from_launcher,
 )
-from build_ul_excel_workbook import (
+from annuity_model.build_ul_excel_workbook import (
     build_ul_workbook_from_spec,
     ul_excel_spec_from_launcher,
 )
-from build_va_excel_workbook import (
+from annuity_model.build_va_excel_workbook import (
     build_va_workbook_from_spec,
     va_excel_spec_from_launcher,
 )
-from build_vul_excel_workbook import (
+from annuity_model.build_vul_excel_workbook import (
     build_vul_workbook_from_spec,
     vul_excel_spec_from_launcher,
 )
-from build_wl_excel_workbook import (
+from annuity_model.build_wl_excel_workbook import (
     build_wl_workbook_from_spec,
     wl_excel_spec_from_launcher,
 )
-from excel_workbook_validator import validate_workbook
-from portfolio_config import portfolio_v1_enabled
+from annuity_model.excel_workbook_validator import validate_workbook
+from annuity_model.portfolio_config import portfolio_v1_enabled
 
 OUT_DIR = REPO_ROOT / ".smoke" / "out"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -483,11 +484,11 @@ def build_vul() -> Path:
 
 def build_portfolio() -> Path:
     """Mixed-product portfolio workbook (canonical inforce CSV)."""
-    from build_portfolio_excel_workbook import build_portfolio_workbook_to_path
-    from inforce_io import load_policy_inputs_from_csv
-    from portfolio import Portfolio
-    from portfolio_runner import run_portfolio
-    from pricing_scenario_materialize import run_scenario_for_portfolio_policies
+    from annuity_model.build_portfolio_excel_workbook import build_portfolio_workbook_to_path
+    from annuity_model.inforce_io import load_policy_inputs_from_csv
+    from annuity_model.portfolio import Portfolio
+    from annuity_model.portfolio_runner import run_portfolio
+    from annuity_model.pricing_scenario_materialize import run_scenario_for_portfolio_policies
 
     csv_path = REPO_ROOT / "tests" / "data" / "inforce" / "example_v1" / "inforce.csv"
     policies = load_policy_inputs_from_csv(csv_path)

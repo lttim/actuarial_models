@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pandas as pd
 
-from inforce_io import load_policy_inputs_from_csv_from_dataframe
-from pricing_run_form_state import (
+from annuity_model.inforce_io import load_policy_inputs_from_csv_from_dataframe
+from annuity_model.pricing_run_form_state import (
     RUN_KEY,
     build_run_form_seed_defaults,
     default_inforce_scratch_row,
 )
-from product_registry import ProductType, parse_term_length_label_to_years
+from annuity_model.product_registry import ProductType, parse_term_length_label_to_years
 
 
 def _seeds(pt: ProductType) -> dict:

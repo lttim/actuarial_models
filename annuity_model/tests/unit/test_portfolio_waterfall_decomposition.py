@@ -7,18 +7,24 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from inforce_io import load_policy_inputs_from_csv, load_policy_inputs_from_csv_from_dataframe
-from portfolio import Portfolio
-from portfolio_runner import run_portfolio
-from pricing_run_form_state import default_inforce_scratch_row
-from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
-from pricing_ui import (
+from annuity_model.inforce_io import (
+    load_policy_inputs_from_csv,
+    load_policy_inputs_from_csv_from_dataframe,
+)
+from annuity_model.portfolio import Portfolio
+from annuity_model.portfolio_runner import run_portfolio
+from annuity_model.pricing_run_form_state import default_inforce_scratch_row
+from annuity_model.pricing_scenario_materialize import (
+    ANN_MODEL_ROOT,
+    run_scenario_for_portfolio_policies,
+)
+from annuity_model.pricing_ui import (
     _build_portfolio_profit_decomposition_rows,
     _build_portfolio_profit_decomposition_rows_for_policy_results,
     _build_profit_decomposition_rows,
     _merge_profit_waterfall_row_sets,
 )
-from product_registry import ProductType
+from annuity_model.product_registry import ProductType
 
 
 def test_homogeneous_spia_waterfall_rows_sum_per_policy_components() -> None:

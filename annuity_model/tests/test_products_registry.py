@@ -1,12 +1,9 @@
-"""Cross-registry consistency for the unified ``products`` registry.
+"""Canonical ProductDefinition invariants.
 
-The :mod:`products` package was introduced in P1 hardening (2026-04) as a
-consolidated view over the five legacy per-product registries
-(``product_registry._PRODUCT_ADAPTERS``,
-``product_excel._BUILDER_REGISTRY``,
-``liability_dispatch._REGISTRY``,
-``product_registry._PRICING_METRIC_FORMATTERS``,
-``liability_layouts.LIABILITY_LAYOUTS``).
+The :mod:`products` package is the source of truth for per-product platform
+wiring. Legacy public functions in ``product_registry``, ``product_excel``,
+and ``liability_dispatch`` are compatibility views derived from
+``ProductDefinition``.
 
 If a contributor adds a new product, they MUST add a
 ``products/<name>.py`` shim at the same time. These invariants catch
@@ -21,21 +18,29 @@ from __future__ import annotations
 
 import pytest
 
-import product_excel as pe
-from liability_dispatch import liability_path_for, registered_typenames
-from liability_layouts import LIABILITY_LAYOUTS
-from product_registry import (
+from annuity_model import product_excel as pe
+from annuity_model.liability_dispatch import liability_path_for, registered_typenames
+from annuity_model.liability_layouts import LIABILITY_LAYOUTS
+from annuity_model.product_registry import (
     ProductType,
     get_product_adapter,
+    get_product_capabilities,
+    get_product_default_mortality_mode,
+    get_product_mortality_mode_options,
+    get_product_ui_config,
     implemented_product_types,
+    product_label,
 )
-from product_registry import (
+from annuity_model.product_registry import (
     pricing_metric_formatters_by_type as legacy_pricing_metric_formatters_by_type,
 )
-from product_registry import (
+from annuity_model.product_registry import (
     product_adapters_by_type as legacy_product_adapters_by_type,
 )
-from products import (
+from annuity_model.product_registry import (
+    product_options_for_ui as legacy_product_options_for_ui,
+)
+from annuity_model.products import (
     ProductDefinition,
     discover_products,
     get_product_definition,
@@ -43,7 +48,14 @@ from products import (
     liability_path_converters_by_result_type_name,
     pricing_metric_formatters_by_type,
     product_adapters_by_type,
+    product_capabilities_by_type,
+    product_default_mortality_modes_by_type,
     product_definitions_by_type,
+    product_display_names_by_type,
+    product_mortality_mode_options_by_type,
+    product_options_for_ui,
+    product_ui_configs_by_type,
+    product_validators_by_type,
     registered_product_types,
     workbook_builder_spec_types_by_type,
     workbook_builders_by_type,
@@ -66,12 +78,7 @@ def test_discover_products_is_idempotent() -> None:
 
 
 def test_every_implemented_product_has_a_definition() -> None:
-    """Every product that has a legacy adapter MUST have a unified shim.
-
-    The reverse direction is enforced by
-    :func:`test_no_orphan_definitions` -- together they guarantee the
-    legacy registries and the new ``products/`` view are bijective.
-    """
+    """Every product exposed through compatibility lookup has a definition."""
     discover_products()
     legacy = set(implemented_product_types())
     unified = set(registered_product_types())
@@ -85,17 +92,15 @@ def test_every_implemented_product_has_a_definition() -> None:
 
 
 def test_no_orphan_definitions() -> None:
-    """A definition without a legacy adapter would mean the unified view
-    advertises a product the engine cannot price -- a worse failure mode
-    than missing the definition. Catch it loudly."""
+    """A definition without adapter compatibility would mean the UI advertises a dead product."""
     discover_products()
     legacy = set(implemented_product_types())
     unified = set(registered_product_types())
     orphan = unified - legacy
     assert not orphan, (
-        "ProductDefinitions without a corresponding entry in "
-        f"product_registry._PRODUCT_ADAPTERS: {sorted(getattr(p, 'value', p) for p in orphan)}. "
-        "Either add the legacy adapter or remove the orphan shim."
+        "ProductDefinitions without a corresponding compatibility adapter: "
+        f"{sorted(getattr(p, 'value', p) for p in orphan)}. "
+        "Either add adapter wiring to the definition or remove the orphan shim."
     )
 
 
@@ -107,12 +112,24 @@ def test_product_definition_compatibility_views_are_canonical_and_read_only() ->
     spec_types = workbook_builder_spec_types_by_type()
     metric_formatters = pricing_metric_formatters_by_type()
     converters = liability_path_converters_by_result_type_name()
+    display_names = product_display_names_by_type()
+    capabilities = product_capabilities_by_type()
+    ui_configs = product_ui_configs_by_type()
+    mortality_options = product_mortality_mode_options_by_type()
+    mortality_defaults = product_default_mortality_modes_by_type()
+    validators = product_validators_by_type()
 
     assert set(definitions) == set(registered_product_types())
     assert set(adapters) == set(definitions)
     assert set(builders) == set(definitions)
     assert set(spec_types) == set(definitions)
     assert set(metric_formatters) == set(definitions)
+    assert set(display_names) == set(definitions)
+    assert set(capabilities) == set(definitions)
+    assert set(ui_configs) == set(definitions)
+    assert set(mortality_options) == set(definitions)
+    assert set(mortality_defaults) == set(definitions)
+    assert set(validators) <= set(definitions)
     assert set(converters) == {
         definition.result_type.__name__ for definition in definitions.values()
     }
@@ -123,6 +140,11 @@ def test_product_definition_compatibility_views_are_canonical_and_read_only() ->
     assert spec_types[ProductType.SPIA] is spia.builder_spec_type
     assert metric_formatters[ProductType.SPIA] is spia.metric_formatter
     assert converters[spia.result_type.__name__] is spia.liability_path_converter
+    assert display_names[ProductType.SPIA] == spia.display_name
+    assert capabilities[ProductType.SPIA] is spia.capabilities
+    assert ui_configs[ProductType.SPIA] is spia.ui_config
+    assert mortality_options[ProductType.SPIA] == spia.mortality_mode_options
+    assert mortality_defaults[ProductType.SPIA] == spia.default_mortality_mode
 
     with pytest.raises(TypeError):
         definitions[ProductType.SPIA] = spia  # type: ignore[index]
@@ -138,42 +160,26 @@ def test_product_definition_views_match_public_legacy_views() -> None:
     assert dict(pricing_metric_formatters_by_type()) == dict(
         legacy_pricing_metric_formatters_by_type()
     )
+    assert list(product_options_for_ui()) == legacy_product_options_for_ui()
 
 
 @pytest.mark.parametrize("product_type", list(ProductType))
-def test_definition_fields_match_legacy_registries(product_type: ProductType) -> None:
-    """For every implemented product, every field of ProductDefinition
-    MUST be the *same object* (``is``) as the legacy registry value.
-
-    Using ``is`` (not ``==``) catches the case where a contributor adds a
-    parallel implementation in products/<name>.py that drifts from the
-    legacy adapter -- silently shipping two different SPIA pricers in the
-    same process.
-    """
+def test_legacy_public_functions_are_derived_from_definition(product_type: ProductType) -> None:
+    """Public compatibility functions must return values from ProductDefinition."""
     discover_products()
     if product_type not in implemented_product_types():
-        # Whole Life / Variable Annuity have no legacy adapter -- the
-        # bijectivity test above already asserts they have no shim either.
         return
     definition = get_product_definition(product_type)
     assert isinstance(definition, ProductDefinition)
     assert definition.product_type is product_type
-    assert definition.adapter is get_product_adapter(product_type), (
-        f"{product_type.value}: ProductDefinition.adapter drifted from "
-        "product_registry._PRODUCT_ADAPTERS. The shim under "
-        f"products/{product_type.value}.py must reuse "
-        "get_product_adapter(...) instead of constructing a parallel adapter."
-    )
-    assert definition.builder is pe.workbook_builders_by_type()[product_type], (
-        f"{product_type.value}: ProductDefinition.builder drifted from "
-        "product_excel._BUILDER_REGISTRY."
-    )
-    assert (
-        definition.metric_formatter is legacy_pricing_metric_formatters_by_type()[product_type]
-    ), (
-        f"{product_type.value}: ProductDefinition.metric_formatter drifted from "
-        "product_registry._PRICING_METRIC_FORMATTERS."
-    )
+    assert get_product_adapter(product_type) is definition.adapter
+    assert product_label(product_type) == definition.display_name
+    assert get_product_capabilities(product_type) is definition.capabilities
+    assert get_product_ui_config(product_type) is definition.ui_config
+    assert get_product_mortality_mode_options(product_type) == definition.mortality_mode_options
+    assert get_product_default_mortality_mode(product_type) == definition.default_mortality_mode
+    assert pe.workbook_builders_by_type()[product_type] is definition.builder
+    assert legacy_pricing_metric_formatters_by_type()[product_type] is definition.metric_formatter
 
 
 @pytest.mark.parametrize("product_type", list(ProductType))
@@ -243,6 +249,11 @@ def test_iter_product_definitions_returns_only_definitions() -> None:
         assert isinstance(definition.contract_type, type)
         assert isinstance(definition.result_type, type)
         assert isinstance(definition.builder_spec_type, type)
+        assert isinstance(definition.mortality_mode_options, tuple)
+        assert definition.default_mortality_mode in definition.mortality_mode_options
+        assert isinstance(definition.order, int)
+        assert isinstance(definition.maturity_label, str) and definition.maturity_label
+        assert isinstance(definition.assumption_profile, str) and definition.assumption_profile
 
 
 def test_register_product_rejects_silent_override() -> None:
@@ -250,7 +261,7 @@ def test_register_product_rejects_silent_override() -> None:
     would otherwise silently overwrite -- exactly the behavior the legacy
     register_builder() and register_liability_path_converter() refuse.
     The unified registry holds the same line."""
-    from products import register_product
+    from annuity_model.products import register_product
 
     existing = get_product_definition(ProductType.SPIA)
     duplicate = ProductDefinition(
@@ -263,6 +274,14 @@ def test_register_product_rejects_silent_override() -> None:
         builder=existing.builder,
         liability_path_converter=existing.liability_path_converter,
         metric_formatter=existing.metric_formatter,
+        capabilities=existing.capabilities,
+        ui_config=existing.ui_config,
+        mortality_mode_options=existing.mortality_mode_options,
+        default_mortality_mode=existing.default_mortality_mode,
+        validator=existing.validator,
+        order=existing.order,
+        maturity_label=existing.maturity_label,
+        assumption_profile=existing.assumption_profile,
     )
     with pytest.raises(RuntimeError, match="already registered"):
         register_product(duplicate)

@@ -19,9 +19,9 @@ from openpyxl import Workbook, load_workbook
 from test_regression_matrix import _FIXTURE_BUILDERS, _build_excel_workbook
 from workbook_recalc_backends import candidate_backends
 
-from excel_workbook_validator import validate_workbook
-from product_excel import registered_builders
-from product_registry import ProductType, implemented_product_types
+from annuity_model.excel_workbook_validator import validate_workbook
+from annuity_model.product_excel import registered_builders
+from annuity_model.product_registry import ProductType, implemented_product_types
 
 pytestmark = [pytest.mark.regression]
 

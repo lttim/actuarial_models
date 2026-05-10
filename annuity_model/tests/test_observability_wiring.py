@@ -33,16 +33,16 @@ import functools
 import numpy as np
 import pytest
 
-import fia_projection as fp
-import iul_projection as iul
-import myga_projection as my
-import pricing_projection as sp
-import rila_projection as rp
-import term_projection as tp
-import ul_projection as ul
-import va_projection as va
-import vul_projection as vul
-import wl_projection as wl
+from annuity_model import fia_projection as fp
+from annuity_model import iul_projection as iul
+from annuity_model import myga_projection as my
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model import term_projection as tp
+from annuity_model import ul_projection as ul
+from annuity_model import va_projection as va
+from annuity_model import vul_projection as vul
+from annuity_model import wl_projection as wl
 
 # (qualified-name-for-error-messages, callable). The qualified name is
 # what the test prints when the wiring breaks; a clear name pointing at
@@ -131,7 +131,7 @@ def test_no_op_path_does_not_alter_return_value() -> None:
     test catches it.
     """
     # Force OTel off even if the dev machine has the libs.
-    import _observability
+    from annuity_model import _observability
 
     _observability._tracer = None
     _observability._OTEL_ENABLED = False
@@ -180,7 +180,7 @@ def test_traced_decorator_uses_functools_wraps() -> None:
     decorator on a synthetic function so we don't depend on any
     particular engine's docstring text.
     """
-    from _observability import traced
+    from annuity_model._observability import traced
 
     @traced("test.synthetic")
     def _example(x: int, y: int = 1) -> int:
@@ -203,7 +203,7 @@ def test_span_name_is_passed_through_when_otel_present(
     span name to ``start_as_current_span``. We stub a fake tracer and
     record the names handed to it.
     """
-    import _observability
+    from annuity_model import _observability
 
     received: list[str] = []
 
@@ -240,7 +240,7 @@ def test_default_span_name_falls_back_to_qualname(
     used. Important so that newly added entry points without an
     explicit span name still get *some* identifier in the trace tree.
     """
-    import _observability
+    from annuity_model import _observability
 
     received: list[str] = []
 

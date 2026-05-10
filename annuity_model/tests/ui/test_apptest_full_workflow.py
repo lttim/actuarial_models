@@ -107,12 +107,15 @@ def _navigate_to_section(at: Any, section: str) -> None:
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 REPO_ROOT = ROOT.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SRC_ROOT = ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
-from build_portfolio_excel_workbook import build_portfolio_workbook_bytes  # noqa: E402
-from excel_workbook_validator import validate_workbook  # noqa: E402
-from pricing_run_form_state import PORTFOLIO_KEY, RUN_KEY  # noqa: E402
+from annuity_model.build_portfolio_excel_workbook import (
+    build_portfolio_workbook_bytes,  # noqa: E402
+)
+from annuity_model.excel_workbook_validator import validate_workbook  # noqa: E402
+from annuity_model.pricing_run_form_state import PORTFOLIO_KEY, RUN_KEY  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Boot tests
@@ -138,7 +141,7 @@ def test_pricing_ui_boots_without_exception(streamlit_apptest_module) -> None:
 def test_streamlit_cloud_entry_boots_without_exception(streamlit_apptest_module) -> None:
     """``streamlit_app.py`` at the repo root is the entry point
     Streamlit Community Cloud uses. It is a thin launcher that injects
-    ``annuity_model/`` onto ``sys.path`` and calls ``pricing_ui.main()``.
+    ``annuity_model/src`` onto ``sys.path`` and calls ``pricing_ui.main()``.
     A regression here ships silently to Cloud users until someone
     actually opens the deployment.
     """

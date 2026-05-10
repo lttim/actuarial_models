@@ -1,18 +1,18 @@
 """Workbook-builder registry invariants.
 
 The Phase-5 hardening pass replaced the if/elif chain inside
-``build_product_workbook`` with a ``@register_builder`` decorator pattern in
-``product_excel.py``. The dispatcher now looks up the per-product builder by
-``ProductType`` enum, so adding a new product means writing a thin builder
-function and decorating it -- no editing the dispatcher itself.
+``build_product_workbook`` with per-product builders and later moved public
+dispatch to canonical ``ProductDefinition`` records. Adding a new product
+means writing a thin builder function and exposing it through the product
+definition -- no editing the dispatcher itself.
 
 These invariants lock that pattern in place:
 
   1. **No drift between the adapter registry and the builder registry.** Every
      product with an implemented :class:`ProductAdapter`
      (``product_registry.implemented_product_types()``) MUST also have a
-     registered workbook builder. The reverse is also enforced: no orphan
-     builders for products that don't have an adapter (which would mean
+     product-definition workbook builder. The reverse is also enforced: no
+     orphan builders for products that don't have an adapter (which would mean
      dead code or a typo'd enum).
   2. **Spec-type validation fails fast.** Passing a wrong spec type to
      ``build_product_workbook`` raises ``TypeError`` with a clear message
@@ -30,24 +30,24 @@ from __future__ import annotations
 
 import pytest
 
-from build_fia_excel_workbook import FIAExcelBuildSpec
-from build_iul_excel_workbook import IULExcelBuildSpec
-from build_myga_excel_workbook import MYGAExcelBuildSpec
-from build_pricing_excel_workbook import ExcelBuildSpec
-from build_rila_excel_workbook import RILAExcelBuildSpec
-from build_term_excel_workbook import TermExcelBuildSpec
-from build_ul_excel_workbook import ULExcelBuildSpec
-from build_va_excel_workbook import VAExcelBuildSpec
-from build_vul_excel_workbook import VULExcelBuildSpec
-from build_wl_excel_workbook import WLExcelBuildSpec
-from product_excel import (
+from annuity_model.build_fia_excel_workbook import FIAExcelBuildSpec
+from annuity_model.build_iul_excel_workbook import IULExcelBuildSpec
+from annuity_model.build_myga_excel_workbook import MYGAExcelBuildSpec
+from annuity_model.build_pricing_excel_workbook import ExcelBuildSpec
+from annuity_model.build_rila_excel_workbook import RILAExcelBuildSpec
+from annuity_model.build_term_excel_workbook import TermExcelBuildSpec
+from annuity_model.build_ul_excel_workbook import ULExcelBuildSpec
+from annuity_model.build_va_excel_workbook import VAExcelBuildSpec
+from annuity_model.build_vul_excel_workbook import VULExcelBuildSpec
+from annuity_model.build_wl_excel_workbook import WLExcelBuildSpec
+from annuity_model.product_excel import (
     _BUILDER_REGISTRY,
     _BUILDER_SPEC_TYPES,
     build_product_workbook,
     register_builder,
     registered_builders,
 )
-from product_registry import ProductType, implemented_product_types
+from annuity_model.product_registry import ProductType, implemented_product_types
 
 pytestmark = [
     pytest.mark.invariant,
@@ -69,9 +69,9 @@ def test_every_implemented_adapter_has_a_registered_builder() -> None:
         f"decorate it with @register_builder(<ProductType>, spec_type=<SpecType>)."
     )
     assert not orphan_builders, (
-        f"Registered builders with no implemented adapter in product_registry.py: "
+        f"Registered builders with no implemented ProductDefinition adapter: "
         f"{sorted(p.value for p in orphan_builders)}. Either remove the builder or "
-        f"add the adapter to _PRODUCT_ADAPTERS."
+        f"add the adapter to the ProductDefinition."
     )
 
 
@@ -112,23 +112,17 @@ def test_dispatcher_rejects_wrong_spec_type_with_clear_typeerror() -> None:
 
 
 def test_dispatcher_rejects_unregistered_product_with_notimplementederror() -> None:
-    """If a future ProductType is added to the enum but not yet given a
-    builder, the dispatcher must raise NotImplementedError. We simulate
-    that by temporarily popping a real builder."""
+    """A product not represented by ProductDefinition must fail clearly."""
+    from enum import Enum
 
     class _NotASpec:
         pass
 
-    saved_builder = _BUILDER_REGISTRY.pop(ProductType.MYGA, None)
-    saved_spec = _BUILDER_SPEC_TYPES.pop(ProductType.MYGA, None)
-    try:
-        with pytest.raises(NotImplementedError, match=r"myga"):
-            build_product_workbook(product_type=ProductType.MYGA, spec=_NotASpec())
-    finally:
-        if saved_builder is not None:
-            _BUILDER_REGISTRY[ProductType.MYGA] = saved_builder
-        if saved_spec is not None:
-            _BUILDER_SPEC_TYPES[ProductType.MYGA] = saved_spec
+    class _FakeProductType(str, Enum):
+        UNKNOWN = "unknown_product_for_test"
+
+    with pytest.raises(NotImplementedError, match=r"unknown_product_for_test"):
+        build_product_workbook(product_type=_FakeProductType.UNKNOWN, spec=_NotASpec())  # type: ignore[arg-type]
 
 
 def test_re_registering_same_product_type_raises_runtimeerror() -> None:

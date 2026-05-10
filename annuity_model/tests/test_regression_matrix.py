@@ -48,31 +48,31 @@ from typing import Any
 import numpy as np
 import pytest
 
-import build_fia_excel_workbook as build_fia_xl
-import build_iul_excel_workbook as build_iul_xl
-import build_myga_excel_workbook as build_myga_xl
-import build_pricing_excel_workbook as build_spia_xl
-import build_rila_excel_workbook as build_rila_xl
-import build_term_excel_workbook as build_term_xl
-import build_ul_excel_workbook as build_ul_xl
-import build_va_excel_workbook as build_va_xl
-import build_vul_excel_workbook as build_vul_xl
-import build_wl_excel_workbook as build_wl_xl
-import excel_workbook_validator
-import fia_projection as fp
-import iul_projection as iul_proj
-import myga_projection as my
-import pricing_projection as sp
-import rila_projection as rp
-import term_projection as tp
-import ul_projection as ul_proj
-import va_projection as va
-import vul_projection as vul_proj
-import wl_projection as wl
-from liability_dispatch import liability_path_for
-from product_registry import (
-    _PRICING_METRIC_FORMATTERS,
+from annuity_model import build_fia_excel_workbook as build_fia_xl
+from annuity_model import build_iul_excel_workbook as build_iul_xl
+from annuity_model import build_myga_excel_workbook as build_myga_xl
+from annuity_model import build_pricing_excel_workbook as build_spia_xl
+from annuity_model import build_rila_excel_workbook as build_rila_xl
+from annuity_model import build_term_excel_workbook as build_term_xl
+from annuity_model import build_ul_excel_workbook as build_ul_xl
+from annuity_model import build_va_excel_workbook as build_va_xl
+from annuity_model import build_vul_excel_workbook as build_vul_xl
+from annuity_model import build_wl_excel_workbook as build_wl_xl
+from annuity_model import excel_workbook_validator
+from annuity_model import fia_projection as fp
+from annuity_model import iul_projection as iul_proj
+from annuity_model import myga_projection as my
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model import term_projection as tp
+from annuity_model import ul_projection as ul_proj
+from annuity_model import va_projection as va
+from annuity_model import vul_projection as vul_proj
+from annuity_model import wl_projection as wl
+from annuity_model.liability_dispatch import liability_path_for
+from annuity_model.product_registry import (
     ProductType,
+    get_pricing_metrics,
     implemented_product_types,
     validate_run_inputs,
 )
@@ -806,8 +806,7 @@ def _excel_validates(fix: ProductFixture) -> None:
 def _metric_formatter(fix: ProductFixture) -> tuple:
     if fix._result is None:
         _price_deterministic(fix)
-    fmt = _PRICING_METRIC_FORMATTERS[fix.product_type]
-    metrics = fmt(fix._result)
+    metrics = get_pricing_metrics(fix.product_type, fix._result)
     assert metrics, f"metric formatter for {fix.product_type!r} returned no metrics"
     return metrics
 

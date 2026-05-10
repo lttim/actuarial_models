@@ -61,7 +61,7 @@ Development is controlled by layered safeguards. A change is acceptable only whe
    - Parity contracts: `annuity_model/docs/model_parity_contract.md`, `annuity_model/docs/rila_parity_contract.md`, `annuity_model/docs/portfolio_parity_contract.md`
    - Product specs: `annuity_model/docs/rila_product_spec.md`, `annuity_model/docs/portfolio_runner_spec.md`
 2. **Static guards**
-   - Formula safety: `annuity_model/excel_workbook_validator.py`
+   - Formula safety: `annuity_model/src/annuity_model/excel_workbook_validator.py`
    - Rule constraints in `.cursor/rules/*.mdc`
    - Docs inventory integrity: `annuity_model/scripts/check_documentation_map.py`
 3. **Regression gates**
@@ -69,7 +69,7 @@ Development is controlled by layered safeguards. A change is acceptable only whe
    - Unit and integration suites: `annuity_model/tests/`
    - End-to-end smoke: `annuity_model/scripts/deep_smoke.py`
 4. **Governance coupling**
-   - Tolerance source of truth: `annuity_model/parity_constants.py`
+   - Tolerance source of truth: `annuity_model/src/annuity_model/parity_constants.py`
    - Required change log updates: `annuity_model/docs/model_change_log.md`
    - Rendered contract consistency: `annuity_model/scripts/render_parity_contract.py --check`
 5. **Ownership and review routing**

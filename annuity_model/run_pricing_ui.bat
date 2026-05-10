@@ -1,6 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
+set "PYTHONPATH=%CD%\src;%PYTHONPATH%"
 
 REM Multi-policy portfolio UI: default ON for this local launcher. Opt out: create .disable-portfolio-v1
 if exist ".disable-portfolio-v1" (
@@ -12,7 +13,7 @@ if exist ".disable-portfolio-v1" (
 REM Hardening rules (mirrored by tests/test_launcher_invariants.py):
 REM   1. PROJECT-VENV-FIRST: prefer .venv\Scripts\python.exe.
 REM   2. MIN-PYTHON: require Python >= 3.11 (kept in sync with pyproject.toml).
-REM   3. IMPORT-SMOKE: confirm `pricing_ui` itself imports before launching streamlit.
+REM   3. IMPORT-SMOKE: confirm `annuity_model.pricing_ui` imports before launching streamlit.
 REM   4. SELF-CHECK: `--self-check` runs (1)+(2)+(3) and exits without starting streamlit.
 
 set MIN_PY_MAJOR=3
@@ -90,10 +91,10 @@ if errorlevel 1 (
     )
 )
 
-%PY% -c "import pricing_ui" 1>nul 2>nul
+%PY% -c "import annuity_model.pricing_ui" 1>nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] Failed to import pricing_ui. Re-running with traceback:
-    %PY% -c "import pricing_ui"
+    echo [ERROR] Failed to import annuity_model.pricing_ui. Re-running with traceback:
+    %PY% -c "import annuity_model.pricing_ui"
     pause
     exit /b 1
 )
@@ -103,7 +104,7 @@ if "%SELF_CHECK%"=="1" (
     exit /b 0
 )
 
-%PY% -m streamlit run pricing_ui.py
+%PY% -m streamlit run src\annuity_model\pricing_ui.py
 if errorlevel 1 (
     echo.
     echo Streamlit exited with an error (see messages above).

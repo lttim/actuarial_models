@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import pricing_projection as sp
-import wl_projection as wl
-from actuarial_benchmarks import (
+from annuity_model import pricing_projection as sp
+from annuity_model import wl_projection as wl
+from annuity_model.actuarial_benchmarks import (
     WL_BENCHMARK_SP_HI,
     WL_BENCHMARK_SP_LO,
     WL_NSP_TOL,
@@ -32,7 +32,7 @@ def _yc(r: float = 0.04) -> sp.YieldCurve:
 
 def _cso_mort() -> sp.MortalityTableQx:
     """Use the CSO 2017 Ultimate placeholder for life-product banding."""
-    from mortality_2017_cso import MortalityTable2017CSO
+    from annuity_model.mortality_2017_cso import MortalityTable2017CSO
 
     return MortalityTable2017CSO.load(sex="male", smoker_class="nonsmoker").table
 

@@ -3,7 +3,7 @@
 
 Why
 ---
-``annuity_model/ui/MIGRATION.md`` is the plan for splitting
+``annuity_model/src/annuity_model/ui/MIGRATION.md`` is the plan for splitting
 ``pricing_ui.py`` (~4,500 LOC) into one Streamlit page per file under
 ``ui/pages/*``. Step 1 of that plan, written verbatim:
 
@@ -57,7 +57,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PRICING_UI = REPO_ROOT / "pricing_ui.py"
+SRC_ROOT = REPO_ROOT / "src"
+PRICING_UI = SRC_ROOT / "annuity_model" / "pricing_ui.py"
 
 
 @dataclass
@@ -142,8 +143,8 @@ def _extract_string_or_attr(node: ast.AST) -> tuple[str | None, bool]:
         try:
             import sys as _sys
 
-            _sys.path.insert(0, str(REPO_ROOT))
-            import pricing_run_form_state as prfs
+            _sys.path.insert(0, str(SRC_ROOT))
+            from annuity_model import pricing_run_form_state as prfs
 
             holder = getattr(prfs, node.value.id, None)
             if holder is not None:

@@ -15,7 +15,7 @@ import check_team_run_packet_evidence as packet_evidence  # noqa: E402
 
 def test_packet_markdown_contains_roles_gates_and_changed_files() -> None:
     plan = router.build_staffing_plan(
-        ["annuity_model/pricing_ui.py"],
+        ["annuity_model/src/annuity_model/pricing_ui.py"],
         objective="Improve Streamlit demo flow",
     )
 
@@ -24,13 +24,13 @@ def test_packet_markdown_contains_roles_gates_and_changed_files() -> None:
     assert "# Team Run Packet" in text
     assert "UX Reviewer / Builder" in text
     assert "`ui_apptest`" in text
-    assert "`annuity_model/pricing_ui.py`" in text
+    assert "`annuity_model/src/annuity_model/pricing_ui.py`" in text
     assert "Orchestrator Integration Summary" in text
 
 
 def test_write_packet_emits_markdown_and_json(tmp_path: Path) -> None:
     plan = router.build_staffing_plan(
-        ["annuity_model/rila_projection.py"],
+        ["annuity_model/src/annuity_model/rila_projection.py"],
         objective="RILA model review",
     )
 
@@ -70,13 +70,16 @@ def test_expand_command_substitutes_python_and_changed_files() -> None:
 
     expanded = agent_preflight._expand_command(
         command,
-        ("annuity_model/rila_projection.py", "annuity_model/alm_excel_ladder.py"),
+        (
+            "annuity_model/src/annuity_model/rila_projection.py",
+            "annuity_model/src/annuity_model/alm_excel_ladder.py",
+        ),
     )
 
     assert expanded[0] == sys.executable
     assert expanded[-2:] == (
-        "annuity_model/rila_projection.py",
-        "annuity_model/alm_excel_ladder.py",
+        "annuity_model/src/annuity_model/rila_projection.py",
+        "annuity_model/src/annuity_model/alm_excel_ladder.py",
     )
 
 
@@ -86,13 +89,16 @@ def test_mutmut_gate_receives_annuity_relative_paths() -> None:
     expanded = agent_preflight._expand_command(
         command,
         (
-            "annuity_model/rila_projection.py",
-            "annuity_model/alm_excel_ladder.py",
+            "annuity_model/src/annuity_model/rila_projection.py",
+            "annuity_model/src/annuity_model/alm_excel_ladder.py",
             ".github/CODEOWNERS",
         ),
     )
 
-    assert expanded[-2:] == ("rila_projection.py", "alm_excel_ladder.py")
+    assert expanded[-2:] == (
+        "src/annuity_model/rila_projection.py",
+        "src/annuity_model/alm_excel_ladder.py",
+    )
     assert ".github/CODEOWNERS" not in expanded
 
 
@@ -102,7 +108,7 @@ def test_default_git_changed_files_includes_untracked(monkeypatch) -> None:
     def fake_check_output(cmd, **kwargs):  # noqa: ANN001, ANN202
         calls.append(tuple(cmd))
         if cmd == ["git", "diff", "--name-only", "HEAD"]:
-            return "annuity_model/pricing_ui.py\n"
+            return "annuity_model/src/annuity_model/pricing_ui.py\n"
         if cmd == ["git", "ls-files", "--others", "--exclude-standard"]:
             return "annuity_model/tests/test_new_behavior.py\n"
         raise AssertionError(f"unexpected command: {cmd}")
@@ -112,7 +118,7 @@ def test_default_git_changed_files_includes_untracked(monkeypatch) -> None:
     changed = agent_preflight._git_changed_files(base=None, head=None, staged=False)
 
     assert changed == (
-        "annuity_model/pricing_ui.py",
+        "annuity_model/src/annuity_model/pricing_ui.py",
         "annuity_model/tests/test_new_behavior.py",
     )
     assert calls == [
@@ -177,8 +183,8 @@ def test_team_run_packet_evidence_not_required_for_low_risk_diff() -> None:
 def test_team_run_packet_evidence_requires_local_packet_for_broad_diff(tmp_path: Path) -> None:
     plan, errors = packet_evidence.evaluate_evidence(
         (
-            "annuity_model/pricing_ui.py",
-            "annuity_model/ui/MIGRATION.md",
+            "annuity_model/src/annuity_model/pricing_ui.py",
+            "annuity_model/src/annuity_model/ui/MIGRATION.md",
             "annuity_model/tests/ui/test_apptest_full_workflow.py",
             "annuity_model/scripts/agent_preflight.py",
             "annuity_model/scripts/check_team_run_packet_evidence.py",
@@ -193,8 +199,8 @@ def test_team_run_packet_evidence_requires_local_packet_for_broad_diff(tmp_path:
 
 def test_team_run_packet_evidence_accepts_completed_local_packet(tmp_path: Path) -> None:
     changed_files = (
-        "annuity_model/pricing_ui.py",
-        "annuity_model/ui/MIGRATION.md",
+        "annuity_model/src/annuity_model/pricing_ui.py",
+        "annuity_model/src/annuity_model/ui/MIGRATION.md",
         "annuity_model/tests/ui/test_apptest_full_workflow.py",
         "annuity_model/scripts/agent_preflight.py",
         "annuity_model/scripts/check_team_run_packet_evidence.py",
@@ -315,8 +321,8 @@ def test_team_run_packet_evidence_accepts_documented_gate_deferral(tmp_path: Pat
 
 def test_team_run_packet_evidence_accepts_pr_body_excerpt() -> None:
     changed_files = (
-        "annuity_model/pricing_ui.py",
-        "annuity_model/ui/MIGRATION.md",
+        "annuity_model/src/annuity_model/pricing_ui.py",
+        "annuity_model/src/annuity_model/ui/MIGRATION.md",
         "annuity_model/tests/ui/test_apptest_full_workflow.py",
         "annuity_model/scripts/agent_preflight.py",
         "annuity_model/scripts/check_team_run_packet_evidence.py",

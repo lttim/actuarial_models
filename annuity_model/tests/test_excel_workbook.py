@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 from openpyxl import load_workbook
 
-import pricing_projection as sp
-from alm_excel_ladder import ALM_ENGINE_SHEET
-from build_pricing_excel_workbook import (
+from annuity_model import pricing_projection as sp
+from annuity_model.alm_excel_ladder import ALM_ENGINE_SHEET
+from annuity_model.build_pricing_excel_workbook import (
     ALM_ENGINE_FIELD_GUIDE_SHEET,
     ALM_ENGINE_STEP_MONTHS,
     ALM_EXCEL_PATH_MONTH_CAP,

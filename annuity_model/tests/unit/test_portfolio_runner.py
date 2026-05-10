@@ -7,14 +7,17 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import pricing_projection as sp
-import rila_projection as rp
-import term_projection as tp
-from inforce_io import load_policy_inputs_from_csv
-from portfolio import PolicyInput, Portfolio, RunScenario
-from portfolio_runner import run_portfolio
-from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
-from product_registry import ProductType
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model import term_projection as tp
+from annuity_model.inforce_io import load_policy_inputs_from_csv
+from annuity_model.portfolio import PolicyInput, Portfolio, RunScenario
+from annuity_model.portfolio_runner import run_portfolio
+from annuity_model.pricing_scenario_materialize import (
+    ANN_MODEL_ROOT,
+    run_scenario_for_portfolio_policies,
+)
+from annuity_model.product_registry import ProductType
 
 
 def _scenario() -> RunScenario:
@@ -57,7 +60,7 @@ def test_run_portfolio_parallel_matches_serial() -> None:
 
 def test_default_portfolio_scenario_rila_has_positive_outputs() -> None:
     """Regression: zero-expense portfolio scenarios priced RILA at SP=0 (degenerate)."""
-    from portfolio_scenario import default_run_scenario
+    from annuity_model.portfolio_scenario import default_run_scenario
 
     scen = default_run_scenario(default_product_type=ProductType.RILA)
     pol = Portfolio(

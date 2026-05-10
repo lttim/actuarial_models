@@ -41,16 +41,16 @@ to bend.
 | Concern | Source of truth | Notes |
 |---|---|---|
 | Four canonical gates ("what do I run?") | [`AGENTS.md`](../AGENTS.md) -- "Before completing any task" | Mirrored in §3 below for convenience. |
-| Numerical parity tolerances | [`parity_constants.py`](../parity_constants.py) | Every change must also append to [`docs/model_change_log.md`](model_change_log.md). CI (`parity-constants-log-guard`) enforces this. |
+| Numerical parity tolerances | [`parity_constants.py`](../src/annuity_model/parity_constants.py) | Every change must also append to [`docs/model_change_log.md`](model_change_log.md). CI (`parity-constants-log-guard`) enforces this. |
 | Tolerance contract narrative (the *why*) | [`docs/model_parity_contract.md`](model_parity_contract.md) | Auto-rendered from `parity_constants.py` via `scripts/render_parity_contract.py`. Never edit by hand. |
-| Per-product Excel column layout | [`liability_layouts.py`](../liability_layouts.py) | Every product must have an entry; cross-sheet validator enforces. |
-| ProductType registry & UI capability matrix | [`product_registry.py`](../product_registry.py) | Adapter Protocol + `validate_run_inputs(state)` hook. |
-| Per-product wires (engine/excel/ui/converter/formatter) | [`products/<name>/__init__.py`](../products/) | Use `@register_product`. `tests/test_products_registry.py` keeps this in sync with legacy registries. |
-| Streamlit run-form state keys | [`pricing_run_form_state.py`](../pricing_run_form_state.py) | Constants live here -- never hardcode `"run_*"` literals elsewhere. |
-| Multi-policy portfolio runner | [`portfolio_runner_spec.md`](portfolio_runner_spec.md) + [`portfolio_runner.py`](../portfolio_runner.py) | UI/CLI enablement: [`portfolio_config.py`](../portfolio_config.py) (`portfolio_v1_enabled`); see also `docs/portfolio_parity_contract.md`. |
-| ALM dispatch (pricing-result -> liability-path) | [`liability_dispatch.py`](../liability_dispatch.py) | Plug-in registry; `register_liability_path_converter`. |
-| Workbook-builder dispatch | [`product_excel.py`](../product_excel.py) | Plug-in registry; `register_builder`. |
-| Static Excel-formula validator | [`excel_workbook_validator.py`](../excel_workbook_validator.py) | All builders MUST call `validate_workbook_or_raise(wb)` before `wb.save(...)`. |
+| Per-product Excel column layout | [`liability_layouts.py`](../src/annuity_model/liability_layouts.py) | Every product must have an entry; cross-sheet validator enforces. |
+| ProductType enum & adapter Protocol | [`product_registry.py`](../src/annuity_model/product_registry.py) | Enum, adapter seed implementations, term label parsers, and `validate_run_inputs(state)` compatibility hook. |
+| Per-product source of truth (engine/excel/ui/converter/formatter/capability/mortality/validator/order) | [`products/<name>/__init__.py`](../src/annuity_model/products/) | Use `register_product(ProductDefinition(...))`. Legacy public registry views derive from this canonical record. |
+| Streamlit run-form state keys | [`pricing_run_form_state.py`](../src/annuity_model/pricing_run_form_state.py) | Constants live here -- never hardcode `"run_*"` literals elsewhere. |
+| Multi-policy portfolio runner | [`portfolio_runner_spec.md`](portfolio_runner_spec.md) + [`portfolio_runner.py`](../src/annuity_model/portfolio_runner.py) | UI/CLI enablement: [`portfolio_config.py`](../src/annuity_model/portfolio_config.py) (`portfolio_v1_enabled`); see also `docs/portfolio_parity_contract.md`. |
+| ALM dispatch (pricing-result -> liability-path) | [`liability_dispatch.py`](../src/annuity_model/liability_dispatch.py) | Plug-in registry; `register_liability_path_converter`. |
+| Workbook-builder dispatch | [`product_excel.py`](../src/annuity_model/product_excel.py) | Plug-in registry; `register_builder`. |
+| Static Excel-formula validator | [`excel_workbook_validator.py`](../src/annuity_model/excel_workbook_validator.py) | All builders MUST call `validate_workbook_or_raise(wb)` before `wb.save(...)`. |
 | Autonomous AI team staffing | [`docs/AI_AGENT_TEAM_PROTOCOL.md`](AI_AGENT_TEAM_PROTOCOL.md) + [`scripts/agent_team_router.py`](../scripts/agent_team_router.py) | The orchestrator automatically selects core/dynamic specialist roles from changed files and task traits. |
 | Team Run Packet / preflight evidence | [`scripts/agent_preflight.py`](../scripts/agent_preflight.py) + [`scripts/check_team_run_packet_evidence.py`](../scripts/check_team_run_packet_evidence.py) | Writes `.agent-team-runs/` packets, optionally runs selected gates, and blocks broad/high-risk changes without completed staffing/gate/signoff evidence. |
 | Adding a new product (full walkthrough) | [`README.md`](../README.md) -- "Adding a new product" | The `scripts/scaffold_product.py` CLI generates step 4's boilerplate. |
@@ -94,32 +94,32 @@ START
 │      → branch: DOC-ONLY
 │
 ├── Does the change touch ANY of:
-│       parity_constants.py, model_parity_contract.md,
+│       src/annuity_model/parity_constants.py, model_parity_contract.md,
 │       parity_test_checklist.md, MODELCHECK_TOL,
 │       any tolerance constant?
 │      → branch: TOLERANCE
 │
 ├── Does the change touch ANY of:
-│       pricing_projection.py, term_projection.py, rila_projection.py,
-│       alm_excel_ladder.py, build_*_excel_workbook.py,
-│       excel_builder_helpers.py, excel_workbook_validator.py,
-│       liability_layouts.py, liability_dispatch.py,
-│       product_registry.py, product_excel.py,
-│       products/<name>/(engine|excel|schema).py?
+│       src/annuity_model/pricing_projection.py, src/annuity_model/term_projection.py, src/annuity_model/rila_projection.py,
+│       src/annuity_model/alm_excel_ladder.py, src/annuity_model/build_*_excel_workbook.py,
+│       src/annuity_model/excel_builder_helpers.py, src/annuity_model/excel_workbook_validator.py,
+│       src/annuity_model/liability_layouts.py, src/annuity_model/liability_dispatch.py,
+│       src/annuity_model/product_registry.py, src/annuity_model/product_excel.py,
+│       src/annuity_model/products/<name>/(engine|excel|schema).py?
 │      → branch: CALCULATION
 │
 ├── Is the task "add a new product"?
 │      → branch: NEW-PRODUCT
 │
 ├── Does the change touch portfolio / inforce / multi-policy aggregation?
-│       (portfolio*.py, liability_aggregation.py, inforce_io.py,
-│        inforce_parsers.py, build_portfolio_excel_workbook.py,
-│        products/*/inforce.py)
+│       (src/annuity_model/portfolio*.py, src/annuity_model/liability_aggregation.py, src/annuity_model/inforce_io.py,
+│        src/annuity_model/inforce_parsers.py, src/annuity_model/build_portfolio_excel_workbook.py,
+│        src/annuity_model/products/*/inforce.py)
 │      → branch: PORTFOLIO
 │
 ├── Does the change touch the Streamlit UI?
-│       (pricing_ui.py, streamlit_app.py, pricing_run_form_state.py,
-│        ui/, products/<name>/ui.py)
+│       (src/annuity_model/pricing_ui.py, streamlit_app.py, src/annuity_model/pricing_run_form_state.py,
+│        src/annuity_model/ui/, src/annuity_model/products/<name>/ui.py)
 │      → branch: UI
 │
 ├── Does the change touch CI / pre-commit / Justfile / branch-protection?
@@ -146,7 +146,7 @@ lock-step with the canonical AGENTS.md by that test.
 
 This is the highest-risk change class in the repo.
 
-1. Edit only `parity_constants.py`. Never widen a tolerance to make a
+1. Edit only `src/annuity_model/parity_constants.py`. Never widen a tolerance to make a
    test pass.
 2. Append a dated entry to [`docs/model_change_log.md`](model_change_log.md)
    describing the change, the parity scenario that exposed it, and the
@@ -198,7 +198,7 @@ python scripts/scaffold_product.py \
     --result-class <Name>ProjectionResult
 ```
 
-The script generates the `products/<name>/{__init__,schema,engine,excel,ui}.py`
+The script generates the `src/annuity_model/products/<name>/{__init__,schema,engine,excel,ui}.py`
 shims. The follow-up checklist printed by the script lists the manual
 steps (engine implementation, ProductType enum member, dispatch converter,
 liability layout, Excel builder, parity test).

@@ -29,7 +29,7 @@ This script tightens the loop. On each PR:
 Local triage::
 
     python scripts/mutmut_pr_gate.py \\
-        --touched-files pricing_projection.py rila_projection.py
+        --touched-files src/annuity_model/pricing_projection.py src/annuity_model/rila_projection.py
     # or, with no shell-out (parse a pre-existing mutants/ tree):
     python scripts/mutmut_pr_gate.py --skip-run \\
         --touched-files pricing_projection.py
@@ -66,16 +66,16 @@ SETUP_CFG = REPO_ROOT / "setup.cfg"
 # `tests/test_mutmut_pr_gate.py` enforces that with a meta-test.
 MUTMUT_SURFACE: frozenset[str] = frozenset(
     {
-        "pricing_projection.py",
-        "term_projection.py",
-        "rila_projection.py",
-        "alm_excel_ladder.py",
-        "build_pricing_excel_workbook.py",
-        "build_rila_excel_workbook.py",
-        "build_term_excel_workbook.py",
-        "excel_workbook_validator.py",
-        "product_excel.py",
-        "product_registry.py",
+        "src/annuity_model/pricing_projection.py",
+        "src/annuity_model/term_projection.py",
+        "src/annuity_model/rila_projection.py",
+        "src/annuity_model/alm_excel_ladder.py",
+        "src/annuity_model/build_pricing_excel_workbook.py",
+        "src/annuity_model/build_rila_excel_workbook.py",
+        "src/annuity_model/build_term_excel_workbook.py",
+        "src/annuity_model/excel_workbook_validator.py",
+        "src/annuity_model/product_excel.py",
+        "src/annuity_model/product_registry.py",
     }
 )
 

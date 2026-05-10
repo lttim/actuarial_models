@@ -18,11 +18,17 @@ pytest.importorskip("pytest_benchmark")
 
 from openpyxl import load_workbook
 
-import pricing_projection as sp
-import rila_projection as rp
-from build_pricing_excel_workbook import build_workbook_from_spec, excel_spec_from_launcher
-from build_rila_excel_workbook import build_rila_workbook_from_spec, rila_excel_spec_from_launcher
-from excel_workbook_validator import validate_workbook_or_raise
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model.build_pricing_excel_workbook import (
+    build_workbook_from_spec,
+    excel_spec_from_launcher,
+)
+from annuity_model.build_rila_excel_workbook import (
+    build_rila_workbook_from_spec,
+    rila_excel_spec_from_launcher,
+)
+from annuity_model.excel_workbook_validator import validate_workbook_or_raise
 
 pytestmark = [pytest.mark.slow]
 

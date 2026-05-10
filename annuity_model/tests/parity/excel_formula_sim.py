@@ -21,7 +21,7 @@ _ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from parity_constants import (  # noqa: E402  (import after sys.path bootstrap)
+from annuity_model.parity_constants import (  # noqa: E402  (import after sys.path bootstrap)
     EXCEL_DISINVEST_EPSILON,
     EXCEL_DISINVEST_THRESHOLD,
 )

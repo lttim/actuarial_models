@@ -23,29 +23,29 @@ import numpy as np
 import pytest
 from openpyxl import load_workbook
 
-import iul_projection as iul
-import pricing_projection as sp
-import rila_projection as rp
-import term_projection as tp
-from build_iul_excel_workbook import (
+from annuity_model import iul_projection as iul
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model import term_projection as tp
+from annuity_model.build_iul_excel_workbook import (
     build_iul_workbook_from_spec,
     iul_excel_spec_from_launcher,
 )
-from build_pricing_excel_workbook import (
+from annuity_model.build_pricing_excel_workbook import (
     ExcelPythonSnapshot,
     alm_excel_snapshot_from_result,
     build_workbook_from_spec,
     excel_spec_from_launcher,
 )
-from build_rila_excel_workbook import (
+from annuity_model.build_rila_excel_workbook import (
     build_rila_workbook_from_spec,
     rila_excel_spec_from_launcher,
 )
-from build_term_excel_workbook import (
+from annuity_model.build_term_excel_workbook import (
     build_term_workbook_from_spec,
     term_excel_spec_from_launcher,
 )
-from excel_workbook_validator import (
+from annuity_model.excel_workbook_validator import (
     ExcelWorkbookValidationError,
     FormulaIssue,
     validate_formula,
@@ -422,7 +422,7 @@ def test_strict_mode_accepts_all_registered_functions():
     """Strict mode is not allowed to flag a function that *is* registered."""
     import openpyxl
 
-    from excel_workbook_validator import FUNCTION_ARITIES
+    from annuity_model.excel_workbook_validator import FUNCTION_ARITIES
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -633,14 +633,17 @@ def test_rila_alm_projection_uses_liability_column_m_not_s():
 def test_portfolio_workbook_passes_strict_validation() -> None:
     from pathlib import Path
 
-    from build_portfolio_excel_workbook import build_portfolio_workbook_bytes
-    from inforce_io import load_policy_inputs_from_csv
-    from portfolio import Portfolio
-    from portfolio_runner import run_portfolio
+    from annuity_model.build_portfolio_excel_workbook import build_portfolio_workbook_bytes
+    from annuity_model.inforce_io import load_policy_inputs_from_csv
+    from annuity_model.portfolio import Portfolio
+    from annuity_model.portfolio_runner import run_portfolio
 
     csv_path = Path(__file__).resolve().parent / "data" / "inforce" / "example_v1" / "inforce.csv"
     policies = load_policy_inputs_from_csv(csv_path)
-    from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
+    from annuity_model.pricing_scenario_materialize import (
+        ANN_MODEL_ROOT,
+        run_scenario_for_portfolio_policies,
+    )
 
     sex = "female" if str(policies[0].contract.sex).lower() == "female" else "male"
     scen = run_scenario_for_portfolio_policies({}, policies, sex=sex, repo_root=ANN_MODEL_ROOT)

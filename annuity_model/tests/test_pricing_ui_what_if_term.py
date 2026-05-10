@@ -5,14 +5,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import pricing_projection as sp
-import rila_projection as rp
-import term_projection as tp
-from pricing_ui import (
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model import term_projection as tp
+from annuity_model.pricing_ui import (
     build_alm_pricing_for_mc_scenario,
     compute_what_if_term_shocked_pricing,
 )
-from product_registry import ProductType
+from annuity_model.product_registry import ProductType
 
 
 def _term_case() -> tuple[tp.TermLifeContract, sp.YieldCurve, sp.MortalityTableQx]:

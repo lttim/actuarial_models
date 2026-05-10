@@ -7,7 +7,7 @@ on:
       - "annuity_model/docs/**"
       - "annuity_model/README.md"
       - "annuity_model/mkdocs.yml"
-      - "annuity_model/parity_constants.py"
+      - "annuity_model/src/annuity_model/parity_constants.py"
       - "annuity_model/scripts/render_parity_contract.py"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
@@ -42,6 +42,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.lock -r requirements-dev.txt
+          pip install --no-build-isolation -e .
 
       - name: Verify tolerance docs are in sync with parity_constants
         run: python scripts/render_parity_contract.py --check

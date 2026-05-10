@@ -5,14 +5,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import fia_projection as fp
-import pricing_projection as sp
-from actuarial_benchmarks import (
+from annuity_model import fia_projection as fp
+from annuity_model import pricing_projection as sp
+from annuity_model.actuarial_benchmarks import (
     FIA_BENCHMARK_AV_T_HI,
     FIA_BENCHMARK_AV_T_LO,
     FIA_SENSITIVITY_EPS,
 )
-from parity_constants import AV_TOL
+from annuity_model.parity_constants import AV_TOL
 
 pytestmark = [pytest.mark.parity, pytest.mark.product_fia]
 

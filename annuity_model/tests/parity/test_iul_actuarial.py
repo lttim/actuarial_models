@@ -5,14 +5,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import iul_projection as iul
-import pricing_projection as sp
-import ul_projection as ul
-from actuarial_benchmarks import (
+from annuity_model import iul_projection as iul
+from annuity_model import pricing_projection as sp
+from annuity_model import ul_projection as ul
+from annuity_model.actuarial_benchmarks import (
     IUL_BENCHMARK_AV_20Y_HI,
     IUL_BENCHMARK_AV_20Y_LO,
 )
-from parity_constants import AV_TOL
+from annuity_model.parity_constants import AV_TOL
 
 pytestmark = [pytest.mark.parity, pytest.mark.product_iul]
 

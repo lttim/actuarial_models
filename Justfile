@@ -128,7 +128,7 @@ portfolio-acceptance:
     @echo "[ring7 5/8] render_parity_contract --check"
     @cd annuity_model && python scripts/render_parity_contract.py --check
     @echo "[ring7 6/8] CLI portfolio-run vs golden portfolio_summary.json"
-    @cd annuity_model && rm -rf .smoke/portfolio_acceptance && ANNUITY_MODEL_PORTFOLIO_V1=1 python -m cli portfolio-run --inforce tests/data/inforce/example_v1/inforce.csv --out .smoke/portfolio_acceptance/
+    @cd annuity_model && rm -rf .smoke/portfolio_acceptance && PYTHONPATH=src ANNUITY_MODEL_PORTFOLIO_V1=1 python -m annuity_model.cli portfolio-run --inforce tests/data/inforce/example_v1/inforce.csv --out .smoke/portfolio_acceptance/
     @cd annuity_model && python -c 'import json, pathlib; root = pathlib.Path("tests/data/inforce/example_v1/expected_summary.json"); got = pathlib.Path(".smoke/portfolio_acceptance/portfolio_summary.json"); assert json.loads(root.read_text()) == json.loads(got.read_text()), "portfolio_summary.json drift"'
     @echo "[ring7 7/8] Gate 5 deterministic evidence (full scope)"
     @just actuary-review-full

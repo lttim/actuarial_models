@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import pricing_projection as sp
-from pricing_ui import _normalize_run_state_for_selected_product
-from product_registry import ProductType
+from annuity_model import pricing_projection as sp
+from annuity_model.pricing_ui import _normalize_run_state_for_selected_product
+from annuity_model.product_registry import ProductType
 
 
 def test_rila_switch_sets_default_mortality_and_enables_index() -> None:

@@ -6,7 +6,7 @@
 # Hardening rules enforced here (mirrored by tests/test_launcher_invariants.py):
 #   1. PROJECT-VENV-FIRST: if ./.venv/bin/python exists, use it.
 #   2. MIN-PYTHON: require Python >= MIN_PYTHON (kept in sync with pyproject.toml).
-#   3. IMPORT-SMOKE: confirm `pricing_ui` itself imports before launching streamlit.
+#   3. IMPORT-SMOKE: confirm `annuity_model.pricing_ui` imports before launching streamlit.
 #   4. SELF-CHECK: `--self-check` runs (1)+(2)+(3) and exits 0/non-zero without
 #      starting streamlit -- used by CI to catch launcher regressions early.
 set -euo pipefail
@@ -17,6 +17,9 @@ MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=11
 
 cd "$(dirname "$0")"
+
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+APP_SCRIPT="src/annuity_model/pricing_ui.py"
 
 # Multi-policy portfolio UI: ON by default for this local launcher only
 # (run_pricing_ui.*). Streamlit Cloud uses repo-root streamlit_app.py — set the
@@ -117,9 +120,9 @@ fi
 # 4. Import-smoke the project itself. Catches regressions where deps install
 #    fine but the project module tree won't load (e.g. a syntax-feature mismatch
 #    like dataclass(slots=True) on Python 3.9).
-if ! "$PY" -c "import pricing_ui" >/dev/null 2>&1; then
-    echo "[ERROR] Failed to import pricing_ui with $PY. Re-running with full traceback:" >&2
-    "$PY" -c "import pricing_ui" || true
+if ! "$PY" -c "import annuity_model.pricing_ui" >/dev/null 2>&1; then
+    echo "[ERROR] Failed to import annuity_model.pricing_ui with $PY. Re-running with full traceback:" >&2
+    "$PY" -c "import annuity_model.pricing_ui" || true
     cat <<EOF >&2
 
 This usually means:
@@ -146,7 +149,7 @@ fi
 if [[ "$(uname -s)" == "Darwin" ]]; then
     export STREAMLIT_SERVER_HEADLESS=true
     url="http://localhost:8501"
-    "$PY" -m streamlit run pricing_ui.py --server.headless true --server.port 8501 &
+    "$PY" -m streamlit run "$APP_SCRIPT" --server.headless true --server.port 8501 &
     st_pid=$!
     trap 'kill "$st_pid" 2>/dev/null; wait "$st_pid" 2>/dev/null; exit 130' INT TERM
 
@@ -172,4 +175,4 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     wait "$st_pid"
 fi
 
-exec "$PY" -m streamlit run pricing_ui.py
+exec "$PY" -m streamlit run "$APP_SCRIPT"

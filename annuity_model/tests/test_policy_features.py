@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from policy_features import (
+from annuity_model.policy_features import (
     GLWBRider,
     LevelPremiumSchedule,
     LoanTerms,

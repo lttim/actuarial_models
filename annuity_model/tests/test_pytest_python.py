@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-import pytest_python as pp
-from pytest_python import select_pytest_interpreter
+from annuity_model import pytest_python as pp
+from annuity_model.pytest_python import select_pytest_interpreter
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 

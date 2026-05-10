@@ -102,38 +102,51 @@ def _render_init(code: str, display_name: str, contract: str, result: str) -> st
 
         from __future__ import annotations
 
-        from product_registry import ProductType, product_label
+        from annuity_model.product_registry import ProductCapabilities, ProductType
 
-        from products import ProductDefinition, register_product
-        from products.{code}.engine import (
+        from annuity_model.products import ProductDefinition, register_product
+        from annuity_model.products.{code}.engine import (
             {contract},
             {result},
         )
-        from products.{code}.excel import {enum_member}_BUILD_SPEC, build_{code}_workbook
-        from products.{code}.ui import {enum_member}_ADAPTER, {code}_metric_formatter
+        from annuity_model.products.{code}.excel import {enum_member}_BUILD_SPEC, build_{code}_workbook
+        from annuity_model.products.{code}.ui import (
+            {enum_member}_ADAPTER,
+            {code}_metric_formatter,
+            {code}_ui_config,
+        )
 
 
         # TODO(scaffolded {code}): once the engine + Excel builder land, replace
         # the placeholder converter / builder references below with the real
         # callables. Until then this import will fail at module load time and
         # ``products.discover_products()`` will surface the missing wires.
-        from products.{code}.engine import liability_path_from_{code}_projection
-        from product_excel import _BUILDER_REGISTRY
+        from annuity_model.products.{code}.engine import liability_path_from_{code}_projection
+        from annuity_model.product_excel import _BUILDER_REGISTRY
 
 
         DEFINITION = register_product(
-            ProductDefinition(
-                product_type=ProductType.{enum_member},
-                display_name=product_label(ProductType.{enum_member}),
-                contract_type={contract},
-                result_type={result},
-                builder_spec_type={enum_member}_BUILD_SPEC,
-                adapter={enum_member}_ADAPTER,
-                builder=_BUILDER_REGISTRY[ProductType.{enum_member}],
-                liability_path_converter=liability_path_from_{code}_projection,
-                metric_formatter={code}_metric_formatter,
+                ProductDefinition(
+                    product_type=ProductType.{enum_member},
+                    display_name="{display_name}",
+                    contract_type={contract},
+                    result_type={result},
+                    builder_spec_type={enum_member}_BUILD_SPEC,
+                    adapter={enum_member}_ADAPTER,
+                    builder=_BUILDER_REGISTRY[ProductType.{enum_member}],
+                    liability_path_converter=liability_path_from_{code}_projection,
+                    metric_formatter={code}_metric_formatter,
+                    capabilities=ProductCapabilities(
+                        supports_economic_scenario=False,
+                        supports_monte_carlo=False,
+                    ),
+                    ui_config={code}_ui_config,
+                    mortality_mode_options=("synthetic", "qx_csv"),
+                    default_mortality_mode="synthetic",
+                    validator=None,
+                    order=999,
+                )
             )
-        )
 
 
         __all__ = [
@@ -145,6 +158,7 @@ def _render_init(code: str, display_name: str, contract: str, result: str) -> st
             "build_{code}_workbook",
             "liability_path_from_{code}_projection",
             "{code}_metric_formatter",
+            "{code}_ui_config",
         ]
         '''
     )
@@ -234,16 +248,17 @@ def _render_ui(code: str) -> str:
 
         from __future__ import annotations
 
-        from product_registry import (
-            ProductType,
-            _PRICING_METRIC_FORMATTERS,
-            get_product_adapter,
-            get_product_ui_config,
-        )
+        from annuity_model.product_registry import ProductUIConfig
 
-        {enum_member}_ADAPTER = get_product_adapter(ProductType.{enum_member})
-        {code}_metric_formatter = _PRICING_METRIC_FORMATTERS[ProductType.{enum_member}]
-        {code}_ui_config = get_product_ui_config(ProductType.{enum_member})
+        # TODO(scaffolded {code}): import or implement the real adapter and
+        # metric formatter here, then wire both into ProductDefinition.
+        {enum_member}_ADAPTER = None
+        {code}_metric_formatter = lambda result: ()
+        {code}_ui_config = ProductUIConfig(
+            selected_info_message=None,
+            projection_csv_filename="pricing_projection_{code}.csv",
+            recalc_workbook_filename="{code}_recalc_model.xlsx",
+        )
 
 
         __all__ = [
@@ -272,7 +287,7 @@ def _print_followups(code: str, contract: str, result: str) -> None:
                     - def price_{code}(...) -> {result}
                     - def liability_path_from_{code}_projection(...) -> LiabilityPath
                     - At module bottom:
-                        from liability_dispatch import register_liability_path_converter
+                        from annuity_model.liability_dispatch import register_liability_path_converter
                         register_liability_path_converter(
                             "{result}", liability_path_from_{code}_projection
                         )
@@ -285,10 +300,10 @@ def _print_followups(code: str, contract: str, result: str) -> None:
                         def _build_{code}_wrapper(**kwargs) -> bytes: ...
               [ ] Add LIABILITY_LAYOUTS["{code}"] entry in liability_layouts.py.
               [ ] Add an adapter (subclass {enum_member}ProductAdapter or build a new one),
-                  register it in product_registry._PRODUCT_ADAPTERS.
-              [ ] Add an entry to product_registry._PRICING_METRIC_FORMATTERS.
-              [ ] Add an entry to product_registry._PRODUCT_DISPLAY_NAME and
-                  ProductCapabilities/UIConfig dicts.
+                  then wire it into products/{code}/__init__.py ProductDefinition.
+              [ ] Add a metric formatter, ProductCapabilities, ProductUIConfig,
+                  mortality defaults, optional validator, and UI order to the
+                  ProductDefinition. Public compatibility views derive from it.
               [ ] Add a parity test under tests/parity/test_{code}_parity.py
                   (copy tests/parity/test_term_parity.py as a template).
               [ ] Run `python scripts/deep_smoke.py` and `python -m pytest -q` --

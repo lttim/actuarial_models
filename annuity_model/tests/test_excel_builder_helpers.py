@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 from openpyxl import Workbook
 
-from excel_builder_helpers import (
+from annuity_model.excel_builder_helpers import (
     InputsSheetSpec,
     LiabilitySummaryBlockSpec,
     write_inputs_sheet,

@@ -41,8 +41,8 @@ import pytest
 # Imports for product engines. Kept inside the test functions where
 # possible so a missing engine doesn't break collection of unrelated
 # scenarios. Top-level imports only for shared types.
-import pricing_projection as sp
-from parity_constants import SME_LITE_MC_TOL, SME_LITE_TOL  # noqa: F401
+from annuity_model import pricing_projection as sp
+from annuity_model.parity_constants import SME_LITE_MC_TOL, SME_LITE_TOL  # noqa: F401
 
 GOLDEN_PATH = Path(__file__).parent / "golden" / "sme" / "sme_baseline.json"
 PERF_BUDGET_SECONDS = 30.0
@@ -101,7 +101,7 @@ def _scenario_spia() -> dict[str, float]:
 
 
 def _scenario_term() -> dict[str, float]:
-    import term_projection as tp
+    from annuity_model import term_projection as tp
 
     contract = tp.TermLifeContract(
         issue_age=35,
@@ -125,7 +125,7 @@ def _scenario_term() -> dict[str, float]:
 
 
 def _scenario_rila() -> dict[str, float]:
-    import rila_projection as rila
+    from annuity_model import rila_projection as rila
 
     contract = rila.RILAContract(
         issue_age=60,
@@ -156,7 +156,7 @@ def _scenario_rila() -> dict[str, float]:
 
 
 def _scenario_myga() -> dict[str, float]:
-    import myga_projection as my
+    from annuity_model import myga_projection as my
 
     contract = my.MYGAContract(
         issue_age=60,
@@ -180,7 +180,7 @@ def _scenario_myga() -> dict[str, float]:
 
 
 def _scenario_fia() -> dict[str, float]:
-    import fia_projection as fp
+    from annuity_model import fia_projection as fp
 
     contract = fp.FIAContract(
         issue_age=60,
@@ -209,7 +209,7 @@ def _scenario_fia() -> dict[str, float]:
 
 
 def _scenario_va() -> dict[str, float]:
-    import va_projection as va
+    from annuity_model import va_projection as va
 
     contract = va.VAContract(
         issue_age=55,
@@ -236,7 +236,7 @@ def _scenario_va() -> dict[str, float]:
 
 
 def _scenario_wl() -> dict[str, float]:
-    import wl_projection as wl
+    from annuity_model import wl_projection as wl
 
     contract = wl.WLContract(
         issue_age=45,
@@ -258,7 +258,7 @@ def _scenario_wl() -> dict[str, float]:
 
 
 def _scenario_ul() -> dict[str, float]:
-    import ul_projection as ul
+    from annuity_model import ul_projection as ul
 
     contract = ul.ULContract(
         issue_age=45,
@@ -284,7 +284,7 @@ def _scenario_ul() -> dict[str, float]:
 
 
 def _scenario_iul() -> dict[str, float]:
-    import iul_projection as iul
+    from annuity_model import iul_projection as iul
 
     contract = iul.IULContract(
         issue_age=45,
@@ -315,7 +315,7 @@ def _scenario_iul() -> dict[str, float]:
 
 
 def _scenario_vul() -> dict[str, float]:
-    import vul_projection as vul
+    from annuity_model import vul_projection as vul
 
     contract = vul.VULContract(
         issue_age=45,
@@ -346,11 +346,14 @@ def _scenario_portfolio() -> dict[str, float]:
     """Mixed-product portfolio (canonical inforce CSV + default_run_scenario)."""
     from pathlib import Path
 
-    from inforce_io import load_policy_inputs_from_csv
-    from portfolio import Portfolio
-    from portfolio_runner import run_portfolio
-    from portfolio_summary import portfolio_result_to_summary_dict
-    from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
+    from annuity_model.inforce_io import load_policy_inputs_from_csv
+    from annuity_model.portfolio import Portfolio
+    from annuity_model.portfolio_runner import run_portfolio
+    from annuity_model.portfolio_summary import portfolio_result_to_summary_dict
+    from annuity_model.pricing_scenario_materialize import (
+        ANN_MODEL_ROOT,
+        run_scenario_for_portfolio_policies,
+    )
 
     root = Path(__file__).resolve().parents[2]
     policies = load_policy_inputs_from_csv(root / "tests/data/inforce/example_v1/inforce.csv")

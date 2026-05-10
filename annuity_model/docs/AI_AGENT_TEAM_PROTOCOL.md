@@ -80,7 +80,7 @@ When explicit changed files are known:
 ```bash
 python scripts/agent_preflight.py \
   --objective "<feature or fix>" \
-  --changed-files annuity_model/pricing_ui.py annuity_model/tests/ui/test_apptest_spia.py \
+  --changed-files annuity_model/src/annuity_model/pricing_ui.py annuity_model/tests/ui/test_apptest_spia.py \
   --write-packet
 ```
 

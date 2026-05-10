@@ -16,9 +16,9 @@ hyp = pytest.importorskip("hypothesis")
 from hypothesis import HealthCheck, assume, given, settings  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
-import pricing_projection as sp  # noqa: E402
-import rila_projection as rp  # noqa: E402
-import term_projection as tp  # noqa: E402
+from annuity_model import pricing_projection as sp  # noqa: E402
+from annuity_model import rila_projection as rp  # noqa: E402
+from annuity_model import term_projection as tp  # noqa: E402
 
 pytestmark = pytest.mark.property
 

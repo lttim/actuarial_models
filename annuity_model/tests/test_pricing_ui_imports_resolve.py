@@ -7,7 +7,7 @@ On 2026-04-18 a Streamlit user double-clicked ``run_pricing_ui.command``
 and got::
 
     File "annuity_model/pricing_ui.py", line 66, in <module>
-        from product_registry import (
+        from annuity_model.product_registry import (
     ImportError: cannot import name 'parse_term_benefit_timing_label'
         from 'product_registry' (.../product_registry.py)
 
@@ -63,13 +63,15 @@ file. Do NOT relax the guard.
 from __future__ import annotations
 
 import ast
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PACKAGE_ROOT = PROJECT_ROOT / "src" / "annuity_model"
 PRICING_UI = PACKAGE_ROOT / "pricing_ui.py"
 
 pytestmark = [pytest.mark.invariant]
@@ -147,12 +149,13 @@ def _pricing_ui_local_imports() -> list[tuple[str, str, int]]:
             if node.level != 0:
                 continue
             module = node.module or ""
-            if module not in locals_:
+            module_tail = module.removeprefix("annuity_model.")
+            if module_tail not in locals_:
                 continue
             for alias in node.names:
                 if alias.name == "*":
                     continue
-                triples.append((module, alias.name, node.lineno))
+                triples.append((module_tail, alias.name, node.lineno))
     return triples
 
 
@@ -244,12 +247,15 @@ def test_pricing_ui_imports_cleanly_in_a_fresh_subprocess() -> None:
     which skips when ``.venv`` is missing. This test is the
     interpreter-only complement that runs everywhere.
     """
-    venv_python = PACKAGE_ROOT / ".venv" / "bin" / "python"
+    venv_python = PROJECT_ROOT / ".venv" / "bin" / "python"
     py = str(venv_python) if venv_python.exists() else sys.executable
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(PROJECT_ROOT / "src")
 
     result = subprocess.run(
-        [py, "-c", "import pricing_ui"],
-        cwd=str(PACKAGE_ROOT),
+        [py, "-c", "import annuity_model.pricing_ui"],
+        cwd=str(PROJECT_ROOT),
+        env=env,
         capture_output=True,
         text=True,
         timeout=120,

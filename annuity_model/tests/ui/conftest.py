@@ -36,8 +36,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SRC_ROOT = ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 
 @pytest.fixture(scope="module")
@@ -66,7 +67,7 @@ def load_pricing_ui(AppTest, default_timeout: int = 120):
     the full coverage gate instruments workbook-building paths and can push a
     legitimate pricing-click rerun just past 60s on local machines.
     """
-    app_path = ROOT / "pricing_ui.py"
+    app_path = SRC_ROOT / "annuity_model" / "pricing_ui.py"
     at = AppTest.from_file(str(app_path), default_timeout=default_timeout)
     at.run()
     if at.exception:

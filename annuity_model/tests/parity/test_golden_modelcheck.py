@@ -59,10 +59,10 @@ from typing import Any
 import numpy as np
 import pytest
 
-import parity_constants
-import pricing_projection as sp
-import rila_projection as rp
-import term_projection as tp
+from annuity_model import parity_constants
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model import term_projection as tp
 
 GOLDEN_DIR = Path(__file__).parent / "golden"
 UPDATE_ENV_VAR = "UPDATE_GOLDEN_MODELCHECK"
@@ -244,7 +244,7 @@ def _rila_snapshot() -> GoldenSnapshot:
 
 
 def _myga_snapshot() -> GoldenSnapshot:
-    import myga_projection as my
+    from annuity_model import myga_projection as my
 
     contract = my.MYGAContract(
         issue_age=60,
@@ -291,7 +291,7 @@ def _myga_snapshot() -> GoldenSnapshot:
 
 
 def _fia_snapshot() -> GoldenSnapshot:
-    import fia_projection as fp
+    from annuity_model import fia_projection as fp
 
     contract = fp.FIAContract(
         issue_age=60,
@@ -350,7 +350,7 @@ def _fia_snapshot() -> GoldenSnapshot:
 
 
 def _va_snapshot() -> GoldenSnapshot:
-    import va_projection as va
+    from annuity_model import va_projection as va
 
     contract = va.VAContract(
         issue_age=55,
@@ -406,7 +406,7 @@ def _va_snapshot() -> GoldenSnapshot:
 
 
 def _wl_snapshot() -> GoldenSnapshot:
-    import wl_projection as wl
+    from annuity_model import wl_projection as wl
 
     contract = wl.WLContract(
         issue_age=45,
@@ -450,7 +450,7 @@ def _wl_snapshot() -> GoldenSnapshot:
 
 
 def _ul_snapshot() -> GoldenSnapshot:
-    import ul_projection as ul_proj
+    from annuity_model import ul_projection as ul_proj
 
     contract = ul_proj.ULContract(
         issue_age=45,
@@ -501,7 +501,7 @@ def _ul_snapshot() -> GoldenSnapshot:
 
 
 def _iul_snapshot() -> GoldenSnapshot:
-    import iul_projection as iul_proj
+    from annuity_model import iul_projection as iul_proj
 
     contract = iul_proj.IULContract(
         issue_age=45,
@@ -564,7 +564,7 @@ def _iul_snapshot() -> GoldenSnapshot:
 
 
 def _vul_snapshot() -> GoldenSnapshot:
-    import vul_projection as vul_proj
+    from annuity_model import vul_projection as vul_proj
 
     contract = vul_proj.VULContract(
         issue_age=45,
@@ -736,7 +736,7 @@ def test_golden_modelcheck_snapshot(product: str) -> None:
 
 def test_every_implemented_product_has_a_snapshot_builder() -> None:
     """Adding a new product must come with a golden snapshot, not a TODO."""
-    from product_registry import implemented_product_types
+    from annuity_model.product_registry import implemented_product_types
 
     missing = [p.value for p in implemented_product_types() if p.value not in SNAPSHOT_BUILDERS]
     assert not missing, (

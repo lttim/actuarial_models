@@ -40,7 +40,7 @@ import subprocess  # nosec B404
 import sys
 from pathlib import Path
 
-_PARITY_CONSTANTS = "annuity_model/parity_constants.py"
+_PARITY_CONSTANTS = "annuity_model/src/annuity_model/parity_constants.py"
 _MODEL_CHANGE_LOG = "annuity_model/docs/model_change_log.md"
 
 

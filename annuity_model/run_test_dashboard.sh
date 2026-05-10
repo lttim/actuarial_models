@@ -5,7 +5,7 @@
 # Hardening mirrors run_pricing_ui.sh (see tests/test_launcher_invariants.py):
 #   1. PROJECT-VENV-FIRST
 #   2. MIN-PYTHON from pyproject.toml
-#   3. IMPORT-SMOKE: ``import test_dashboard`` before Streamlit
+#   3. IMPORT-SMOKE: ``import annuity_model.test_dashboard`` before Streamlit
 #   4. ``--self-check`` runs (1)+(2)+(3) without starting the server
 set -euo pipefail
 
@@ -13,6 +13,9 @@ MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=11
 
 cd "$(dirname "$0")"
+
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+APP_SCRIPT="src/annuity_model/test_dashboard.py"
 
 SELF_CHECK=0
 if [[ "${1:-}" == "--self-check" ]]; then
@@ -59,9 +62,9 @@ EOF
     fi
 fi
 
-if ! "$PY" -c "import test_dashboard" >/dev/null 2>&1; then
-    echo "[ERROR] Failed to import test_dashboard with $PY:" >&2
-    "$PY" -c "import test_dashboard" || true
+if ! "$PY" -c "import annuity_model.test_dashboard" >/dev/null 2>&1; then
+    echo "[ERROR] Failed to import annuity_model.test_dashboard with $PY:" >&2
+    "$PY" -c "import annuity_model.test_dashboard" || true
     exit 1
 fi
 
@@ -70,4 +73,4 @@ if [[ "$SELF_CHECK" -eq 1 ]]; then
     exit 0
 fi
 
-exec "$PY" -m streamlit run test_dashboard.py
+exec "$PY" -m streamlit run "$APP_SCRIPT"

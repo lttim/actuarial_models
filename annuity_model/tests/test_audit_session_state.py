@@ -67,7 +67,7 @@ def test_run_key_symbol_recorded_as_non_literal() -> None:
     symbol breakdown reflects migration progress."""
     src = """
 import streamlit as st
-from pricing_run_form_state import RUN_KEY
+from annuity_model.pricing_run_form_state import RUN_KEY
 def _render_demo():
     return st.session_state[RUN_KEY.ISSUE_AGE]
 """
@@ -77,7 +77,7 @@ def _render_demo():
     # Use the RUN_KEY symbol rather than the raw issue-age string
     # literal so this test honours the no-new-raw-literals ratchet
     # enforced by tests/test_run_state_key_drift.py.
-    from pricing_run_form_state import RUN_KEY
+    from annuity_model.pricing_run_form_state import RUN_KEY
 
     assert RUN_KEY.ISSUE_AGE in rep.page_to_keys["_render_demo"]
 

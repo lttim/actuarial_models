@@ -1,4 +1,4 @@
-"""Cross-registry meta-invariants (P0 hardening, 2026-04).
+"""Product-definition meta-invariants.
 
 These tests are the "scaffolding cannot rot" net for the platform's plug-in
 points. If a contributor adds a new ``ProductType`` to the enum but forgets
@@ -7,11 +7,11 @@ tolerance discipline), the failure surfaces here at PR time, not in
 production at the next month-end.
 
 Each test is intentionally short and surgical so the failure message points
-at the exact registry that is missing the entry.
+at the exact product-definition field that is missing.
 
-Adding a new product? Add it to ``_PRODUCT_ADAPTERS`` *and* register a
-liability-path converter from its engine module *and* add an entry to
-``_PRICING_METRIC_FORMATTERS``. Then this file passes.
+Adding a new product? Add a complete ``ProductDefinition`` under
+``products/<name>/__init__.py`` with adapter, builder, liability converter,
+metric formatter, capability, UI, mortality, and validator metadata.
 
 Loosening ``MODELCHECK_TOL`` from 0.0? Update
 ``annuity_model/docs/model_change_log.md`` in the same PR and route through
@@ -25,17 +25,17 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import parity_constants
-import pricing_projection as sp
-import rila_projection as rp  # noqa: F401  -- import so dispatch self-registers
-import term_projection as tp  # noqa: F401  -- import so dispatch self-registers
-from liability_dispatch import liability_path_for, registered_typenames
-from product_registry import (
-    _PRICING_METRIC_FORMATTERS,
+from annuity_model import parity_constants
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp  # noqa: F401  -- import so dispatch self-registers
+from annuity_model import term_projection as tp  # noqa: F401  -- import so dispatch self-registers
+from annuity_model.liability_dispatch import liability_path_for, registered_typenames
+from annuity_model.product_registry import (
     ProductType,
     get_pricing_metrics,
     implemented_product_types,
 )
+from annuity_model.products import pricing_metric_formatters_by_type
 
 pytestmark = [pytest.mark.invariant]
 
@@ -164,15 +164,14 @@ def test_modelcheck_tol_is_exactly_zero() -> None:
 
 
 def test_every_implemented_product_has_an_explicit_metric_formatter() -> None:
+    formatters = pricing_metric_formatters_by_type()
     missing = [
-        product.value
-        for product in implemented_product_types()
-        if product not in _PRICING_METRIC_FORMATTERS
+        product.value for product in implemented_product_types() if product not in formatters
     ]
     assert not missing, (
-        "Implemented products with no entry in _PRICING_METRIC_FORMATTERS: "
-        f"{sorted(missing)}. Add a per-product formatter -- silent fallback "
-        "to SPIA was removed in P0 hardening."
+        "Implemented products with no ProductDefinition.metric_formatter: "
+        f"{sorted(missing)}. Add a per-product formatter; silent fallback "
+        "to SPIA is prohibited."
     )
 
 

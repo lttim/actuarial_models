@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import mortality_2017_cso as cso
+from annuity_model import mortality_2017_cso as cso
 
 
 @pytest.mark.parametrize(

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pricing_run_form_state import (
+from annuity_model.pricing_run_form_state import (
     PRICING_RUN_NUMBER_INPUT_KEYS,
     build_run_form_seed_defaults,
     coerce_numeric_widget_value,
     ensure_session_choice,
 )
-from product_registry import ProductType
+from annuity_model.product_registry import ProductType
 
 
 def test_coerce_numeric_clamps_and_replaces_non_positive() -> None:

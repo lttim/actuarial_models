@@ -2,7 +2,7 @@
 
 The :mod:`products.spia`, :mod:`products.term`, and :mod:`products.rila`
 subpackages are *re-export shims* over the legacy flat modules. New code
-SHOULD import from the canonical ``products.<name>.{schema,engine,excel,ui}``
+SHOULD import from the canonical ``annuity_model.products.<name>.{schema,engine,excel,ui}``
 paths, but until the implementation physically moves into the subpackages
 the two import paths must resolve to the **same object** (``is`` check).
 
@@ -14,13 +14,13 @@ time.
 
 When the implementation eventually moves into the subpackages, this test
 gets inverted: the legacy module becomes the shim and re-exports from
-``products.<name>``. The shape of the assertions stays the same; only
+``annuity_model.products.<name>``. The shape of the assertions stays the same; only
 the direction changes.
 
 Import-surface guard (2026-04): several products register
 :class:`~products.ProductDefinition` from ``products/<name>/__init__.py``
 using **direct** imports from legacy flat modules (``fia_projection``,
-etc.) and never reference ``products.<name>.engine`` at package import
+etc.) and never reference ``annuity_model.products.<name>.engine`` at package import
 time. A syntax error or ``IndentationError`` in ``engine.py`` would then
 pass the full pytest suite until something explicitly imported that
 shim. :func:`test_every_product_package_canonical_shims_import` closes
@@ -35,32 +35,32 @@ from pathlib import Path
 
 import pytest
 
-import build_pricing_excel_workbook as bpw
-import build_rila_excel_workbook as brw
-import build_term_excel_workbook as btw
-import pricing_projection as sp
-import products.rila as rila_pkg
-import products.rila.engine as rila_engine
-import products.rila.excel as rila_excel
-import products.rila.schema as rila_schema
-import products.rila.ui as rila_ui
-import products.spia as spia_pkg
-import products.spia.engine as spia_engine
-import products.spia.excel as spia_excel
-import products.spia.schema as spia_schema
-import products.spia.ui as spia_ui
-import products.term as term_pkg
-import products.term.engine as term_engine
-import products.term.excel as term_excel
-import products.term.schema as term_schema
-import products.term.ui as term_ui
-import rila_projection as rp
-import term_projection as tp
-from product_registry import ProductType, get_product_adapter
+import annuity_model.products.rila as rila_pkg
+import annuity_model.products.rila.engine as rila_engine
+import annuity_model.products.rila.excel as rila_excel
+import annuity_model.products.rila.schema as rila_schema
+import annuity_model.products.rila.ui as rila_ui
+import annuity_model.products.spia as spia_pkg
+import annuity_model.products.spia.engine as spia_engine
+import annuity_model.products.spia.excel as spia_excel
+import annuity_model.products.spia.schema as spia_schema
+import annuity_model.products.spia.ui as spia_ui
+import annuity_model.products.term as term_pkg
+import annuity_model.products.term.engine as term_engine
+import annuity_model.products.term.excel as term_excel
+import annuity_model.products.term.schema as term_schema
+import annuity_model.products.term.ui as term_ui
+from annuity_model import build_pricing_excel_workbook as bpw
+from annuity_model import build_rila_excel_workbook as brw
+from annuity_model import build_term_excel_workbook as btw
+from annuity_model import pricing_projection as sp
+from annuity_model import rila_projection as rp
+from annuity_model import term_projection as tp
+from annuity_model.product_registry import ProductType, get_product_adapter
 
 pytestmark = [pytest.mark.invariant]
 
-PRODUCTS_ROOT = Path(__file__).resolve().parent.parent / "products"
+PRODUCTS_ROOT = Path(__file__).resolve().parent.parent / "src" / "annuity_model" / "products"
 _CANONICAL_SUBMODULES = ("schema", "engine", "excel", "ui")
 
 
@@ -143,7 +143,7 @@ def test_term_ui_reexports_adapter_and_parsers() -> None:
     # Parsers must reference the SAME callable as product_registry exports;
     # divergence here would silently break the AST guard in
     # tests/test_pricing_ui_term_config.py.
-    from product_registry import (
+    from annuity_model.product_registry import (
         parse_term_benefit_timing_label,
         parse_term_length_label_to_years,
         parse_term_premium_mode_label,
@@ -231,12 +231,12 @@ def test_every_product_package_canonical_shims_import(pkg_name: str, submodule: 
     This is stronger than :func:`test_every_product_subpackage_exposes_canonical_layout`
     (SPIA/Term/RILA only): newer products' ``__init__.py`` often wires
     ``ProductDefinition`` from legacy modules without ever importing
-    ``products.<pkg>.engine``. Syntax errors there must still fail CI.
+    ``annuity_model.products.<pkg>.engine``. Syntax errors there must still fail CI.
     """
     shim_path = PRODUCTS_ROOT / pkg_name / f"{submodule}.py"
     if not shim_path.is_file():
-        pytest.skip(f"products/{pkg_name}/{submodule}.py not present yet")
-    importlib.import_module(f"products.{pkg_name}.{submodule}")
+        pytest.skip(f"annuity_model.products/{pkg_name}/{submodule}.py not present yet")
+    importlib.import_module(f"annuity_model.products.{pkg_name}.{submodule}")
 
 
 @pytest.mark.parametrize(
@@ -245,7 +245,7 @@ def test_every_product_package_canonical_shims_import(pkg_name: str, submodule: 
     ids=lambda pkg: pkg.__name__,
 )
 def test_every_product_subpackage_publishes_a_definition(package) -> None:
-    from products import ProductDefinition
+    from annuity_model.products import ProductDefinition
 
     assert hasattr(package, "DEFINITION"), (
         f"{package.__name__}.DEFINITION is missing. Every product "

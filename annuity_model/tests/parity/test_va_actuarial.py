@@ -5,16 +5,16 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import pricing_projection as sp
-import va_projection as va
-from actuarial_benchmarks import (
+from annuity_model import pricing_projection as sp
+from annuity_model import va_projection as va
+from annuity_model.actuarial_benchmarks import (
     VA_BENCHMARK_AV_T_FLAT_HI,
     VA_BENCHMARK_AV_T_FLAT_LO,
     VA_BENCHMARK_AV_T_MC_HI,
     VA_BENCHMARK_AV_T_MC_LO,
     VA_SENSITIVITY_EPS,
 )
-from parity_constants import AV_TOL
+from annuity_model.parity_constants import AV_TOL
 
 pytestmark = [pytest.mark.parity, pytest.mark.product_va]
 

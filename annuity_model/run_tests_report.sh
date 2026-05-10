@@ -3,6 +3,7 @@
 # Windows users: run_tests_report.bat does the same thing.
 set -euo pipefail
 cd "$(dirname "$0")"
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 
 mkdir -p reports
 

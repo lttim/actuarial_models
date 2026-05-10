@@ -8,13 +8,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+SRC_ROOT = ROOT / "src"
 
 
 def test_navigation_options_inject_portfolio_after_pricing_run() -> None:
     code = (
         "import sys\n"
-        f"sys.path.insert(0, {str(ROOT)!r})\n"
-        "from ui.navigation import SECTION_LABELS, SECTION_ORDER, section_options\n"
+        f"sys.path.insert(0, {str(SRC_ROOT)!r})\n"
+        "from annuity_model.ui.navigation import SECTION_LABELS, SECTION_ORDER, section_options\n"
         "assert section_options(include_portfolio=False) == list(SECTION_ORDER)\n"
         "with_portfolio = section_options(include_portfolio=True)\n"
         "assert with_portfolio[:3] == ['overview', 'run', 'portfolio']\n"
@@ -34,9 +35,9 @@ def test_navigation_options_inject_portfolio_after_pricing_run() -> None:
 def test_overview_features_are_registry_backed() -> None:
     code = (
         "import sys\n"
-        f"sys.path.insert(0, {str(ROOT)!r})\n"
-        "from ui.navigation import overview_section_labels\n"
-        "from ui.pages.overview import dynamic_overview_features\n"
+        f"sys.path.insert(0, {str(SRC_ROOT)!r})\n"
+        "from annuity_model.ui.navigation import overview_section_labels\n"
+        "from annuity_model.ui.pages.overview import dynamic_overview_features\n"
         "features = dynamic_overview_features()\n"
         "assert len(features) >= 8\n"
         "assert any('Supported product run types' in feature for feature in features)\n"
@@ -54,7 +55,7 @@ def test_overview_features_are_registry_backed() -> None:
 
 
 def test_pricing_ui_delegates_overview_and_shell_to_ui_modules() -> None:
-    pricing_ui_path = ROOT / "pricing_ui.py"
+    pricing_ui_path = SRC_ROOT / "annuity_model" / "pricing_ui.py"
     tree = ast.parse(pricing_ui_path.read_text(encoding="utf-8"))
 
     imported_modules = {

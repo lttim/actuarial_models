@@ -8,7 +8,7 @@ import tempfile
 import numpy as np
 import pytest
 
-import lapse
+from annuity_model import lapse
 
 
 def test_lapse_assumption_validates_rates():

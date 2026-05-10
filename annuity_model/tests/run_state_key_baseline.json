@@ -16,7 +16,7 @@
     "pricing_run_form_state.py is the source of truth and is intentionally",
     "excluded from the count -- the literals there ARE the constants."
   ],
-  "pricing_ui.py": 167,
+  "src/annuity_model/pricing_ui.py": 167,
   "tests/test_pricing_run_form_state.py": 9,
   "tests/test_pricing_ui_state_normalization.py": 33,
   "tests/ui/conftest.py": 2,

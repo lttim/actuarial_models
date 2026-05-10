@@ -47,16 +47,17 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = REPO_ROOT / "src"
 BASELINE_PATH = REPO_ROOT / "tests" / "run_state_key_baseline.json"
-SOURCE_OF_TRUTH = "pricing_run_form_state.py"
+SOURCE_OF_TRUTH = "src/annuity_model/pricing_run_form_state.py"
 
 
 def _canonical_keys() -> frozenset[str]:
     """Late-binding import so the test fails loudly if the module breaks."""
     import sys
 
-    sys.path.insert(0, str(REPO_ROOT))
-    from pricing_run_form_state import RUN_STATE_KEY_NAMES
+    sys.path.insert(0, str(SRC_ROOT))
+    from annuity_model.pricing_run_form_state import RUN_STATE_KEY_NAMES
 
     return RUN_STATE_KEY_NAMES
 
@@ -71,6 +72,8 @@ def _walk_python_files() -> list[Path]:
     for p in sorted(REPO_ROOT.rglob("*.py")):
         rel = str(p.relative_to(REPO_ROOT))
         if "/.venv/" in str(p) or "/__pycache__/" in str(p) or rel.startswith(".venv"):
+            continue
+        if rel.startswith("build/"):
             continue
         if rel == SOURCE_OF_TRUTH:
             continue
@@ -194,8 +197,8 @@ def test_run_key_namespace_round_trips() -> None:
     """
     import sys
 
-    sys.path.insert(0, str(REPO_ROOT))
-    from pricing_run_form_state import RUN_KEY, RUN_STATE_KEY_NAMES
+    sys.path.insert(0, str(SRC_ROOT))
+    from annuity_model.pricing_run_form_state import RUN_KEY, RUN_STATE_KEY_NAMES
 
     attr_values = {v for v in vars(RUN_KEY).values() if isinstance(v, str)}
     assert attr_values >= RUN_STATE_KEY_NAMES, (

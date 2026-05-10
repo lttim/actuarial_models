@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import account_value as av
+from annuity_model import account_value as av
 
 
 def test_avconfig_validates_inputs():

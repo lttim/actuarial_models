@@ -15,10 +15,11 @@ from pathlib import Path
 
 import pytest
 
-from liability_layouts import LIABILITY_LAYOUTS
-from product_registry import ProductType, implemented_product_types
+from annuity_model.liability_layouts import LIABILITY_LAYOUTS
+from annuity_model.product_registry import ProductType, implemented_product_types
 
-PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PACKAGE_ROOT = PROJECT_ROOT / "src" / "annuity_model"
 BUILDER_FILES = sorted(PACKAGE_ROOT.glob("build_*_excel_workbook.py"))
 
 pytestmark = pytest.mark.invariant

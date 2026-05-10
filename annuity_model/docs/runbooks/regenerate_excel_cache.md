@@ -34,7 +34,7 @@ formula caches may be missing or stale.
 2. **Validate formulas and cross-sheet references**:
    ```python
    from openpyxl import load_workbook
-   from excel_workbook_validator import validate_workbook_or_raise
+from annuity_model.excel_workbook_validator import validate_workbook_or_raise
    wb = load_workbook("SPIA.xlsx", data_only=False)
    validate_workbook_or_raise(wb)
    ```

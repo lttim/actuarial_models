@@ -34,6 +34,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r annuity_model/requirements.lock -r annuity_model/requirements-dev.txt pre-commit
+          pip install --no-build-isolation -e ./annuity_model
       - name: Run pre-commit on all files
         run: pre-commit run --all-files --show-diff-on-failure
       - name: Enforce parity_constants <-> model_change_log discipline
@@ -82,6 +83,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.lock -r requirements-dev.txt coverage[toml]
+          pip install --no-build-isolation -e .
       - name: pytest with coverage
         # The coverage gate is a one-way ratchet. The floor lives in
         # annuity_model/pyproject.toml under [tool.coverage.report].fail_under
@@ -108,6 +110,7 @@ jobs:
           python -m venv .venv
           ./.venv/bin/python -m pip install --upgrade pip
           ./.venv/bin/python -m pip install -r requirements.lock
+          ./.venv/bin/python -m pip install --no-build-isolation -e .
           env -i HOME="$HOME" PATH="/usr/bin:/bin:/usr/sbin:/sbin" SHELL=/bin/bash \
             bash ./run_pricing_ui.sh --self-check
       - name: Launcher self-check (Windows)
@@ -117,6 +120,7 @@ jobs:
           py -3 -m venv .venv
           .venv\Scripts\python.exe -m pip install --upgrade pip
           .venv\Scripts\python.exe -m pip install -r requirements.lock
+          .venv\Scripts\python.exe -m pip install --no-build-isolation -e .
           call run_pricing_ui.bat --self-check
       - name: HTML pytest report
         if: always()

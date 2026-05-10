@@ -1,6 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
+set "PYTHONPATH=%CD%\src;%PYTHONPATH%"
 
 set MIN_PY_MAJOR=3
 set MIN_PY_MINOR=11
@@ -54,10 +55,10 @@ if errorlevel 1 (
     )
 )
 
-%PY% -c "import test_dashboard" 1>nul 2>nul
+%PY% -c "import annuity_model.test_dashboard" 1>nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] Failed to import test_dashboard.
-    %PY% -c "import test_dashboard"
+    echo [ERROR] Failed to import annuity_model.test_dashboard.
+    %PY% -c "import annuity_model.test_dashboard"
     pause
     exit /b 1
 )
@@ -67,7 +68,7 @@ if "%SELF_CHECK%"=="1" (
     exit /b 0
 )
 
-%PY% -m streamlit run test_dashboard.py
+%PY% -m streamlit run src\annuity_model\test_dashboard.py
 if errorlevel 1 (
     echo Streamlit exited with an error.
     pause

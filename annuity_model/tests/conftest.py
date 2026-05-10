@@ -9,7 +9,7 @@ import pytest
 
 def pytest_configure(config: pytest.Config) -> None:
     """Fail fast with a clear message when CI or a developer uses an unsupported interpreter."""
-    from pytest_python import MIN_PYTHON_MAJOR, MIN_PYTHON_MINOR
+    from annuity_model.pytest_python import MIN_PYTHON_MAJOR, MIN_PYTHON_MINOR
 
     if sys.version_info[:2] < (MIN_PYTHON_MAJOR, MIN_PYTHON_MINOR):
         pytest.exit(

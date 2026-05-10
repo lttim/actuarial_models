@@ -23,7 +23,7 @@ constant changed.
 
 3. Confirm tolerance constants did not silently change since last tag:
    ```bash
-   git diff $(git describe --tags --abbrev=0)..HEAD -- annuity_model/parity_constants.py
+   git diff $(git describe --tags --abbrev=0)..HEAD -- annuity_model/src/annuity_model/parity_constants.py
    ```
    If non-empty, ensure each change is accompanied by a `model_change_log.md`
    entry.

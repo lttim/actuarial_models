@@ -4,10 +4,13 @@ from types import SimpleNamespace
 
 import numpy as np
 
-import pricing_projection as sp
-import term_projection as tp
-from pricing_ui import _build_profit_decomposition_rows, _build_profit_waterfall_chart_df
-from product_registry import ProductType
+from annuity_model import pricing_projection as sp
+from annuity_model import term_projection as tp
+from annuity_model.pricing_ui import (
+    _build_profit_decomposition_rows,
+    _build_profit_waterfall_chart_df,
+)
+from annuity_model.product_registry import ProductType
 
 
 def test_term_profit_decomposition_excludes_spia_indexation_language() -> None:

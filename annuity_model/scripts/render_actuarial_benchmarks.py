@@ -36,10 +36,11 @@ from pathlib import Path
 
 _HERE = Path(__file__).resolve()
 _REPO_ROOT = _HERE.parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+_SRC_ROOT = _REPO_ROOT / "src"
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
 
-import actuarial_benchmarks as ab  # noqa: E402
+from annuity_model import actuarial_benchmarks as ab  # noqa: E402
 
 DOCS_DIR = _REPO_ROOT / "docs"
 DOC_PATH = DOCS_DIR / "actuarial_benchmarks.md"

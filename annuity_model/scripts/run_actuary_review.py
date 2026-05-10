@@ -53,10 +53,11 @@ from pathlib import Path
 _HERE = Path(__file__).resolve()
 _ANNUITY_DIR = _HERE.parent.parent
 _REPO_ROOT = _ANNUITY_DIR.parent
-if str(_ANNUITY_DIR) not in sys.path:
-    sys.path.insert(0, str(_ANNUITY_DIR))
+_SRC_ROOT = _ANNUITY_DIR / "src"
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
 
-import actuarial_benchmarks as ab  # noqa: E402
+from annuity_model import actuarial_benchmarks as ab  # noqa: E402
 
 EVIDENCE_DIR = _REPO_ROOT / ".cursor" / "actuary-reviews"
 EVIDENCE_PATH = EVIDENCE_DIR / "_evidence-current.md"

@@ -6,10 +6,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import pricing_projection as sp
-import term_projection as tp
-from pricing_ui import _build_mortality
-from product_registry import (
+from annuity_model import pricing_projection as sp
+from annuity_model import term_projection as tp
+from annuity_model.pricing_ui import _build_mortality
+from annuity_model.product_registry import (
     ProductType,
     get_product_capabilities,
     get_product_default_mortality_mode,
@@ -155,7 +155,9 @@ def test_pricing_ui_does_not_hardcode_term_contract_fields() -> None:
     constants. We assert via AST that no kwarg in the TermLifeContract call
     inside pricing_ui.py is a Constant for any of those fields. This catches
     the original 2026-04 regression and any future repeats."""
-    pricing_ui_path = Path(__file__).resolve().parent.parent / "pricing_ui.py"
+    pricing_ui_path = (
+        Path(__file__).resolve().parent.parent / "src" / "annuity_model" / "pricing_ui.py"
+    )
     tree = ast.parse(pricing_ui_path.read_text(encoding="utf-8"))
     calls = _find_term_life_contract_calls(tree)
     assert calls, "Expected at least one TermLifeContract call in pricing_ui.py"

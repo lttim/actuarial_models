@@ -38,6 +38,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r annuity_model/requirements.lock -r annuity_model/requirements-dev.txt
+          pip install --no-build-isolation -e ./annuity_model
 
       - name: Configure mutmut surface
         # Generated inline (not committed) so the surface lives next to
@@ -59,16 +60,16 @@ jobs:
           #     mutation via the registry sha256 invariant test, which
           #     pads survivor counts but adds no real signal).
           paths_to_mutate = [
-              "pricing_projection.py",
-              "term_projection.py",
-              "rila_projection.py",
-              "alm_excel_ladder.py",
-              "build_pricing_excel_workbook.py",
-              "build_rila_excel_workbook.py",
-              "build_term_excel_workbook.py",
-              "excel_workbook_validator.py",
-              "product_excel.py",
-              "product_registry.py",
+              "src/annuity_model/pricing_projection.py",
+              "src/annuity_model/term_projection.py",
+              "src/annuity_model/rila_projection.py",
+              "src/annuity_model/alm_excel_ladder.py",
+              "src/annuity_model/build_pricing_excel_workbook.py",
+              "src/annuity_model/build_rila_excel_workbook.py",
+              "src/annuity_model/build_term_excel_workbook.py",
+              "src/annuity_model/excel_workbook_validator.py",
+              "src/annuity_model/product_excel.py",
+              "src/annuity_model/product_registry.py",
           ]
           tests_dir = "tests"
           # Use the parity gate as the hot loop -- it's the fastest

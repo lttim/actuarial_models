@@ -20,13 +20,13 @@ import numpy as np
 import pytest
 from openpyxl import load_workbook
 
-import pricing_projection as sp
-from build_pricing_excel_workbook import (
+from annuity_model import pricing_projection as sp
+from annuity_model.build_pricing_excel_workbook import (
     ExcelPythonSnapshot,
     build_workbook_from_spec,
     excel_spec_from_launcher,
 )
-from parity_constants import MODELCHECK_TOL
+from annuity_model.parity_constants import MODELCHECK_TOL
 
 pytestmark = [pytest.mark.parity, pytest.mark.product_spia, pytest.mark.slow]
 

@@ -6,11 +6,14 @@ import numpy as np
 import pytest
 from openpyxl import load_workbook
 
-import pricing_projection as sp
-import term_projection as tp
-from build_pricing_excel_workbook import LIABILITY_SHEET_NAME
-from build_term_excel_workbook import build_term_workbook_from_spec, term_excel_spec_from_launcher
-from parity_constants import TERM_MODELCHECK_TOL
+from annuity_model import pricing_projection as sp
+from annuity_model import term_projection as tp
+from annuity_model.build_pricing_excel_workbook import LIABILITY_SHEET_NAME
+from annuity_model.build_term_excel_workbook import (
+    build_term_workbook_from_spec,
+    term_excel_spec_from_launcher,
+)
+from annuity_model.parity_constants import TERM_MODELCHECK_TOL
 
 pytestmark = [pytest.mark.parity, pytest.mark.product_term]
 
@@ -147,8 +150,8 @@ def test_term_workbook_includes_alm_sheets_when_snapshot_passed():
         rebalance_policy="liquidity_only",
         liquidity_near_liquid_years=0.25,
     )
-    from alm_excel_ladder import ALM_ENGINE_SHEET
-    from build_pricing_excel_workbook import (
+    from annuity_model.alm_excel_ladder import ALM_ENGINE_SHEET
+    from annuity_model.build_pricing_excel_workbook import (
         ALM_ENGINE_FIELD_GUIDE_SHEET,
         ALM_ENGINE_STEP_MONTHS,
         ALM_EXCEL_PATH_MONTH_CAP,

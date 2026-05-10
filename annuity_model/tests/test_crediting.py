@@ -6,8 +6,8 @@ import math
 
 import pytest
 
-import crediting
-import rila_projection as rp
+from annuity_model import crediting
+from annuity_model import rila_projection as rp
 
 
 def test_fixed_declared_rate_ignores_index():

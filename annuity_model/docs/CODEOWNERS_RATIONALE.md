@@ -8,23 +8,23 @@ maintainers don't accidentally weaken a load-bearing gate.
 
 | Path                                          | Why owner review is required                                              |
 |-----------------------------------------------|---------------------------------------------------------------------------|
-| `annuity_model/pricing_projection.py`         | Source of truth for SPIA cashflows + ALM. A silent change here is a release-stopping defect. |
-| `annuity_model/term_projection.py`            | Term Life liability cashflow definition; consumed by Excel builder.       |
-| `annuity_model/rila_projection.py`            | RILA crediting / cap / floor logic; consumed by Excel builder.            |
-| `annuity_model/alm_excel_ladder.py`           | Generates the Excel formulas that must match Python -- any divergence breaks parity. |
-| `annuity_model/excel_workbook_validator.py`   | The static gate that catches malformed formulas. Loosening it loses safety. |
-| `annuity_model/product_registry.py`           | The dispatch surface that lets a new product land in 2 files; structural correctness matters here more than perf. |
-| `annuity_model/parity_constants.py`           | The immutable tolerance contract. Every value here is referenced by code, tests, and rendered docs. |
+| `annuity_model/src/annuity_model/pricing_projection.py`         | Source of truth for SPIA cashflows + ALM. A silent change here is a release-stopping defect. |
+| `annuity_model/src/annuity_model/term_projection.py`            | Term Life liability cashflow definition; consumed by Excel builder.       |
+| `annuity_model/src/annuity_model/rila_projection.py`            | RILA crediting / cap / floor logic; consumed by Excel builder.            |
+| `annuity_model/src/annuity_model/alm_excel_ladder.py`           | Generates the Excel formulas that must match Python -- any divergence breaks parity. |
+| `annuity_model/src/annuity_model/excel_workbook_validator.py`   | The static gate that catches malformed formulas. Loosening it loses safety. |
+| `annuity_model/src/annuity_model/product_registry.py`           | The dispatch surface that lets a new product land in 2 files; structural correctness matters here more than perf. |
+| `annuity_model/src/annuity_model/parity_constants.py`           | The immutable tolerance contract. Every value here is referenced by code, tests, and rendered docs. |
 
 ## Excel builders
 
 | Path                                          | Why                                                                       |
 |-----------------------------------------------|---------------------------------------------------------------------------|
-| `build_pricing_excel_workbook.py` (SPIA)      | One off-by-one in the liability column letter and ModelCheck explodes.    |
-| `build_term_excel_workbook.py`                | Same.                                                                     |
-| `build_rila_excel_workbook.py`                | Same; plus RILA must use column M, not S.                                 |
-| `recalc_excel_shared.py`                      | Recalc helper used by parity tests; bug here masks formula errors.        |
-| `product_excel.py`                            | Dispatcher across per-product builders (all implemented products).                                     |
+| `annuity_model/src/annuity_model/build_pricing_excel_workbook.py` (SPIA) | One off-by-one in the liability column letter and ModelCheck explodes.    |
+| `annuity_model/src/annuity_model/build_term_excel_workbook.py`   | Same.                                                                     |
+| `annuity_model/src/annuity_model/build_rila_excel_workbook.py`   | Same; plus RILA must use column M, not S.                                 |
+| `annuity_model/src/annuity_model/recalc_excel_shared.py`         | Recalc helper used by parity tests; bug here masks formula errors.        |
+| `annuity_model/src/annuity_model/product_excel.py`               | Dispatcher across per-product builders (all implemented products).        |
 
 ## Load-bearing internals (added P0 hardening 2026-04)
 
@@ -33,14 +33,14 @@ explicitly so reviewers see them flagged as parity/UI critical:
 
 | Path                                          | Why                                                                       |
 |-----------------------------------------------|---------------------------------------------------------------------------|
-| `liability_layouts.py`                        | Single source of truth for liability column letters per product. RILA `M` vs SPIA/Term `S` lives here; a typo breaks every workbook. |
-| `liability_dispatch.py`                       | Pricing-result -> LiabilityPath converter registry. Renaming a result class without updating the registered key silently breaks ALM. |
-| `data_registry.py`                            | Versioned data + sha256 lock for mortality/yield CSVs. A silent dataset bump invalidates parity. |
-| `pricing_ui.py`                               | Monolithic Streamlit UI. Bug class includes silently dropping widget values into hard-coded contract fields (see Term wiring fix). |
-| `streamlit_app.py`                            | App entry point; reroutes / launcher logic.                               |
-| `pricing_run_form_state.py`                   | Run-form session-state defaults & numeric input wrapping. Affects every product's UI inputs. |
-| `_logging.py`                                 | Structured logging configuration; controls what reaches operators.        |
-| `_observability.py`                           | OpenTelemetry tracing decorator. P3 wiring will route engine entry points through this. |
+| `annuity_model/src/annuity_model/liability_layouts.py`           | Single source of truth for liability column letters per product. RILA `M` vs SPIA/Term `S` lives here; a typo breaks every workbook. |
+| `annuity_model/src/annuity_model/liability_dispatch.py`          | Pricing-result -> LiabilityPath converter registry. Renaming a result class without updating the registered key silently breaks ALM. |
+| `annuity_model/src/annuity_model/data_registry.py`               | Versioned data + sha256 lock for mortality/yield CSVs. A silent dataset bump invalidates parity. |
+| `annuity_model/src/annuity_model/pricing_ui.py`                  | Monolithic Streamlit UI. Bug class includes silently dropping widget values into hard-coded contract fields (see Term wiring fix). |
+| `streamlit_app.py`                                               | App entry point; reroutes / launcher logic.                               |
+| `annuity_model/src/annuity_model/pricing_run_form_state.py`      | Run-form session-state defaults & numeric input wrapping. Affects every product's UI inputs. |
+| `annuity_model/src/annuity_model/_logging.py`                    | Structured logging configuration; controls what reaches operators.        |
+| `annuity_model/src/annuity_model/_observability.py`              | OpenTelemetry tracing decorator. P3 wiring will route engine entry points through this. |
 
 ## Parity contracts and tests
 

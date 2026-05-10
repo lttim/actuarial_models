@@ -7,7 +7,7 @@ from textwrap import dedent
 
 import pytest
 
-import test_dashboard as td
+from annuity_model import test_dashboard as td
 
 
 def test_discover_tests_metadata_non_empty() -> None:

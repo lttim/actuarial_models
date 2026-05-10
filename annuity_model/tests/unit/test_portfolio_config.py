@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-import portfolio_config as pc
-from portfolio_config import portfolio_sidebar_visible, portfolio_v1_enabled
-from pricing_run_form_state import PORTFOLIO_KEY
+from annuity_model import portfolio_config as pc
+from annuity_model.portfolio_config import portfolio_sidebar_visible, portfolio_v1_enabled
+from annuity_model.pricing_run_form_state import PORTFOLIO_KEY
 
 
 def test_default_on_when_env_unset_and_no_disable_file(

@@ -29,7 +29,7 @@ Complete catalog of tracked documentation in this repository, with one-line purp
 - `annuity_model/README.md` — product package architecture, module map, and developer commands.
 - `annuity_model/AGENTS.md` — canonical four gates plus product-critical rules.
 - `annuity_model/state.md` — compact local snapshot/handoff state for the product folder.
-- `annuity_model/ui/MIGRATION.md` — planned decomposition path for `pricing_ui.py`.
+- `annuity_model/src/annuity_model/ui/MIGRATION.md` — planned decomposition path for `pricing_ui.py`.
 
 ## Annuity-model AI-review/skill artifacts (tracked)
 
@@ -38,7 +38,7 @@ Complete catalog of tracked documentation in this repository, with one-line purp
 
 ## Data artifact documentation
 
-- `annuity_model/data/mortality/cso_2017_ult/README.md` — synthetic CSO placeholder description and production overlay guidance.
+- `annuity_model/src/annuity_model/data/mortality/cso_2017_ult/README.md` — synthetic CSO placeholder description and production overlay guidance.
 
 ## Annuity-model docs hub
 

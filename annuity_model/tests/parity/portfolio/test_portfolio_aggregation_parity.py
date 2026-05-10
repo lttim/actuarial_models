@@ -9,12 +9,15 @@ import numpy as np
 import pytest
 from openpyxl import load_workbook
 
-from build_portfolio_excel_workbook import build_portfolio_workbook_bytes
-from excel_workbook_validator import validate_workbook_or_raise
-from inforce_io import load_policy_inputs_from_csv
-from portfolio import Portfolio
-from portfolio_runner import run_portfolio
-from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
+from annuity_model.build_portfolio_excel_workbook import build_portfolio_workbook_bytes
+from annuity_model.excel_workbook_validator import validate_workbook_or_raise
+from annuity_model.inforce_io import load_policy_inputs_from_csv
+from annuity_model.portfolio import Portfolio
+from annuity_model.portfolio_runner import run_portfolio
+from annuity_model.pricing_scenario_materialize import (
+    ANN_MODEL_ROOT,
+    run_scenario_for_portfolio_policies,
+)
 
 pytestmark = pytest.mark.parity
 

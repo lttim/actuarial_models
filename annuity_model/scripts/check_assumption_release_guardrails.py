@@ -13,10 +13,11 @@ from pathlib import Path
 
 _HERE = Path(__file__).resolve()
 _REPO_ROOT = _HERE.parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+_SRC_ROOT = _REPO_ROOT / "src"
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
 
-from data_registry import REGISTRY
+from annuity_model.data_registry import REGISTRY
 
 REQUIRED_WAIVER_FIELDS = (
     "Release version",

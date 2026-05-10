@@ -27,7 +27,9 @@ COPY annuity_model/ ./annuity_model/
 COPY actuarial_parity_kit/ ./actuarial_parity_kit/
 COPY README.md AGENTS.md CONTRIBUTING.md ./
 
-ENV PYTHONPATH=/app/annuity_model
+RUN pip install --no-build-isolation -e ./annuity_model
+
+ENV PYTHONPATH=/app/annuity_model/src
 
 WORKDIR /app/annuity_model
 

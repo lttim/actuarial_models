@@ -65,7 +65,7 @@ def test_pass_when_zero_survivors(
     mutants = tmp_path / "mutants"
     _seed_meta(
         mutants,
-        "pricing_projection.py",
+        "src/annuity_model/pricing_projection.py",
         {"pp.x__mutmut_1": 1, "pp.x__mutmut_2": 1},  # killed/killed
     )
     thresholds = _write_thresholds(tmp_path, default=0, per_file={})
@@ -73,7 +73,7 @@ def test_pass_when_zero_survivors(
         [
             "--skip-run",
             "--touched-files",
-            "pricing_projection.py",
+            "src/annuity_model/pricing_projection.py",
             "--thresholds",
             str(thresholds),
             "--mutants-dir",
@@ -93,7 +93,7 @@ def test_fail_when_survivor_exceeds_default_cap(
     mutants = tmp_path / "mutants"
     _seed_meta(
         mutants,
-        "rila_projection.py",
+        "src/annuity_model/rila_projection.py",
         {"r.x__mutmut_1": 0, "r.x__mutmut_2": 1},  # one survivor
     )
     thresholds = _write_thresholds(tmp_path, default=0, per_file={})
@@ -101,7 +101,7 @@ def test_fail_when_survivor_exceeds_default_cap(
         [
             "--skip-run",
             "--touched-files",
-            "rila_projection.py",
+            "src/annuity_model/rila_projection.py",
             "--thresholds",
             str(thresholds),
             "--mutants-dir",
@@ -122,15 +122,17 @@ def test_per_file_threshold_overrides_default(
     mutants = tmp_path / "mutants"
     _seed_meta(
         mutants,
-        "pricing_projection.py",
+        "src/annuity_model/pricing_projection.py",
         {f"pp.x__mutmut_{i}": (0 if i < 2 else 1) for i in range(5)},
     )
-    thresholds = _write_thresholds(tmp_path, default=0, per_file={"pricing_projection.py": 3})
+    thresholds = _write_thresholds(
+        tmp_path, default=0, per_file={"src/annuity_model/pricing_projection.py": 3}
+    )
     rc = gate.main(
         [
             "--skip-run",
             "--touched-files",
-            "pricing_projection.py",
+            "src/annuity_model/pricing_projection.py",
             "--thresholds",
             str(thresholds),
             "--mutants-dir",
@@ -149,15 +151,17 @@ def test_per_file_threshold_can_still_fail_when_exceeded(
     mutants = tmp_path / "mutants"
     _seed_meta(
         mutants,
-        "pricing_projection.py",
+        "src/annuity_model/pricing_projection.py",
         {f"pp.x__mutmut_{i}": 0 for i in range(4)},
     )
-    thresholds = _write_thresholds(tmp_path, default=0, per_file={"pricing_projection.py": 3})
+    thresholds = _write_thresholds(
+        tmp_path, default=0, per_file={"src/annuity_model/pricing_projection.py": 3}
+    )
     rc = gate.main(
         [
             "--skip-run",
             "--touched-files",
-            "pricing_projection.py",
+            "src/annuity_model/pricing_projection.py",
             "--thresholds",
             str(thresholds),
             "--mutants-dir",
@@ -181,7 +185,7 @@ def test_missing_meta_file_treated_as_zero_zero(
         [
             "--skip-run",
             "--touched-files",
-            "pricing_projection.py",
+            "src/annuity_model/pricing_projection.py",
             "--thresholds",
             str(thresholds),
             "--mutants-dir",
@@ -190,7 +194,7 @@ def test_missing_meta_file_treated_as_zero_zero(
     )
     assert rc == 0
     captured = capsys.readouterr()
-    assert "no mutants/pricing_projection.py.meta produced" in captured.err
+    assert "no mutants/src/annuity_model/pricing_projection.py.meta produced" in captured.err
 
 
 def test_negative_threshold_aborts_with_two(

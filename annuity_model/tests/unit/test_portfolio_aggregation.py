@@ -7,15 +7,15 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-import pricing_projection as sp
-from liability_aggregation import (
+from annuity_model import pricing_projection as sp
+from annuity_model.liability_aggregation import (
     aggregate_by_product_type,
     aggregate_liability_paths,
     assert_rollups_sum_to_total,
     padded_cashflows_on_portfolio_grid,
 )
-from parity_constants import PORTFOLIO_ROLLUP_TOL
-from product_registry import ProductType
+from annuity_model.parity_constants import PORTFOLIO_ROLLUP_TOL
+from annuity_model.product_registry import ProductType
 
 
 def _path(n: int, scale: float) -> sp.LiabilityPath:

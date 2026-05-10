@@ -8,11 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from inforce_io import load_policy_inputs_from_csv
-from portfolio import Portfolio
-from portfolio_runner import run_portfolio
-from portfolio_summary import portfolio_result_to_summary_dict
-from pricing_scenario_materialize import ANN_MODEL_ROOT, run_scenario_for_portfolio_policies
+from annuity_model.inforce_io import load_policy_inputs_from_csv
+from annuity_model.portfolio import Portfolio
+from annuity_model.portfolio_runner import run_portfolio
+from annuity_model.portfolio_summary import portfolio_result_to_summary_dict
+from annuity_model.pricing_scenario_materialize import (
+    ANN_MODEL_ROOT,
+    run_scenario_for_portfolio_policies,
+)
 
 pytestmark = pytest.mark.parity
 

@@ -17,8 +17,8 @@ def _role_ids(plan: router.StaffingPlan) -> set[str]:
 def test_calculation_and_excel_staffs_model_builder_validation_and_actuary() -> None:
     plan = router.build_staffing_plan(
         [
-            "annuity_model/rila_projection.py",
-            "annuity_model/build_rila_excel_workbook.py",
+            "annuity_model/src/annuity_model/rila_projection.py",
+            "annuity_model/src/annuity_model/build_rila_excel_workbook.py",
         ],
         objective="change rila mechanics",
     )
@@ -41,8 +41,8 @@ def test_calculation_and_excel_staffs_model_builder_validation_and_actuary() -> 
 def test_ui_state_change_staffs_ux_and_validation() -> None:
     plan = router.build_staffing_plan(
         [
-            "annuity_model/pricing_ui.py",
-            "annuity_model/pricing_run_form_state.py",
+            "annuity_model/src/annuity_model/pricing_ui.py",
+            "annuity_model/src/annuity_model/pricing_run_form_state.py",
         ]
     )
 
@@ -117,12 +117,12 @@ def test_broad_mixed_change_adds_migration_planner_and_soft_cap_signal() -> None
     plan = router.build_staffing_plan(
         [
             "annuity_model/pyproject.toml",
-            "annuity_model/__init__.py",
-            "annuity_model/pricing_ui.py",
-            "annuity_model/rila_projection.py",
-            "annuity_model/build_rila_excel_workbook.py",
+            "annuity_model/src/annuity_model/__init__.py",
+            "annuity_model/src/annuity_model/pricing_ui.py",
+            "annuity_model/src/annuity_model/rila_projection.py",
+            "annuity_model/src/annuity_model/build_rila_excel_workbook.py",
             "annuity_model/docs/AI_AGENT_PREFLIGHT.md",
-            "annuity_model/data_registry.py",
+            "annuity_model/src/annuity_model/data_registry.py",
             "annuity_model/tests/test_rila_projection.py",
         ]
     )
@@ -138,7 +138,7 @@ def test_every_dynamic_role_has_declared_role_contract_fields() -> None:
     plan = router.build_staffing_plan(
         [
             "annuity_model/requirements.txt",
-            "annuity_model/data/assumptions/assumption_approvals.json",
+            "annuity_model/src/annuity_model/data/assumptions/assumption_approvals.json",
             "annuity_model/tests/test_perf_baselines.py",
             ".github/branch-protection.json",
         ]

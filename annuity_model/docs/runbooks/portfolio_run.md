@@ -12,7 +12,7 @@ From `annuity_model/` with the project venv active:
 
 ```bash
 export ANNUITY_MODEL_PORTFOLIO_V1=1
-python -m cli portfolio-run \
+python -m annuity_model.cli portfolio-run \
   --inforce tests/data/inforce/example_v1/inforce.csv \
   --out .smoke/portfolio_run/
 ```
@@ -25,7 +25,7 @@ Outputs:
 Optional parallelism:
 
 ```bash
-python -m cli portfolio-run --inforce …/inforce.csv --out …/ --workers 4
+python -m annuity_model.cli portfolio-run --inforce …/inforce.csv --out …/ --workers 4
 ```
 
 ## Streamlit
@@ -39,7 +39,7 @@ Enablement matches **`portfolio_config.portfolio_v1_enabled()`** (same rules as
 `run_pricing_ui.sh` / `run_pricing_ui.bat`): **on by default** when the env var is
 unset, unless **`annuity_model/.disable-portfolio-v1`** exists or
 `ANNUITY_MODEL_PORTFOLIO_V1` is set to a falsy value (`0`, `false`, …). That way
-`streamlit run pricing_ui.py` keeps the Portfolio section without copying shell
+`streamlit run src/annuity_model/pricing_ui.py` keeps the Portfolio section without copying shell
 exports. If the section is off, the sidebar expander explains why and offers a
 session-only checkbox to show it anyway.
 

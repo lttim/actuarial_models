@@ -30,16 +30,16 @@ on:
       # catches surface drift between the gate and the nightly; the
       # path filter below is a (deliberate) sub-set that limits when
       # this expensive job spins up.
-      - "annuity_model/pricing_projection.py"
-      - "annuity_model/term_projection.py"
-      - "annuity_model/rila_projection.py"
-      - "annuity_model/alm_excel_ladder.py"
-      - "annuity_model/build_pricing_excel_workbook.py"
-      - "annuity_model/build_rila_excel_workbook.py"
-      - "annuity_model/build_term_excel_workbook.py"
-      - "annuity_model/excel_workbook_validator.py"
-      - "annuity_model/product_excel.py"
-      - "annuity_model/product_registry.py"
+      - "annuity_model/src/annuity_model/pricing_projection.py"
+      - "annuity_model/src/annuity_model/term_projection.py"
+      - "annuity_model/src/annuity_model/rila_projection.py"
+      - "annuity_model/src/annuity_model/alm_excel_ladder.py"
+      - "annuity_model/src/annuity_model/build_pricing_excel_workbook.py"
+      - "annuity_model/src/annuity_model/build_rila_excel_workbook.py"
+      - "annuity_model/src/annuity_model/build_term_excel_workbook.py"
+      - "annuity_model/src/annuity_model/excel_workbook_validator.py"
+      - "annuity_model/src/annuity_model/product_excel.py"
+      - "annuity_model/src/annuity_model/product_registry.py"
       # Also re-run when the gate machinery itself changes -- a bug in
       # the gate could otherwise hide a real regression.
       - "annuity_model/scripts/mutmut_pr_gate.py"
@@ -84,6 +84,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.lock -r requirements-dev.txt
+          pip install --no-build-isolation -e .
 
       - name: Compute touched parity-critical files
         id: diff
@@ -98,7 +99,7 @@ jobs:
           # Run from repo root for the diff so paths come out
           # repo-relative; we then strip the `annuity_model/` prefix.
           all=$(cd .. && git diff --name-only "$base" "$head" \
-              | grep -E '^annuity_model/[^/]+\.py$' \
+              | grep -E '^annuity_model/src/annuity_model/[^/]+\.py$' \
               | sed 's#^annuity_model/##' || true)
           # Newline-separated -> space-separated for argv friendliness;
           # GitHub Actions multi-line outputs need the heredoc form.

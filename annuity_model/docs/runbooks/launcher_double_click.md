@@ -1,7 +1,7 @@
 # Runbook: "I double-clicked `run_pricing_ui.command` and got an error"
 
 This runbook covers the Finder / Explorer double-click path. For the standard
-`streamlit run pricing_ui.py` developer flow, see the project README instead.
+`streamlit run src/annuity_model/pricing_ui.py` developer flow, see the project README instead.
 
 ## Symptom catalog
 
@@ -11,7 +11,7 @@ This runbook covers the Finder / Explorer double-click path. For the standard
 | `[ERROR] $PY is Python 3.X.Y; this project requires >= 3.11`                              | Launcher refused an old interpreter (working as intended) | [P-OLD]     |
 | `[ERROR] streamlit is not importable ... Refusing to pip install ... (PEP 668)`           | No project `.venv`; running against system Python        | [NO-VENV]   |
 | `[ERROR] No usable Python interpreter on PATH`                                            | No Python at all                                         | [NO-PY]     |
-| `[ERROR] Failed to import pricing_ui ...`                                                 | Module-level regression broke import                     | [BAD-IMPORT] |
+| `[ERROR] Failed to import annuity_model.pricing_ui ...`                                   | Module-level regression broke import                     | [BAD-IMPORT] |
 | Terminal window closes the moment the script ends                                         | (Should not happen anymore -- file a bug)                | [BUG]       |
 
 ## Triage flow
@@ -69,7 +69,7 @@ to surface this error early. Re-run with full traceback:
 
 ```bash
 cd annuity_model
-./.venv/bin/python -c "import pricing_ui"
+PYTHONPATH=src ./.venv/bin/python -c "import annuity_model.pricing_ui"
 ```
 
 Common causes:

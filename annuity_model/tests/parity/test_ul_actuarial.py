@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import pricing_projection as sp
-import ul_projection as ul
-from actuarial_benchmarks import (
+from annuity_model import pricing_projection as sp
+from annuity_model import ul_projection as ul
+from annuity_model.actuarial_benchmarks import (
     UL_BENCHMARK_AV_20Y_HI,
     UL_BENCHMARK_AV_20Y_LO,
     UL_SENSITIVITY_EPS,

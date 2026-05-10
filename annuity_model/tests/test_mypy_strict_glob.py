@@ -1,7 +1,7 @@
 """Meta-invariant: the mypy strict-mode glob actually covers every product.
 
 We replaced the manually-curated ``[[tool.mypy.overrides]]`` strict-list
-with a glob over ``products.*.engine`` (and friends) so that adding a
+with a glob over ``annuity_model.products.*.engine`` (and friends) so that adding a
 new product does not require a separate "remember to add it to mypy
 strict" commit. This test pins down the contract: every product
 subpackage that exists on disk must be matched by the glob, AND every
@@ -29,25 +29,25 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
-PRODUCTS_DIR = REPO_ROOT / "products"
+PRODUCTS_DIR = REPO_ROOT / "src" / "annuity_model" / "products"
 
 # Load-bearing core modules: every parity-critical legacy module must
 # remain mypy-strict. If a module is renamed / split, update both the
 # pyproject override block AND this list.
 LOAD_BEARING_CORE: tuple[str, ...] = (
-    "pricing_projection",
-    "term_projection",
-    "rila_projection",
-    "alm_excel_ladder",
-    "build_pricing_excel_workbook",
-    "build_term_excel_workbook",
-    "build_rila_excel_workbook",
-    "excel_builder_helpers",
-    "excel_workbook_validator",
-    "product_registry",
-    "product_excel",
-    "liability_dispatch",
-    "liability_layouts",
+    "annuity_model.pricing_projection",
+    "annuity_model.term_projection",
+    "annuity_model.rila_projection",
+    "annuity_model.alm_excel_ladder",
+    "annuity_model.build_pricing_excel_workbook",
+    "annuity_model.build_term_excel_workbook",
+    "annuity_model.build_rila_excel_workbook",
+    "annuity_model.excel_builder_helpers",
+    "annuity_model.excel_workbook_validator",
+    "annuity_model.product_registry",
+    "annuity_model.product_excel",
+    "annuity_model.liability_dispatch",
+    "annuity_model.liability_layouts",
 )
 
 # Per-product files that the glob must cover. Adding a new file here
@@ -137,26 +137,26 @@ def test_per_product_glob_covers_all_products(strict_patterns: list[str], submod
         path = PRODUCTS_DIR / product / f"{submodule}.py"
         if not path.is_file():
             continue
-        dotted = f"products.{product}.{submodule}"
+        dotted = f"annuity_model.products.{product}.{submodule}"
         if not _matches_any(dotted, strict_patterns):
             missing.append(dotted)
     assert not missing, (
         f"The mypy strict override glob does not cover these product "
         f"submodules: {missing!r}. Re-widen the override glob in "
-        f"pyproject.toml (the canonical pattern is `products.*.{submodule}`)."
+        f"pyproject.toml (the canonical pattern is `annuity_model.products.*.{submodule}`)."
     )
 
 
 def test_no_redundant_product_modules_in_load_bearing_list() -> None:
-    """Don't list `products.spia.engine` twice -- the glob already covers it.
+    """Don't list `annuity_model.products.spia.engine` twice -- the glob already covers it.
 
     This guards against a contributor seeing a mypy strict failure on
     products.<x>.engine and "fixing" it by adding the literal name to
     LOAD_BEARING_CORE, which would silently re-introduce the old
     manual-list maintenance burden.
     """
-    bad = [m for m in LOAD_BEARING_CORE if m.startswith("products.")]
+    bad = [m for m in LOAD_BEARING_CORE if m.startswith("annuity_model.products.")]
     assert not bad, (
-        f"LOAD_BEARING_CORE must not contain products.* entries (these are "
+        f"LOAD_BEARING_CORE must not contain annuity_model.products.* entries (these are "
         f"covered by the glob override). Found: {bad!r}."
     )

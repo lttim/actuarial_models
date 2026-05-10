@@ -38,12 +38,14 @@ import numpy as np
 
 _HERE = Path(__file__).resolve()
 _REPO_ROOT = _HERE.parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+_SRC_ROOT = _REPO_ROOT / "src"
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
 
-import pricing_projection as sp  # noqa: E402
-from parity_constants import TOL_DOLLAR  # noqa: E402
 from tests.parity.excel_formula_sim import excel_disinvest_shortest_first  # noqa: E402
+
+from annuity_model import pricing_projection as sp  # noqa: E402
+from annuity_model.parity_constants import TOL_DOLLAR  # noqa: E402
 
 
 def _default_scenario() -> tuple[

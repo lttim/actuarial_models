@@ -10,9 +10,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import myga_projection as my
-import pricing_projection as sp
-from actuarial_benchmarks import (
+from annuity_model import myga_projection as my
+from annuity_model import pricing_projection as sp
+from annuity_model.actuarial_benchmarks import (
     MYGA_BENCHMARK_AV_T_HI,
     MYGA_BENCHMARK_AV_T_LO,
     MYGA_BENCHMARK_PV_HI,

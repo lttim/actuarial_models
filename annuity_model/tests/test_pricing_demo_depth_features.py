@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import numpy as np
 
-from assumption_provenance import approvals_as_dicts, provenance_rows_from_pricing_state
-from dynamic_lapse import DynamicLapseConfig, dynamic_lapse_path, persistency_from_monthly_lapse
-from experience_study import sample_experience_rows
-from run_ledger import pricing_run_summary, stable_input_hash
-from scenario_catalog import get_pricing_scenario, list_pricing_scenarios
+from annuity_model.assumption_provenance import (
+    approvals_as_dicts,
+    provenance_rows_from_pricing_state,
+)
+from annuity_model.dynamic_lapse import (
+    DynamicLapseConfig,
+    dynamic_lapse_path,
+    persistency_from_monthly_lapse,
+)
+from annuity_model.experience_study import sample_experience_rows
+from annuity_model.run_ledger import pricing_run_summary, stable_input_hash
+from annuity_model.scenario_catalog import get_pricing_scenario, list_pricing_scenarios
 
 
 def test_scenario_catalog_has_replayable_named_stresses() -> None:
