@@ -35,7 +35,7 @@ filelock==3.28.0
 fonttools==4.62.1
 ghp-import==2.1.0
 gitdb==4.0.12
-GitPython==3.1.46
+GitPython==3.1.50
 griffe==2.0.2
 griffecli==2.0.2
 griffelib==2.0.2
@@ -128,4 +128,4 @@ uc-micro-py==2.0.0
 urllib3==2.6.3
 virtualenv==21.2.4
 watchdog==6.0.0
-wheel==0.45.1
+wheel==0.46.2

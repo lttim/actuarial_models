@@ -3,7 +3,7 @@
 # Production / Streamlit-Cloud installs MUST NOT pull this file.
 # Pinned to the versions in the M5 dev venv on 2026-04 (Python 3.12).
 setuptools==80.9.0
-wheel==0.45.1
+wheel==0.46.2
 pytest==9.0.3
 pytest-html==4.2.0
 
