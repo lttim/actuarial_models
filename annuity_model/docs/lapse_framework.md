@@ -1,8 +1,7 @@
 # Lapse / persistency framework (v1)
 
 This document describes the **static lapse table** framework introduced
-in Phase 0 of the seven-product rollout
-([rollout plan](seven_product_rollout_plan.md)). All new products
+for the seven-product expansion. All new products
 (MYGA, FIA, VA, WL, UL, IUL, VUL) accept an optional
 `lapse: LapseAssumption | None = None` parameter; existing products
 (SPIA, Term, RILA) remain mortality-only.

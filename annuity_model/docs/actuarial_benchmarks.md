@@ -1,7 +1,7 @@
 # Per-product actuarial benchmark bands
 
 This document is the **rationale** companion to
-[`actuarial_benchmarks.py`](../actuarial_benchmarks.py). The Python
+[`actuarial_benchmarks.py`](../src/annuity_model/actuarial_benchmarks.py). The Python
 module owns the *executable* constants; this doc owns the *why*. The
 two are kept in sync by
 [`scripts/render_actuarial_benchmarks.py`](../scripts/render_actuarial_benchmarks.py)

@@ -4,9 +4,9 @@ Production-quality 10-product pricing engine, ALM ladder, and Excel
 workbook generator. Python is the source of truth; Excel is the auditor.
 
 **Implemented products:** SPIA, Term Life, RILA, MYGA, FIA, VA, WL, UL,
-IUL, VUL. The 7 new products beyond the original SPIA / Term / RILA core
-landed in the seven-product rollout
-([docs/seven_product_rollout_plan.md](docs/seven_product_rollout_plan.md)).
+IUL, VUL. The seven products beyond the original SPIA / Term / RILA core
+are now first-class products behind the same registry, UI, CLI, parity, and
+workbook evidence surfaces.
 
 ## Module map
 
@@ -25,8 +25,8 @@ annuity_model/
 │   ├── alm_excel_ladder.py
 │   ├── build_*_excel_workbook.py  # 10 per-product workbook builders
 │   ├── product_excel.py           # build_product_workbook dispatcher
-│   ├── pricing_ui.py              # Streamlit app (legacy monolith; see ui/MIGRATION.md)
-│   ├── ui/                        # decomposition target for pricing_ui.py
+│   ├── pricing_ui.py              # Streamlit app orchestration; see ui/MIGRATION.md
+│   ├── ui/                        # extracted shell, pages, widgets, diagnostics
 │   ├── products/                  # per-product subpackages (10 of them)
 │   └── data/                      # packaged mortality, curves, scenarios
 ├── scripts/
@@ -40,7 +40,6 @@ annuity_model/
 │   ├── ui/                        # Streamlit AppTest smokes (10 products)
 │   └── test_*.py                  # unit tests
 └── docs/
-    ├── seven_product_rollout_plan.md   # plan covering Phase 0..9
     ├── model_parity_contract.md   # SPIA + ALM tolerance contract (generated)
     ├── rila_parity_contract.md    # RILA tolerance contract (generated)
     ├── actuarial_benchmarks.md    # per-product band rationale (generated)
@@ -57,7 +56,7 @@ annuity_model/
         └── release.md
 ```
 
-## Architecture (after Phase 2 hardening)
+## Current architecture
 
 The diagram shows the original SPIA / Term / RILA spine; the live
 `ProductRegistry` dispatches **10** products (see module map above).

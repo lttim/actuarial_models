@@ -61,7 +61,7 @@ Entries are appended at the **bottom**; never edit historical entries.
 - **PR:** seven-product-rollout (Phase 0)
 - **Author / reviewer:** lttim
 - **Summary:** Landed the Phase 0 deliverables for the seven-product
-  rollout per `docs/seven_product_rollout_plan.md`:
+  rollout:
   * **`lapse.py`** — static lapse / persistency framework
     (`LapseAssumption`, `combined_monthly_survival`, monthly hazard
     helpers). Opt-in only; existing engines unchanged.
@@ -136,8 +136,7 @@ Entries are appended at the **bottom**; never edit historical entries.
   gains `actuary-review` and `actuary-review-full` recipes. Verdicts
   live under `.cursor/actuary-reviews/` (gitignored, like handoffs).
 - **Justification:** Adds the "internally consistent but actuarially
-  nonsense" gate that pure parity tests cannot see (Section 13 of
-  `docs/seven_product_rollout_plan.md`). The autonomous loop means
+  nonsense" gate that pure parity tests cannot see. The autonomous loop means
   notable findings drive the AI developer to iterate without
   prompting the user, so the workflow finishes cleanly in the
   background. The lite scenario set keeps the runtime cost of the

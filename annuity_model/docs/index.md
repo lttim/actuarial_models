@@ -5,8 +5,7 @@ Controlled actuarial prototype for a **10-product** pricing/projection platform
 workbook generator. Python is the source of truth; Excel is the auditor. RILA
 and IUL are being promoted toward mechanics-production product mechanics with
 expanded policy-access state, while assumption governance remains advisory and
-must be disclosed in run/export evidence. Rollout narrative:
-[`seven_product_rollout_plan.md`](seven_product_rollout_plan.md).
+must be disclosed in run/export evidence.
 
 ## Where to start
 
@@ -28,7 +27,7 @@ must be disclosed in run/export evidence. Rollout narrative:
 
 ## Architecture
 
-Schematic: three original engines feed the same adapter/registry pattern; nine
+Schematic: three original engines feed the same adapter/registry pattern; seven
 additional products plug into the same registry (see `product_registry.py`).
 
 ```mermaid
@@ -77,6 +76,6 @@ CI enforces all of these:
   [AI agent team protocol](AI_AGENT_TEAM_PROTOCOL.md),
   [gap register](platform_gap_register.md),
   [independent challenge activation](independent_challenge_activation.md)
-* Roadmaps: [actuarial fidelity backlog](actuarial_fidelity_backlog.md),
-  [platform engineering roadmap](platform_engineering_roadmap.md),
-  [implementation phasing](implementation_phasing.md)
+* Active planning: [gap register](platform_gap_register.md),
+  [actuarial fidelity backlog](actuarial_fidelity_backlog.md),
+  [UI migration map](../src/annuity_model/ui/MIGRATION.md)

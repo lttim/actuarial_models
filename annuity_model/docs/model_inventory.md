@@ -20,8 +20,8 @@ It provides ownership, intended use, key limitations, and validation cadence.
 | Portfolio aggregation (`portfolio_runner.py`, `liability_aggregation.py`, `build_portfolio_excel_workbook.py`) | 2 | Platform actuary | Independent actuarial reviewer | Multi-policy rollups and portfolio ALM | Per PR + release | Shared scenario assumptions may be coarse for heterogeneous cohorts. |
 | Scenario materialization (`pricing_scenario_materialize.py`) | 1 | Platform actuary | Independent actuarial reviewer | Shared assumption package for pricing and portfolio runs | Per PR + release | Deterministic defaults unless stochastic scenarios are explicitly configured. |
 | Data artifact registry (`data_registry.py`) | 1 | Assumption steward | Independent actuarial reviewer | Controlled lookup for assumption data artifacts | Per PR + release | Governance metadata currently technical-first unless augmented by governance schema. |
-| Streamlit UI orchestration (`pricing_ui.py`) | 2 | Platform engineering | Platform reviewer | Interactive model execution and inspection | Per PR | Monolithic composition increases regression coupling risk. |
-| CLI orchestration (`cli.py`) | 2 | Platform engineering | Platform reviewer | Batch portfolio pricing and artifact output | Per PR | No centralized run ledger by default. |
+| Streamlit UI orchestration (`pricing_ui.py`, `ui/`) | 2 | Platform engineering | Platform reviewer | Interactive model execution and inspection | Per PR | App shell and shared widgets are extracted; several page bodies remain in the orchestration module and carry regression coupling risk. |
+| CLI orchestration (`cli.py`, `run_ledger.py`) | 2 | Platform engineering | Platform reviewer | Batch portfolio pricing and artifact output | Per PR | Default SQLite run ledger exists; replay/export workflow should keep hardening as API surfaces mature. |
 
 ## Control requirements
 

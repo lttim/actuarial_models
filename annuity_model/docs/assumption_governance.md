@@ -1,7 +1,7 @@
 # Assumption governance standard
 
 This standard adds governance metadata on top of the technical
-artifact registry in [`data_registry.py`](../data_registry.py).
+artifact registry in [`data_registry.py`](../src/annuity_model/data_registry.py).
 
 ## Required metadata for assumption sets
 

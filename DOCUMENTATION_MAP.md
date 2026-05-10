@@ -29,7 +29,7 @@ Complete catalog of tracked documentation in this repository, with one-line purp
 - `annuity_model/README.md` — product package architecture, module map, and developer commands.
 - `annuity_model/AGENTS.md` — canonical four gates plus product-critical rules.
 - `annuity_model/state.md` — compact local snapshot/handoff state for the product folder.
-- `annuity_model/src/annuity_model/ui/MIGRATION.md` — planned decomposition path for `pricing_ui.py`.
+- `annuity_model/src/annuity_model/ui/MIGRATION.md` — current decomposition path for `pricing_ui.py`.
 
 ## Annuity-model AI-review/skill artifacts (tracked)
 
@@ -42,7 +42,7 @@ Complete catalog of tracked documentation in this repository, with one-line purp
 
 ## Annuity-model docs hub
 
-- `annuity_model/docs/index.md` — entry index for contracts, runbooks, governance docs, and roadmaps.
+- `annuity_model/docs/index.md` — entry index for contracts, runbooks, governance docs, and active planning.
 - `annuity_model/docs/AI_AGENT_PREFLIGHT.md` — AI decision tree and source-of-truth map before edits.
 - `annuity_model/docs/AI_AGENT_TEAM_PROTOCOL.md` — autonomous multi-agent staffing, role authority, and Team Run Packet protocol.
 
@@ -73,13 +73,10 @@ Complete catalog of tracked documentation in this repository, with one-line purp
 - `annuity_model/docs/glossary.md` — term definitions for actuarial and platform vocabulary.
 - `annuity_model/docs/lapse_framework.md` — static lapse v1 framework and limitations.
 - `annuity_model/docs/actuarial_benchmarks.md` — benchmark-band rationale with generated constants table.
-- `annuity_model/docs/seven_product_rollout_plan.md` — phased rollout blueprint and completion criteria.
 
 ## Forward-planning docs
 
 - `annuity_model/docs/actuarial_fidelity_backlog.md` — actuarial capability backlog with evidence expectations.
-- `annuity_model/docs/platform_engineering_roadmap.md` — architecture/platform hardening roadmap tracks.
-- `annuity_model/docs/implementation_phasing.md` — phased delivery/evidence plan across governance, actuarial, platform work.
 
 ## Operational runbooks
 

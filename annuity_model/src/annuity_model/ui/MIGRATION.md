@@ -2,9 +2,9 @@
 
 > **Status (current inventory):** still gated, but Chunk 5 has moved the
 > shared app shell, overview page, diagnostics export, page router, and
-> product maturity badges into `annuity_model/ui/`. The hardening roadmap
-> conditioned the full per-page split on `pricing_ui.py < 1.5k LOC after
-> P1/P2 extractions`. The current count (run
+> product maturity badges into `annuity_model/ui/`. The full per-page split is
+> still conditioned on `pricing_ui.py < 1.5k LOC after
+> staged extractions`. The current count (run
 > `wc -l annuity_model/src/annuity_model/pricing_ui.py` from the repository
 > root) is **6,022 LOC**, so the pricing-run/ALM/what-if/export pages remain
 > above the safe migration threshold.
@@ -25,7 +25,7 @@
 what-if/excel-replicator state plumbing.
 
 This package (`annuity_model/ui/`) is the **target** structure for the
-decomposition planned in Phase 2 of the hardening roadmap. The goal is to
+remaining decomposition. The goal is to
 move the existing functions here progressively, **one logical page at a
 time**, with full Streamlit-test coverage at each step.
 
@@ -83,7 +83,7 @@ annuity_model/
 
 ## Why phased
 
-The audit (Phase 2 plan, `architecture explore` report) found `session_state`
+The audit script found `session_state`
 keys minted at ~30 distinct sites, often shared across pages. A single big
 split would invariably mis-route at least one of them and produce a
 confusing UI bug days later. One page per PR with a behaviour test before

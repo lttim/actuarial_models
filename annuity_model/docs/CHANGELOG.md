@@ -12,9 +12,8 @@ ALM rules, RILA crediting) MUST also be logged in
 
 ### Added — Seven-product rollout (Phases 0-9)
 
-Per [docs/seven_product_rollout_plan.md](seven_product_rollout_plan.md),
-the following seven products are now first-class citizens alongside SPIA
-/ Term / RILA. The `implemented_product_types()` set grows from 3 to 10:
+The following seven products are now first-class citizens alongside SPIA /
+Term / RILA. The `implemented_product_types()` set grows from 3 to 10:
 
 - **MYGA** (Multi-Year Guaranteed Annuity) — single premium, declared
   rate, fixed guarantee period. Maturity payout + in-period death CF.

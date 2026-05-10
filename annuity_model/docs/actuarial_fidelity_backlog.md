@@ -18,9 +18,9 @@ within a single portfolio run.
 
 ### Candidate implementation surfaces
 
-- [`inforce_parsers.py`](../inforce_parsers.py)
-- [`pricing_scenario_materialize.py`](../pricing_scenario_materialize.py)
-- [`portfolio_runner.py`](../portfolio_runner.py)
+- [`inforce_parsers.py`](../src/annuity_model/inforce_parsers.py)
+- [`pricing_scenario_materialize.py`](../src/annuity_model/pricing_scenario_materialize.py)
+- [`portfolio_runner.py`](../src/annuity_model/portfolio_runner.py)
 - [`docs/portfolio_runner_spec.md`](portfolio_runner_spec.md)
 
 ### Evidence artifacts
@@ -42,7 +42,7 @@ Move from static lapse assumptions to behaviorally responsive lapse models.
 
 ### Candidate implementation surfaces
 
-- [`lapse.py`](../lapse.py)
+- [`lapse.py`](../src/annuity_model/lapse.py)
 - [`docs/lapse_framework.md`](lapse_framework.md)
 - Product engines (`*_projection.py`) that support lapse assumptions.
 
@@ -65,9 +65,9 @@ Establish governed scenario sets with reproducibility and clear intended use.
 
 ### Candidate implementation surfaces
 
-- [`data_registry.py`](../data_registry.py)
-- [`pricing_scenario_materialize.py`](../pricing_scenario_materialize.py)
-- CLI/export payloads in [`cli.py`](../cli.py)
+- [`data_registry.py`](../src/annuity_model/data_registry.py)
+- [`pricing_scenario_materialize.py`](../src/annuity_model/pricing_scenario_materialize.py)
+- CLI/export payloads in [`cli.py`](../src/annuity_model/cli.py)
 
 ### Evidence artifacts
 
@@ -88,7 +88,8 @@ Create a managed observed-vs-expected loop for assumption updates.
 
 ### Candidate implementation surfaces
 
-- New module: `experience_study.py` (planned).
+- [`experience_study.py`](../src/annuity_model/experience_study.py) for
+  observed-vs-expected calculations and report payloads.
 - New runbook for O/E operations.
 - Link updates into [`docs/model_change_log.md`](model_change_log.md).
 

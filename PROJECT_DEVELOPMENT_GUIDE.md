@@ -14,7 +14,7 @@ Use this file as the navigation hub for development governance. Product math con
 - Pricing engines and ALM logic in Python.
 - Generated Excel workbooks as independently recalculating auditors.
 - Parity, validator, and regression tests that block unsafe changes.
-- Operational docs and runbooks for investigations, releases, and roadmap governance.
+- Operational docs and runbooks for investigations, releases, gap tracking, and backlog governance.
 
 Main active surfaces:
 

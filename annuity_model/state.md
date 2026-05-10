@@ -1,7 +1,9 @@
 # Handoff — `annuity_model` (multi-product)
 
-Short snapshot for humans. For structured AI session continuity, use `!handoff`
-/ `!recall` per `.cursor/rules/handoff-recall.mdc` (files under `.cursor/handoffs/`).
+Short snapshot for humans. For structured AI session continuity, use
+`.agent-team-runs/` Team Run Packets for governed work; older Cursor
+`!handoff` / `!recall` files under `.cursor/handoffs/` remain historical
+helpers only.
 
 ## Tip of `main`
 
@@ -27,9 +29,9 @@ tests are added; **exit code 0** is the invariant.
 
 ## Product surface
 
-Ten pricing engines + Excel builders behind `ProductRegistry` (SPIA, Term,
-RILA, MYGA, FIA, VA, WL, UL, IUL, VUL). Narrative plan:
-`docs/seven_product_rollout_plan.md`.
+Ten pricing engines + Excel builders behind canonical `ProductDefinition`
+records and derived compatibility views (SPIA, Term, RILA, MYGA, FIA, VA,
+WL, UL, IUL, VUL).
 
 ## Parity / release (do not skip)
 
@@ -43,8 +45,9 @@ RILA, MYGA, FIA, VA, WL, UL, IUL, VUL). Narrative plan:
 
 ## Optional next steps
 
-- See `docs/actuarial_fidelity_backlog.md` and `docs/platform_engineering_roadmap.md`
-  for staged work; `docs/index.md` for the full doc map.
+- See `docs/platform_gap_register.md`, `docs/actuarial_fidelity_backlog.md`,
+  and `src/annuity_model/ui/MIGRATION.md` for staged work; `docs/index.md`
+  for the full doc map.
 
 ## Open issues
 
