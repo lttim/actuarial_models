@@ -1,5 +1,19 @@
-"""Reusable widgets shared across pages.
+"""Reusable widgets shared across pages."""
 
-Move ``_render_*`` helpers out of ``pricing_ui.py`` here once the UI tests
-have a strong enough behavior contract that the move is safe.
-"""
+from .product_badges import (
+    ProductStatus,
+    badges_for_status,
+    product_status_for,
+    product_statuses,
+    render_product_readiness_summary,
+    render_product_status_badges,
+)
+
+__all__ = [
+    "ProductStatus",
+    "badges_for_status",
+    "product_status_for",
+    "product_statuses",
+    "render_product_readiness_summary",
+    "render_product_status_badges",
+]

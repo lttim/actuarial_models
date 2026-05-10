@@ -15,9 +15,7 @@ widgets to ``min_value`` on first paint.
 from __future__ import annotations
 
 import dataclasses
-import datetime as _dt
 import io
-import json
 import os
 import time
 import uuid
@@ -114,11 +112,14 @@ from annuity_model.run_ledger import pricing_run_summary
 from annuity_model.scenario_catalog import PricingScenario, list_pricing_scenarios
 from annuity_model.test_dashboard import render_unit_tests_page
 from annuity_model.ui.app_shell import configure_pricing_page, render_sidebar_shell
+from annuity_model.ui.diagnostics import DiagnosticsBuilders, render_diagnostics_export_sidebar
 from annuity_model.ui.navigation import SECTION_LABELS as _NAV_SECTION_LABELS
 from annuity_model.ui.navigation import SECTION_ORDER as _NAV_SECTION_ORDER
 from annuity_model.ui.navigation import section_options
 from annuity_model.ui.pages.overview import dynamic_overview_features
 from annuity_model.ui.pages.overview import render_overview as _render_overview
+from annuity_model.ui.pages.router import render_selected_page
+from annuity_model.ui.widgets.product_badges import render_product_status_badges
 
 
 def _maybe_alm_excel_snapshot_for_workbook() -> ALMExcelSnapshot | None:
@@ -3035,6 +3036,7 @@ def _render_run_and_results() -> None:
         key="run_product_type",
     )
     selected_product = ProductType(selected_product)
+    render_product_status_badges(st, selected_product)
     last_product_raw = st.session_state.get("_run_last_product_type")
     switched_product = (
         last_product_raw is not None and str(last_product_raw) != selected_product.value
@@ -5974,192 +5976,46 @@ def _render_portfolio_section() -> None:
         )
 
 
+def _diagnostics_builders() -> DiagnosticsBuilders:
+    return DiagnosticsBuilders(
+        active_provenance_rows=_active_provenance_rows,
+        pricing_result_to_dict=_pricing_result_to_dict,
+        yield_curve_to_dict=_yield_curve_to_dict,
+        mortality_to_dict=_mortality_to_dict,
+        alm_result_to_dict=_alm_result_to_dict,
+        alm_assumptions_to_dict=_alm_assumptions_to_dict,
+        whatif_result_to_dict=_whatif_result_to_dict,
+        is_yield_curve=lambda value: isinstance(value, sp.YieldCurve),
+        is_expense_assumptions=lambda value: isinstance(value, sp.ExpenseAssumptions),
+        is_alm_result=lambda value: isinstance(value, sp.ALMResult),
+        is_alm_assumptions=lambda value: isinstance(value, sp.ALMAssumptions),
+    )
+
+
 def main() -> None:
     configure_pricing_page()
     with st.sidebar:
         page = render_sidebar_shell(project_root=PROJECT_ROOT)
+        render_diagnostics_export_sidebar(
+            st,
+            session_state=st.session_state,
+            builders=_diagnostics_builders(),
+        )
 
-        st.subheader("Diagnostics export")
-        # Diagnostics should be fully self-contained for offline review/debugging.
-        # Always include everything (no include/exclude toggles).
-        include_full_paths = True
-        include_alm_buckets = True
-        if st.button("Prepare diagnostics JSON", type="secondary"):
-            pricing_res = st.session_state.get("pricing_res")
-            pricing_contract = st.session_state.get("pricing_contract")
-            pricing_excel_context = st.session_state.get("pricing_excel_context") or {}
-            alm_last = st.session_state.get("alm_last")
-            alm_last_assumptions = st.session_state.get("alm_last_assumptions")
-            alm_current_assumptions = st.session_state.get("alm_current_assumptions")
-            alm_current_aum0 = st.session_state.get("alm_current_initial_asset_market_value")
-
-            if pricing_res is None or pricing_contract is None:
-                st.warning("Run Pricing Run first to populate diagnostics.")
-            else:
-                ctx_yc = pricing_excel_context.get("yield_curve")
-                ctx_mort = pricing_excel_context.get("mortality")
-                ctx_exp = pricing_excel_context.get("expenses")
-                payload: dict[str, Any] = {
-                    "exported_at_utc": _dt.datetime.utcnow().isoformat() + "Z",
-                    "pricing_run_id": st.session_state.get("pricing_run_id"),
-                    "pricing_meta": st.session_state.get("pricing_meta") or {},
-                    "pricing_run_inputs": st.session_state.get("pricing_run_inputs") or {},
-                    "pricing_run_summary": st.session_state.get("pricing_run_summary") or {},
-                    "assumption_provenance": _active_provenance_rows(),
-                    "pricing": _pricing_result_to_dict(
-                        pricing_res,
-                        pricing_contract,
-                        include_full=include_full_paths,
-                    ),
-                    "pricing_inputs": {
-                        "horizon_age": pricing_excel_context.get("horizon_age"),
-                        "valuation_year": pricing_excel_context.get("valuation_year"),
-                        "spread": pricing_excel_context.get("spread"),
-                        "yield_curve": (
-                            _yield_curve_to_dict(ctx_yc)
-                            if isinstance(ctx_yc, sp.YieldCurve)
-                            else None
-                        ),
-                        "mortality": _mortality_to_dict(ctx_mort) if ctx_mort is not None else None,
-                        "expenses": (
-                            {
-                                "policy_expense_dollars": float(
-                                    getattr(ctx_exp, "policy_expense_dollars", float("nan"))
-                                ),
-                                "premium_expense_rate": float(
-                                    getattr(ctx_exp, "premium_expense_rate", float("nan"))
-                                ),
-                                "monthly_expense_dollars": float(
-                                    getattr(ctx_exp, "monthly_expense_dollars", float("nan"))
-                                ),
-                            }
-                            if isinstance(ctx_exp, sp.ExpenseAssumptions)
-                            else None
-                        ),
-                        "yield_mode": pricing_excel_context.get("yield_mode"),
-                        "mortality_mode": pricing_excel_context.get("mortality_mode"),
-                        "expense_mode": pricing_excel_context.get("expense_mode"),
-                        "expense_annual_inflation": pricing_excel_context.get(
-                            "expense_annual_inflation"
-                        ),
-                    },
-                    "alm": None,
-                    "alm_current": None,
-                    "what_if": None,
-                }
-
-                current_pricing_run_id = st.session_state.get("pricing_run_id")
-                alm_run_id = st.session_state.get("alm_last_pricing_run_id")
-                whatif_run_id = st.session_state.get("whatif_last_pricing_run_id")
-
-                if isinstance(alm_last, sp.ALMResult) and alm_run_id == current_pricing_run_id:
-                    payload["alm"] = _alm_result_to_dict(
-                        alm_last,
-                        (
-                            alm_last_assumptions
-                            if isinstance(alm_last_assumptions, sp.ALMAssumptions)
-                            else None
-                        ),
-                        include_buckets=include_alm_buckets,
-                        include_full=include_full_paths,
-                    )
-
-                if isinstance(alm_current_assumptions, sp.ALMAssumptions):
-                    payload["alm_current"] = {
-                        "initial_asset_market_value": (
-                            float(alm_current_aum0) if alm_current_aum0 is not None else None
-                        ),
-                        "assumptions": _alm_assumptions_to_dict(alm_current_assumptions),
-                    }
-
-                what_if_shocked_res = st.session_state.get("whatif_last_shocked_res")
-                what_if_base_res = st.session_state.get("whatif_last_base_res")
-                what_if_alm_base = st.session_state.get("whatif_last_alm_base")
-                what_if_alm_after = st.session_state.get("whatif_last_alm_after")
-                what_if_baseline_mc = st.session_state.get("whatif_last_baseline_mc")
-                what_if_shocked_mc = st.session_state.get("whatif_last_shocked_mc")
-                what_if_shocked_curve = st.session_state.get("whatif_last_shocked_curve")
-                what_if_shocked_mortality = st.session_state.get("whatif_last_shocked_mortality")
-                what_if_alm_assumptions = st.session_state.get("whatif_last_alm_assumptions")
-                what_if_params = st.session_state.get("whatif_last_params") or {}
-
-                pricing_meta_whatif = st.session_state.get("pricing_meta") or {}
-                pt_whatif = str(pricing_meta_whatif.get("product_type", ProductType.SPIA.value))
-                what_if_need_mc = pt_whatif != ProductType.TERM_LIFE.value
-                if (
-                    whatif_run_id == current_pricing_run_id
-                    and what_if_shocked_res is not None
-                    and what_if_base_res is not None
-                    and (
-                        not what_if_need_mc
-                        or (what_if_baseline_mc is not None and what_if_shocked_mc is not None)
-                    )
-                ):
-                    payload["what_if"] = _whatif_result_to_dict(
-                        base_res=what_if_base_res,
-                        shocked_res=what_if_shocked_res,
-                        baseline_mc=what_if_baseline_mc,
-                        shocked_mc=what_if_shocked_mc,
-                        whatif_params={
-                            **what_if_params,
-                            "shocked_curve": (
-                                _yield_curve_to_dict(what_if_shocked_curve)
-                                if isinstance(what_if_shocked_curve, sp.YieldCurve)
-                                else None
-                            ),
-                            "shocked_mortality": (
-                                _mortality_to_dict(what_if_shocked_mortality)
-                                if what_if_shocked_mortality is not None
-                                else None
-                            ),
-                        },
-                        alm_base=what_if_alm_base,
-                        alm_after=what_if_alm_after,
-                        asm=(
-                            what_if_alm_assumptions
-                            if isinstance(what_if_alm_assumptions, sp.ALMAssumptions)
-                            else None
-                        ),
-                        include_full=include_full_paths,
-                    )
-
-                st.session_state["diagnostics_json_bytes"] = json.dumps(
-                    payload, default=str, ensure_ascii=False, indent=2
-                ).encode("utf-8")
-                st.session_state["diagnostics_json_filename"] = (
-                    f"pricing_diagnostics_{_dt.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
-                )
-                st.success("Diagnostics JSON prepared. Use Download below.")
-
-        diag_bytes = st.session_state.get("diagnostics_json_bytes")
-        diag_name = st.session_state.get("diagnostics_json_filename") or "pricing_diagnostics.json"
-        if isinstance(diag_bytes, (bytes, bytearray)) and diag_bytes:
-            st.download_button(
-                "Download diagnostics JSON",
-                data=diag_bytes,
-                file_name=diag_name,
-                mime="application/json",
-                type="primary",
-            )
-
-    if page == "overview":
-        _render_overview()
-    elif page == "run":
-        _render_run_and_results()
-    elif page == "portfolio":
-        _render_portfolio_section()
-    elif page == "workbench":
-        _render_pricing_workbench()
-    elif page == "alm":
-        _render_alm_section()
-    elif page == "what_if":
-        _render_what_if_studio()
-    elif page == "experience":
-        _render_experience_study_page()
-    elif page == "excel_replicator":
-        _render_excel_replicator()
-    else:
-        render_unit_tests_page(embedded=True)
+    render_selected_page(
+        page,
+        {
+            "overview": _render_overview,
+            "run": _render_run_and_results,
+            "portfolio": _render_portfolio_section,
+            "workbench": _render_pricing_workbench,
+            "alm": _render_alm_section,
+            "what_if": _render_what_if_studio,
+            "experience": _render_experience_study_page,
+            "excel_replicator": _render_excel_replicator,
+        },
+        fallback=lambda: render_unit_tests_page(embedded=True),
+    )
 
 
 if __name__ == "__main__":

@@ -1,10 +1,13 @@
 # UI decomposition — migration map
 
-> **Status (current inventory):** still gated. The
-> hardening roadmap conditioned the per-page split on
-> `pricing_ui.py < 1.5k LOC after P1/P2 extractions`. The current count
-> (run `wc -l annuity_model/pricing_ui.py` from the repository root) is
-> **6,158 LOC**, so the monolith remains above the migration threshold.
+> **Status (current inventory):** still gated, but Chunk 5 has moved the
+> shared app shell, overview page, diagnostics export, page router, and
+> product maturity badges into `annuity_model/ui/`. The hardening roadmap
+> conditioned the full per-page split on `pricing_ui.py < 1.5k LOC after
+> P1/P2 extractions`. The current count (run
+> `wc -l annuity_model/src/annuity_model/pricing_ui.py` from the repository
+> root) is **6,022 LOC**, so the pricing-run/ALM/what-if/export pages remain
+> above the safe migration threshold.
 >
 > **Prerequisite enabler delivered:** Step 3 of the migration rules
 > below ("session-state audit script") is now live at
@@ -49,6 +52,9 @@ annuity_model/
 | Current location                          | Target                            |
 |-------------------------------------------|-----------------------------------|
 | `pricing_ui.py` :: `_render_overview`     | `ui/pages/overview.py`            |
+| `pricing_ui.py` :: sidebar diagnostics export | `ui/diagnostics.py`           |
+| `pricing_ui.py` :: top-level page dispatch | `ui/pages/router.py`             |
+| `pricing_ui.py` :: product readiness copy | `ui/widgets/product_badges.py`    |
 | `pricing_ui.py` :: `_render_pricing_run`  | `ui/pages/pricing_run.py`         |
 | `pricing_ui.py` :: `_render_what_if`      | `ui/pages/what_if.py`             |
 | `pricing_ui.py` :: `_render_excel_replicator` | `ui/pages/excel_replicator.py`|

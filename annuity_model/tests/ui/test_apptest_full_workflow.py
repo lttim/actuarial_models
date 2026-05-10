@@ -138,6 +138,30 @@ def test_pricing_ui_boots_without_exception(streamlit_apptest_module) -> None:
 
 
 @pytest.mark.ui
+def test_overview_renders_product_readiness_badges(streamlit_apptest_module) -> None:
+    """Overview must expose product maturity and assumption status."""
+    AppTest = streamlit_apptest_module
+    at = load_pricing_ui(AppTest)
+    assert_no_exceptions(at, context="render overview product readiness badges")
+    rendered_markdown = "\n".join(str(getattr(item, "value", "")) for item in at.markdown)
+    assert "Mechanics-production" in rendered_markdown
+    assert "Assumptions: demo-safe-with-waiver" in rendered_markdown
+
+
+@pytest.mark.ui
+def test_diagnostics_export_empty_state_is_actionable(streamlit_apptest_module) -> None:
+    """Preparing diagnostics before pricing should guide the user, not crash."""
+    AppTest = streamlit_apptest_module
+    at = load_pricing_ui(AppTest)
+    buttons = [button for button in at.button if button.label == "Prepare diagnostics JSON"]
+    assert buttons, "Diagnostics export button missing from the sidebar."
+    buttons[0].click().run()
+    assert_no_exceptions(at, context="prepare diagnostics before pricing run")
+    warnings = [warning.value for warning in at.warning]
+    assert "Run Pricing Run first to populate diagnostics." in warnings
+
+
+@pytest.mark.ui
 def test_streamlit_cloud_entry_boots_without_exception(streamlit_apptest_module) -> None:
     """``streamlit_app.py`` at the repo root is the entry point
     Streamlit Community Cloud uses. It is a thin launcher that injects

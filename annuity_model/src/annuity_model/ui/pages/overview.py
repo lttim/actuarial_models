@@ -11,6 +11,7 @@ from annuity_model.product_registry import (
 )
 
 from ..navigation import overview_section_labels
+from ..widgets.product_badges import render_product_readiness_summary
 
 
 def dynamic_overview_features() -> list[str]:
@@ -52,6 +53,8 @@ def render_overview() -> None:
     st.subheader("Current feature set")
     for i, feat in enumerate(dynamic_overview_features(), start=1):
         st.markdown(f"{i}. {feat}")
+
+    render_product_readiness_summary(st)
 
     st.subheader("Workspace sections")
     st.markdown(
