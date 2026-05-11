@@ -52,6 +52,22 @@ def test_select_pytest_interpreter_prefers_project_venv(
     assert exe == sys.executable
 
 
+def test_select_pytest_interpreter_rejects_interpreter_without_pytest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Python that meets the version floor is still unusable for pytest commands without pytest."""
+    monkeypatch.setattr(pp, "project_venv_python", lambda anchor: None)
+    monkeypatch.setattr(pp, "interpreter_meets_minimum", lambda py, maj, min_: True)
+    monkeypatch.setattr(pp, "interpreter_has_pytest", lambda py: False)
+
+    exe, err = select_pytest_interpreter(tmp_path)
+
+    assert exe is None
+    assert err is not None
+    assert "pytest" in err
+    assert "requirements-dev.txt" in err
+
+
 def test_select_pytest_interpreter_rejects_stale_venv(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

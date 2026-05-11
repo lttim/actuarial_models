@@ -7,6 +7,7 @@ depend on an editable package install, ``requirements.lock``, or dev tools.
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT / "annuity_model" / "src"
 CLOUD_ENTRY = REPO_ROOT / "streamlit_app.py"
 STARTUP_ERROR = "The app failed while starting."
+OLD_TEST_COLLECTION_ERROR = (
+    "Could not collect tests. Open the `annuity_model` folder as project root and "
+    "confirm pytest is installed in the selected interpreter."
+)
+PYTEST_DEV_ONLY_MESSAGE = "Unit tests are local development tooling"
 
 
 def _element_values(elements: Any) -> list[str]:
@@ -25,6 +31,42 @@ def _element_values(elements: Any) -> list[str]:
             value = str(element)
         values.append(str(value))
     return values
+
+
+def _find_section_radio(at: Any) -> Any:
+    for radio in at.radio:
+        if getattr(radio, "label", None) == "Section":
+            return radio
+    labels = [getattr(radio, "label", None) for radio in at.radio]
+    raise AssertionError(f"Could not find sidebar Section radio; saw labels {labels!r}.")
+
+
+def _rendered_text(at: Any) -> str:
+    groups = [
+        getattr(at, "caption", []),
+        getattr(at, "error", []),
+        getattr(at, "exception", []),
+        getattr(at, "markdown", []),
+        getattr(at, "subheader", []),
+        getattr(at, "warning", []),
+    ]
+    return "\n".join(value for group in groups for value in _element_values(group))
+
+
+def _assert_no_exception(at: Any, *, context: str) -> bool:
+    exception_values = _element_values(getattr(at, "exception", []))
+    error_values = _element_values(getattr(at, "error", []))
+    all_error_text = "\n".join(exception_values + error_values)
+    if exception_values or STARTUP_ERROR in all_error_text:
+        print(f"FAIL: streamlit_app.py failed during {context}.", file=sys.stderr)
+        if exception_values:
+            print("AppTest exceptions:", file=sys.stderr)
+            print("\n---\n".join(exception_values), file=sys.stderr)
+        if error_values:
+            print("Streamlit errors:", file=sys.stderr)
+            print("\n---\n".join(error_values), file=sys.stderr)
+        return False
+    return True
 
 
 def main() -> int:
@@ -46,20 +88,32 @@ def main() -> int:
     at = AppTest.from_file(str(CLOUD_ENTRY), default_timeout=120)
     at.run()
 
-    exception_values = _element_values(getattr(at, "exception", []))
-    error_values = _element_values(getattr(at, "error", []))
-    all_error_text = "\n".join(exception_values + error_values)
-    if exception_values or STARTUP_ERROR in all_error_text:
-        print("FAIL: streamlit_app.py did not boot cleanly.", file=sys.stderr)
-        if exception_values:
-            print("AppTest exceptions:", file=sys.stderr)
-            print("\n---\n".join(exception_values), file=sys.stderr)
-        if error_values:
-            print("Streamlit errors:", file=sys.stderr)
-            print("\n---\n".join(error_values), file=sys.stderr)
+    if not _assert_no_exception(at, context="initial boot"):
         return 1
 
-    print("PASS: streamlit_app.py boots under the Streamlit Cloud runtime surface.")
+    try:
+        _find_section_radio(at).set_value("tests").run()
+    except Exception as exc:
+        print("FAIL: navigating to Unit Tests raised:", repr(exc), file=sys.stderr)
+        return 1
+
+    if not _assert_no_exception(at, context="Unit Tests tab render"):
+        return 1
+
+    rendered_text = _rendered_text(at)
+    if OLD_TEST_COLLECTION_ERROR in rendered_text:
+        print("FAIL: Unit Tests tab showed the legacy pytest collection error.", file=sys.stderr)
+        return 1
+    if importlib.util.find_spec("pytest") is None and PYTEST_DEV_ONLY_MESSAGE not in rendered_text:
+        print(
+            "FAIL: Unit Tests tab did not explain that pytest is local development tooling.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        "PASS: streamlit_app.py boots and the Unit Tests tab degrades under the Streamlit Cloud runtime surface."
+    )
     return 0
 
 

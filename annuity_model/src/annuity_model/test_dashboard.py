@@ -36,6 +36,10 @@ PRESET_ARGS: dict[str, list[str]] = {
     "Integration": [str(ROOT / "tests" / "integration")],
     "Unit folder": [str(ROOT / "tests" / "unit")],
 }
+LOCAL_PYTEST_SETUP = """cd annuity_model
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt
+./run_pricing_ui.sh"""
 
 
 def _section_at_line(lines: list[str], lineno: int) -> str:
@@ -121,11 +125,7 @@ def _collect_nodeids(pytest_args: list[str] | None = None) -> tuple[list[str], s
     return nodeids, None
 
 
-def discover_tests_metadata(pytest_args: list[str] | None = None) -> list[dict[str, Any]]:
-    """Discover pytest nodeids and enrich them with docstrings when available."""
-    nodeids, err = _collect_nodeids(pytest_args)
-    if err and not nodeids:
-        return []
+def _metadata_rows_from_nodeids(nodeids: list[str]) -> list[dict[str, Any]]:
     docs = _docstring_index()
     rows: list[dict[str, Any]] = []
     for nodeid in nodeids:
@@ -148,6 +148,22 @@ def discover_tests_metadata(pytest_args: list[str] | None = None) -> list[dict[s
                 ),
             }
         )
+    return rows
+
+
+def discover_tests_metadata_with_error(
+    pytest_args: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Discover pytest metadata and preserve collection diagnostics for the UI."""
+    nodeids, err = _collect_nodeids(pytest_args)
+    return _metadata_rows_from_nodeids(nodeids), err
+
+
+def discover_tests_metadata(pytest_args: list[str] | None = None) -> list[dict[str, Any]]:
+    """Discover pytest nodeids and enrich them with docstrings when available."""
+    rows, err = discover_tests_metadata_with_error(pytest_args)
+    if err and not rows:
+        return []
     return rows
 
 
@@ -189,6 +205,29 @@ def _base_test_name(name: str) -> str:
     """Strip parametrize suffix '[...]' so parametrized cases map to their base function name."""
     bracket = name.find("[")
     return name[:bracket] if bracket != -1 else name
+
+
+def _render_pytest_unavailable(setup_error: str) -> None:
+    st.warning("Unit tests are local development tooling and are not runnable here.")
+    st.markdown(
+        "This environment does not have a pytest-capable interpreter. Streamlit Cloud installs "
+        "only the production dependencies from the root `requirements.txt`, so the app can run "
+        "without shipping the local test runner."
+    )
+    st.markdown("To run this tab locally:")
+    st.code(LOCAL_PYTEST_SETUP, language="bash")
+    with st.expander("Interpreter details"):
+        st.code(setup_error, language="text")
+
+
+def _render_collection_failure(collect_err: str | None, *, filter_text: str) -> None:
+    if filter_text:
+        st.warning("No tests matched the selected suite and filter.")
+    else:
+        st.error("Pytest collection did not return any tests.")
+    if collect_err:
+        with st.expander("pytest collection output"):
+            st.code(collect_err, language="text")
 
 
 def _nodeid_from_junit_case(tc: ElementTree.Element) -> str:
@@ -281,6 +320,11 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
             "Each row is one automated check of `pricing_projection.py`. "
             "Discovery is powered by `pytest --collect-only`, so it reflects the full project suite."
         )
+    else:
+        st.subheader("Unit tests")
+        st.caption(
+            "Automated checks collected from the full pytest suite. Use the filters to run a smaller gate."
+        )
 
     selected_preset = st.session_state.get("pytest_preset", "Full suite")
     filter_text = st.session_state.get("pytest_filter", "")
@@ -288,17 +332,19 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
     if filter_text:
         run_args.extend(["-k", filter_text])
 
-    meta = discover_tests_metadata(run_args)
-    if not meta:
-        st.error(
-            "Could not collect tests. Open the `annuity_model` folder as project root and "
-            "confirm pytest is installed in the selected interpreter."
-        )
-        return
-
     _py_ok, py_setup_err = select_pytest_interpreter(ROOT)
     if py_setup_err:
-        st.error(py_setup_err)
+        _render_pytest_unavailable(py_setup_err)
+        return
+
+    meta, collect_err = discover_tests_metadata_with_error(run_args)
+    if not meta:
+        _render_collection_failure(collect_err, filter_text=filter_text)
+        return
+    if collect_err:
+        st.warning("pytest reported collection diagnostics; showing the tests it did collect.")
+        with st.expander("pytest collection output"):
+            st.code(collect_err, language="text")
 
     notify = st.session_state.get("last_notify")
     if notify == "pass":
@@ -317,10 +363,6 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
         st.session_state["last_notify"] = "pass" if code == 0 else "fail"
 
     if embedded:
-        st.subheader("Unit tests")
-        st.caption(
-            "Automated checks collected from the full pytest suite. Use the filters to run a smaller gate."
-        )
         c_preset, c_filter, c_run = st.columns([1.2, 1.5, 1.0])
         with c_preset:
             st.selectbox(

@@ -57,6 +57,16 @@ def interpreter_meets_minimum(py: str | Path, major: int, minor: int) -> bool:
     return proc.returncode == 0
 
 
+def interpreter_has_pytest(py: str | Path) -> bool:
+    """Return whether ``py`` can import pytest."""
+    # Reviewed: command uses a resolved local interpreter and fixed inline import probe.
+    proc = subprocess.run(  # nosec B603
+        [str(py), "-c", "import pytest"],
+        capture_output=True,
+    )
+    return proc.returncode == 0
+
+
 def select_pytest_interpreter(anchor: Path | None = None) -> tuple[str | None, str | None]:
     """
     Choose ``python`` for ``subprocess``-driven pytest from the annuity_model tree.
@@ -72,7 +82,14 @@ def select_pytest_interpreter(anchor: Path | None = None) -> tuple[str | None, s
 
     if venv_py is not None:
         if interpreter_meets_minimum(venv_py, *req):
-            return str(venv_py), None
+            if interpreter_has_pytest(venv_py):
+                return str(venv_py), None
+            return None, (
+                f"The project virtualenv at `{venv_py}` does not have pytest installed. "
+                "Install local development dependencies with:\n"
+                "  cd annuity_model && .venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt\n"
+                "Then launch Streamlit via `./run_pricing_ui.sh` or `./run_test_dashboard.sh`."
+            )
         return None, (
             f"The project virtualenv at `{venv_py}` uses a Python older than "
             f"{req[0]}.{req[1]} (see `pyproject.toml`). Remove it and recreate, e.g.\n"
@@ -80,7 +97,18 @@ def select_pytest_interpreter(anchor: Path | None = None) -> tuple[str | None, s
         )
 
     if interpreter_meets_minimum(sys.executable, *req):
-        return sys.executable, None
+        if interpreter_has_pytest(sys.executable):
+            return sys.executable, None
+        return None, (
+            "The selected Python interpreter does not have pytest installed. "
+            "The Unit Tests tab is local development tooling; Streamlit Cloud installs "
+            "only the production dependencies from the root `requirements.txt`.\n"
+            "For local test execution, run:\n"
+            "  cd annuity_model\n"
+            "  python3.12 -m venv .venv\n"
+            "  .venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt\n"
+            "  ./run_pricing_ui.sh"
+        )
 
     return None, (
         f"No usable interpreter: need Python >= {req[0]}.{req[1]} (see `pyproject.toml`). "
