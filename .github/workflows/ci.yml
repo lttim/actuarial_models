@@ -94,7 +94,7 @@ jobs:
         run: |
           coverage run -m pytest tests/ tests/parity/ -q
           coverage report
-          python scripts/ratchet_coverage.py --coverage-cmd python -m coverage
+          python scripts/ratchet_coverage.py
           coverage xml -o coverage.xml
       - name: Parity contract docs in sync with parity_constants
         run: python scripts/render_parity_contract.py --check

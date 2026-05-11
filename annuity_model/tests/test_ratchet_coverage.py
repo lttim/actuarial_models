@@ -116,6 +116,26 @@ def test_bump_hint_silent_inside_threshold(
     assert "consider running" not in out
 
 
+def test_default_coverage_cmd_uses_current_python(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The default command must be venv-safe and not depend on PATH."""
+    monkeypatch.setattr(ratchet_coverage, "PYPROJECT_PATH", _write_pyproject(tmp_path, 55.0))
+    captured: dict[str, list[str]] = {}
+
+    def fake_measure_actual(coverage_cmd: list[str]) -> float:
+        captured["coverage_cmd"] = coverage_cmd
+        return 55.0
+
+    monkeypatch.setattr(ratchet_coverage, "_measure_actual", fake_measure_actual)
+
+    rc = ratchet_coverage.main([])
+
+    assert rc == 0
+    assert captured["coverage_cmd"] == [sys.executable, "-m", "coverage"]
+
+
 def test_update_writes_new_floor(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

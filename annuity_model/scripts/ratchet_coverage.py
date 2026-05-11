@@ -16,7 +16,7 @@ This script collapses both into a single source of truth: the
 ``fail_under`` key in ``[tool.coverage.report]`` of
 ``annuity_model/pyproject.toml``. CI calls
 ``python scripts/ratchet_coverage.py``; the script reads the floor, asks
-``coverage`` for the actual percentage, and fails if actual < floor.
+``python -m coverage`` for the actual percentage, and fails if actual < floor.
 
 Local contributors who improve coverage can run::
 
@@ -171,10 +171,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--coverage-cmd",
         nargs="+",
-        default=["coverage"],
+        default=[sys.executable, "-m", "coverage"],
         help=(
             "command (and optional args) to invoke `coverage`. Override for "
-            "venv-aware CI runners, e.g. `--coverage-cmd python -m coverage`."
+            "unusual runners, e.g. `--coverage-cmd coverage`."
         ),
     )
     args = parser.parse_args(argv)
