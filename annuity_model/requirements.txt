@@ -9,3 +9,4 @@ altair==6.0.0
 streamlit==1.56.0
 matplotlib==3.10.8
 openpyxl==3.1.5
+defusedxml==0.7.1

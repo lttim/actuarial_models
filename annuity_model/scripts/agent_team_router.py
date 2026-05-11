@@ -250,6 +250,14 @@ GATES: dict[str, GateSpec] = {
         {},
         "UI changes must render and run workflows under AppTest.",
     ),
+    "streamlit_cloud_runtime": GateSpec(
+        "streamlit_cloud_runtime",
+        "Streamlit Cloud runtime smoke",
+        ("python", "scripts/streamlit_cloud_smoke.py"),
+        "annuity_model",
+        {},
+        "Cloud entry must boot with the root requirements.txt runtime surface.",
+    ),
     "portfolio_acceptance_subset": GateSpec(
         "portfolio_acceptance_subset",
         "Portfolio acceptance subset",
@@ -595,13 +603,13 @@ def _gate_ids_for_surfaces(surfaces: set[str], multi_agent_required: bool) -> tu
             ]
         )
     if "ui" in surfaces:
-        gates.extend(["ui_apptest", "full_pytest"])
+        gates.extend(["streamlit_cloud_runtime", "ui_apptest", "full_pytest"])
     if "portfolio" in surfaces:
         gates.extend(["portfolio_acceptance_subset"])
     if "assumptions" in surfaces:
         gates.extend(["assumption_guardrail", "docs_inventory"])
     if "packaging" in surfaces:
-        gates.extend(["full_pytest", "deep_smoke"])
+        gates.extend(["streamlit_cloud_runtime", "full_pytest", "deep_smoke"])
     if "security" in surfaces:
         gates.extend(["security"])
     if "validation" in surfaces:

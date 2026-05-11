@@ -7,6 +7,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "requirements.txt"
       - "annuity_model/requirements*.txt"
       - "annuity_model/requirements.lock"
       - "annuity_model/pyproject.toml"

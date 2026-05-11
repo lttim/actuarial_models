@@ -141,6 +141,23 @@ jobs:
           name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}
           path: annuity_model/coverage.xml
 
+  streamlit-cloud-runtime:
+    name: streamlit cloud runtime smoke
+    needs: pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Streamlit Cloud runtime deps only
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Boot Streamlit Cloud entry
+        run: python annuity_model/scripts/streamlit_cloud_smoke.py
+
   docker:
     name: docker build + deep_smoke in container
     needs: pre-commit

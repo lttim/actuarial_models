@@ -47,6 +47,7 @@ to bend.
 | ProductType enum & adapter Protocol | [`product_registry.py`](../src/annuity_model/product_registry.py) | Enum, adapter seed implementations, term label parsers, and `validate_run_inputs(state)` compatibility hook. |
 | Per-product source of truth (engine/excel/ui/converter/formatter/capability/mortality/validator/order) | [`products/<name>/__init__.py`](../src/annuity_model/products/) | Use `register_product(ProductDefinition(...))`. Legacy public registry views derive from this canonical record. |
 | Streamlit run-form state keys | [`pricing_run_form_state.py`](../src/annuity_model/pricing_run_form_state.py) | Constants live here -- never hardcode `"run_*"` literals elsewhere. |
+| Streamlit Cloud runtime dependencies | root [`requirements.txt`](../../requirements.txt), [`requirements.txt`](../requirements.txt), [`pyproject.toml`](../pyproject.toml), [`tests/test_runtime_dependency_manifests.py`](../tests/test_runtime_dependency_manifests.py), [`scripts/streamlit_cloud_smoke.py`](../scripts/streamlit_cloud_smoke.py) | Root `requirements.txt` is the Streamlit Cloud production manifest. Direct runtime imports must be declared there, mirrored in product requirements and pyproject, and smoke-tested without the lockfile/dev deps/editable install. |
 | Multi-policy portfolio runner | [`portfolio_runner_spec.md`](portfolio_runner_spec.md) + [`portfolio_runner.py`](../src/annuity_model/portfolio_runner.py) | UI/CLI enablement: [`portfolio_config.py`](../src/annuity_model/portfolio_config.py) (`portfolio_v1_enabled`); see also `docs/portfolio_parity_contract.md`. |
 | ALM dispatch (pricing-result -> liability-path) | [`liability_dispatch.py`](../src/annuity_model/liability_dispatch.py) | Plug-in registry; `register_liability_path_converter`. |
 | Workbook-builder dispatch | [`product_excel.py`](../src/annuity_model/product_excel.py) | Plug-in registry; `register_builder`. |
@@ -237,6 +238,10 @@ Streamlit changes never bypass parity, but they have an extra constraint:
   enforces this).
 * Run [`tests/ui/`](../tests/) AppTest smoke tests in addition to the
   full pytest gate.
+* Run `python scripts/streamlit_cloud_smoke.py` when touching
+  `streamlit_app.py`, runtime dependencies, packaging, or UI import wiring.
+  The smoke intentionally uses the Streamlit Cloud entry and root
+  `requirements.txt` surface, not the locked/dev install surface.
 * If the change adds a widget that becomes a contract input, also add
   it to `validate_run_inputs(state)` in `product_registry.py`.
 
@@ -249,9 +254,11 @@ CI / pre-commit / branch-protection / Justfile changes.
 * If you change `parity-gate.yml`, also update
   `.github/branch-protection.json` `required_status_checks.contexts`
   (the parity gate must remain a required check).
-* If you add a new gate, add it to the four-gate list in `AGENTS.md`,
-  to the `just preflight` recipe, and update the `REQUIRED_FRAGMENTS`
-  list in `tests/test_kit_template_parity.py`.
+* If you add a new **canonical completion gate**, add it to the four-gate list
+  in `AGENTS.md`, to the `just preflight` recipe, and update the
+  `REQUIRED_FRAGMENTS` list in `tests/test_kit_template_parity.py`. Task-specific
+  router gates, such as `streamlit_cloud_runtime`, should instead be wired in
+  `scripts/agent_team_router.py`, documented in this file, and covered by tests.
 * If you change the mypy strict surface, update the `pyproject.toml`
   override block AND verify `tests/test_mypy_strict_glob.py` still
   passes (its `LOAD_BEARING_CORE` list is the human-readable mirror).

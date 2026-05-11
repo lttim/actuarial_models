@@ -10,6 +10,21 @@ ALM rules, RILA crediting) MUST also be logged in
 
 ## [Unreleased]
 
+### Fixed — Streamlit Cloud runtime dependency gate
+
+- Declared `defusedxml==0.7.1` as a direct runtime dependency in root
+  `requirements.txt`, `annuity_model/requirements.txt`, and
+  `[project].dependencies`. Streamlit Cloud installs the root manifest and was
+  missing this package even though local/CI validation passed under
+  `requirements.lock`.
+- Added `tests/test_runtime_dependency_manifests.py` to keep the two runtime
+  requirements files, pyproject dependencies, and lockfile pins aligned, and to
+  fail when runtime source imports a third-party package absent from the Cloud
+  production manifest.
+- Added `scripts/streamlit_cloud_smoke.py` plus a dedicated GitHub Actions job
+  that installs only root `requirements.txt` and boots `streamlit_app.py`
+  without relying on dev dependencies, the lockfile, or editable install.
+
 ### Added — Seven-product rollout (Phases 0-9)
 
 The following seven products are now first-class citizens alongside SPIA /

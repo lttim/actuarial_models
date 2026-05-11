@@ -50,6 +50,7 @@ def test_ui_state_change_staffs_ux_and_validation() -> None:
     assert "ui" in plan.surfaces
     assert "ux_reviewer_builder" in roles
     assert "validation_engineer" in roles
+    assert "streamlit_cloud_runtime" in plan.gate_ids
     assert "ui_apptest" in plan.gate_ids
 
 
@@ -77,6 +78,7 @@ def test_security_and_packaging_create_dynamic_specialists() -> None:
     assert "security_reviewer" in roles
     assert roles["packaging_engineer"].dynamic
     assert roles["security_reviewer"].dynamic
+    assert "streamlit_cloud_runtime" in plan.gate_ids
     assert "security" in plan.gate_ids
 
 

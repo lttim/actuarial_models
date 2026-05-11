@@ -127,6 +127,16 @@ because they catch the bug classes the parity engine cannot:
   canonical validated liability summary rows. The pre-existing
   `tests/parity/test_runtime_excel_recalc.py` is retained as a focused
   SPIA ModelCheck wiring regression.
+* **`tests/test_runtime_dependency_manifests.py` +
+  `scripts/streamlit_cloud_smoke.py`** — locks the Streamlit Cloud
+  production install surface. Root `requirements.txt`,
+  `annuity_model/requirements.txt`, and `[project].dependencies` must
+  declare the same direct runtime pins, every runtime import used by
+  `streamlit_app.py` / `src/annuity_model` must be present in that Cloud
+  manifest, and the Cloud entry must boot without relying on
+  `requirements.lock`, dev dependencies, or an editable install. If you touch
+  runtime dependencies, packaging, `streamlit_app.py`, or Streamlit UI wiring,
+  run `python scripts/streamlit_cloud_smoke.py` in addition to the AppTests.
 
 If a task changes Excel-generating code, ALSO validate the regenerated
 workbook and inspect the `ModelCheck` sheet links. The parity tests assert
