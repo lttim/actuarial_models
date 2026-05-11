@@ -124,9 +124,10 @@ jobs:
           call run_pricing_ui.bat --self-check
       - name: HTML pytest report
         if: always()
+        continue-on-error: true
         run: |
-          mkdir -p reports
-          pytest tests/ tests/parity/ -q --html=reports/pytest_report.html --self-contained-html || true
+          python -c "from pathlib import Path; Path('reports').mkdir(exist_ok=True)"
+          python -m pytest tests/ tests/parity/ -q --html=reports/pytest_report.html --self-contained-html
       - name: Upload pytest report
         if: always()
         uses: actions/upload-artifact@v7

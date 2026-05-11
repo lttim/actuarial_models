@@ -64,10 +64,14 @@ def test_mixed_book_generic_bridge_matches_scalar_sums() -> None:
     sum_sp = sum(float(getattr(pr.pricing, "single_premium")) for pr in res.policy_results)
     n = len(res.policy_results)
     issue = float(scen.expenses.policy_expense_dollars) * n if scen.expenses is not None else 0.0
-    assert rows[0] == ("PV benefits (portfolio sum)", sum_pv_b, True)
+    assert rows[0][0] == "PV benefits (portfolio sum)"
+    assert rows[0][1] == pytest.approx(sum_pv_b, rel=0, abs=1e-6)
+    assert rows[0][2] is True
     assert rows[1][0] == "PV monthly cashflow component (portfolio sum)"
     assert rows[1][1] == pytest.approx(sum_pv_m)
-    assert rows[2] == ("Issue expense (portfolio sum)", issue, False)
+    assert rows[2][0] == "Issue expense (portfolio sum)"
+    assert rows[2][1] == pytest.approx(issue, rel=0, abs=1e-6)
+    assert rows[2][2] is False
     assert rows[3][0] == "Modeled net premium / value (portfolio sum)" and rows[3][2] is True
     assert rows[3][1] == pytest.approx(sum_sp, rel=0, abs=1e-6)
 
