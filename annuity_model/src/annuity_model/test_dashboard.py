@@ -125,6 +125,41 @@ def _collect_nodeids(pytest_args: list[str] | None = None) -> tuple[list[str], s
     return nodeids, None
 
 
+def _test_collection_fingerprint() -> tuple[tuple[str, int, int], ...]:
+    """Hashable file-state snapshot for invalidating cached pytest collection."""
+    paths = [ROOT / "pytest.ini", ROOT / "pyproject.toml"]
+    paths.extend(sorted((ROOT / "tests").rglob("test_*.py")))
+    out: list[tuple[str, int, int]] = []
+    for path in paths:
+        try:
+            stt = path.stat()
+        except OSError:
+            continue
+        out.append((path.relative_to(ROOT).as_posix(), int(stt.st_mtime_ns), int(stt.st_size)))
+    return tuple(out)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_discover_tests_metadata_with_error(
+    pytest_args: tuple[str, ...],
+    fingerprint: tuple[tuple[str, int, int], ...],
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Cached collection for Streamlit renders; invalidated by test file metadata."""
+    del fingerprint
+    return discover_tests_metadata_with_error(list(pytest_args))
+
+
+def _discover_tests_metadata_for_render(
+    pytest_args: list[str],
+) -> tuple[list[dict[str, Any]], str | None]:
+    if not hasattr(st, "cache_data"):
+        return discover_tests_metadata_with_error(pytest_args)
+    return _cached_discover_tests_metadata_with_error(
+        tuple(pytest_args),
+        _test_collection_fingerprint(),
+    )
+
+
 def _metadata_rows_from_nodeids(nodeids: list[str]) -> list[dict[str, Any]]:
     docs = _docstring_index()
     rows: list[dict[str, Any]] = []
@@ -337,7 +372,7 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
         _render_pytest_unavailable(py_setup_err)
         return
 
-    meta, collect_err = discover_tests_metadata_with_error(run_args)
+    meta, collect_err = _discover_tests_metadata_for_render(run_args)
     if not meta:
         _render_collection_failure(collect_err, filter_text=filter_text)
         return
@@ -380,7 +415,7 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
             )
         with c_run:
             if st.button(
-                "Run selected", type="primary", use_container_width=True, key="pytest_run_embedded"
+                "Run selected", type="primary", width="stretch", key="pytest_run_embedded"
             ):
                 _run_clicked()
     else:
@@ -388,7 +423,7 @@ def render_unit_tests_page(*, embedded: bool = False) -> None:
             st.header("Run")
             st.selectbox("Suite", list(PRESET_ARGS), key="pytest_preset")
             st.text_input("Filter", key="pytest_filter", placeholder="-k expression")
-            if st.button("Run selected", type="primary", use_container_width=True):
+            if st.button("Run selected", type="primary", width="stretch"):
                 _run_clicked()
             st.divider()
             st.markdown(

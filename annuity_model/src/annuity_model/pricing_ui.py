@@ -140,6 +140,15 @@ def _maybe_alm_excel_snapshot_for_workbook() -> ALMExcelSnapshot | None:
     )
 
 
+def _mark_pricing_excel_workbook_dirty() -> None:
+    """Invalidate workbook download bytes without rebuilding them on the current rerun."""
+    st.session_state["pricing_xlsx_dirty"] = True
+    st.session_state.pop("pricing_xlsx_bytes", None)
+    st.session_state.pop("pricing_xlsx_built_error", None)
+    st.session_state.pop("pricing_xlsx_has_mc", None)
+    st.session_state.pop("pricing_xlsx_has_alm", None)
+
+
 def _refresh_pricing_excel_workbook_in_session() -> None:
     """Rebuild `pricing_xlsx_bytes` from the current pricing result and optional MC/ALM session state."""
     res = st.session_state.get("pricing_res")
@@ -214,22 +223,27 @@ def _refresh_pricing_excel_workbook_in_session() -> None:
         )
         st.session_state["pricing_xlsx_has_mc"] = mc_snap is not None
         st.session_state["pricing_xlsx_has_alm"] = alm_snap is not None
+        st.session_state["pricing_xlsx_dirty"] = False
         st.session_state.pop("pricing_xlsx_built_error", None)
     except Exception as ex:
         st.session_state["pricing_xlsx_bytes"] = None
         st.session_state.pop("pricing_xlsx_has_mc", None)
         st.session_state.pop("pricing_xlsx_has_alm", None)
+        st.session_state["pricing_xlsx_dirty"] = False
         st.session_state["pricing_xlsx_built_error"] = repr(ex)
 
 
-def _ensure_excel_workbook_includes_current_alm() -> None:
-    """If ALM completed after the last Excel build, regenerate the workbook so download includes ALM_Projection."""
-    if not isinstance(st.session_state.get("pricing_xlsx_bytes"), bytes):
-        return
+def _ensure_pricing_excel_workbook_current() -> None:
+    """Build workbook bytes lazily and refresh them if ALM availability changed."""
     want_alm = _maybe_alm_excel_snapshot_for_workbook() is not None
     has_alm = bool(st.session_state.get("pricing_xlsx_has_alm", False))
-    if want_alm != has_alm:
-        _refresh_pricing_excel_workbook_in_session()
+    has_bytes = isinstance(st.session_state.get("pricing_xlsx_bytes"), bytes)
+    has_error = "pricing_xlsx_built_error" in st.session_state
+    needs_initial_build = not has_bytes and not has_error
+    needs_alm_refresh = has_bytes and want_alm != has_alm
+    if bool(st.session_state.get("pricing_xlsx_dirty", False)) or needs_initial_build or needs_alm_refresh:
+        with st.spinner("Preparing Excel workbook..."):
+            _refresh_pricing_excel_workbook_in_session()
 
 
 def _resolve_path(p: str) -> Path:
@@ -275,7 +289,7 @@ def _alm_surplus_chart(ages: np.ndarray | pd.Series, surplus: np.ndarray | pd.Se
         )
         .resolve_scale(y="shared")
     )
-    st.altair_chart(layered.interactive(), use_container_width=True)
+    st.altair_chart(layered.interactive(), width="stretch")
 
 
 def _number_cols_no_decimals(df: pd.DataFrame) -> dict[str, st.column_config.NumberColumn]:
@@ -908,7 +922,7 @@ def _render_profit_decomposition_chart(
     )
 
     wf_df = _build_profit_waterfall_chart_df(rows)
-    st.altair_chart(_altair_profit_waterfall_chart(wf_df), use_container_width=True)
+    st.altair_chart(_altair_profit_waterfall_chart(wf_df), width="stretch")
     st.caption(
         "Blue = subtotal / reconciliation pillars from zero; green = upward step; red = downward step (table amount)."
     )
@@ -917,7 +931,7 @@ def _render_profit_decomposition_chart(
     table_display = _round_for_visuals(table)
     st.dataframe(
         table_display,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config=_number_cols_no_decimals(table_display),
     )
@@ -1134,7 +1148,7 @@ def _render_portfolio_profit_waterfall(
             st.caption(
                 "Note: modeled premium / value is negative (e.g. net premium outflow to policyholders)."
             )
-        st.altair_chart(_altair_profit_waterfall_chart(wf_df), use_container_width=True)
+        st.altair_chart(_altair_profit_waterfall_chart(wf_df), width="stretch")
         st.caption(
             "Blue = subtotal / reconciliation pillars from zero; green = upward step; red = downward step (table amount)."
         )
@@ -1142,7 +1156,7 @@ def _render_portfolio_profit_waterfall(
         table_display = _round_for_visuals(table)
         st.dataframe(
             table_display,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config=_number_cols_no_decimals(table_display),
         )
@@ -1201,7 +1215,7 @@ def _render_portfolio_liability_projection_chart(res: PortfolioResult) -> None:
         )
         .properties(height=420)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
 
 
 def _render_portfolio_alm_baseline_section(res: PortfolioResult) -> None:
@@ -1250,7 +1264,7 @@ def _render_portfolio_alm_baseline_section(res: PortfolioResult) -> None:
         .encode(y="y:Q")
     )
     st.altair_chart(
-        (line + rule).properties(height=320, title="Surplus path"), use_container_width=True
+        (line + rule).properties(height=320, title="Surplus path"), width="stretch"
     )
     fr_df = pd.DataFrame({"Time (years)": ty_vis, "Funding ratio": fr})
     fr_chart = (
@@ -1262,7 +1276,7 @@ def _render_portfolio_alm_baseline_section(res: PortfolioResult) -> None:
         )
         .properties(height=260, title="Funding ratio")
     )
-    st.altair_chart(fr_chart, use_container_width=True)
+    st.altair_chart(fr_chart, width="stretch")
 
 
 def _execute_portfolio_pricing(
@@ -1405,7 +1419,7 @@ def _render_assumption_provenance_panel() -> None:
     ]
     df = pd.DataFrame(rows)
     st.dataframe(
-        df[[c for c in show_cols if c in df.columns]], use_container_width=True, hide_index=True
+        df[[c for c in show_cols if c in df.columns]], width="stretch", hide_index=True
     )
     risky = (
         df[df.get("requires_waiver_for_release", False).astype(bool)]
@@ -1726,7 +1740,7 @@ def _render_pricing_workbench() -> None:
         df = pd.DataFrame(rows)
         st.dataframe(
             _round_for_visuals(df),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config=_number_cols_no_decimals(df),
         )
@@ -1740,7 +1754,7 @@ def _render_pricing_workbench() -> None:
     st.subheader("Scenario catalog metadata")
     st.dataframe(
         pd.DataFrame([s.to_dict() for s in catalog]),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
     st.subheader("Assumption provenance")
@@ -1762,7 +1776,7 @@ def _render_experience_study_page() -> None:
     show["lapse_oe"] = show["lapse_oe"].round(3)
     st.dataframe(
         _round_for_visuals(show),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config=_number_cols_no_decimals(show),
     )
@@ -1794,7 +1808,7 @@ def _render_experience_study_page() -> None:
         .mark_rule(color="#444", strokeDash=[4, 4])
         .encode(y="oe_ratio:Q")
     )
-    st.altair_chart(chart + rule, use_container_width=True)
+    st.altair_chart(chart + rule, width="stretch")
     flags = df[df["review_flag"] != "Within monitoring band"]
     if flags.empty:
         st.success("All sample cohorts are within monitoring bands.")
@@ -2485,7 +2499,7 @@ def _render_what_if_studio() -> None:
     compare_display = _round_for_visuals(compare_df)
     st.dataframe(
         compare_display,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config=_number_cols_no_decimals(compare_display),
     )
@@ -2588,7 +2602,7 @@ def _render_what_if_studio() -> None:
             alm_show.loc[money_rows, ["Before", "After", "Impact"]] = (
                 alm_show.loc[money_rows, ["Before", "After", "Impact"]].round(0).astype(int)
             )
-        st.dataframe(alm_show, use_container_width=True, hide_index=True)
+        st.dataframe(alm_show, width="stretch", hide_index=True)
 
         age_alm = np.round((base_contract.issue_age + _alm_b.times_years).astype(float), 2)
         path_cmp = pd.DataFrame(
@@ -2812,7 +2826,7 @@ def _render_what_if_studio() -> None:
                         .resolve_scale(y="independent")
                         .configure_view(strokeWidth=0)
                     )
-                    st.altair_chart(krd_wf_chart, use_container_width=True)
+                    st.altair_chart(krd_wf_chart, width="stretch")
                     st.caption(
                         "Each panel compares Before vs After KRD at key tenors for one series, with independent y-scales to keep "
                         "the view readable when Surplus KRD magnitudes are much larger."
@@ -3795,8 +3809,8 @@ def _render_run_and_results() -> None:
                 st.session_state["pricing_run_summary"],
                 state_prefix="pricing_run",
             )
-            # --- Excel workbook (built after MC so MC_Summary + run evidence can be included) ---
-            _refresh_pricing_excel_workbook_in_session()
+            # --- Excel workbook is built lazily by Excel Replicator/download surfaces. ---
+            _mark_pricing_excel_workbook_dirty()
         except Exception as e:
             _clear_dependent_state_on_pricing_change()
             st.session_state["pricing_err"] = f"{type(e).__name__}: {e}"
@@ -3810,6 +3824,7 @@ def _render_run_and_results() -> None:
             st.session_state.pop("pricing_mc_params", None)
             st.session_state.pop("pricing_xlsx_has_mc", None)
             st.session_state.pop("pricing_xlsx_has_alm", None)
+            st.session_state.pop("pricing_xlsx_dirty", None)
             st.session_state.pop("pricing_run_summary", None)
             st.session_state.pop("pricing_run_ledger_run_id", None)
             st.session_state.pop("pricing_run_ledger_path", None)
@@ -3918,7 +3933,7 @@ def _render_run_and_results() -> None:
         df_display = _round_for_visuals(df)
         st.dataframe(
             df_display,
-            use_container_width=True,
+            width="stretch",
             height=360,
             column_config=_number_cols_no_decimals(df_display),
         )
@@ -4134,7 +4149,7 @@ def _render_excel_replicator() -> None:
         else ProductType.SPIA
     )
 
-    _ensure_excel_workbook_includes_current_alm()
+    _ensure_pricing_excel_workbook_current()
 
     m1, m2, m3, m4 = st.columns(4)
     metrics = get_pricing_metrics(product_type, res)
@@ -4183,7 +4198,7 @@ def _render_excel_replicator() -> None:
     modelcheck_display = _round_for_visuals(modelcheck)
     st.dataframe(
         modelcheck_display,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config=_number_cols_no_decimals(modelcheck_display),
     )
@@ -4204,7 +4219,7 @@ def _render_excel_replicator() -> None:
         trace_display = _round_for_visuals(trace_df)
         st.dataframe(
             trace_display,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config=_number_cols_no_decimals(trace_display),
         )
@@ -4243,7 +4258,7 @@ def _render_excel_replicator() -> None:
             alm_mc_disp = _round_for_visuals(alm_mc_df)
             st.dataframe(
                 alm_mc_disp,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config=_number_cols_no_decimals(alm_mc_disp),
             )
@@ -4337,7 +4352,7 @@ def _render_excel_replicator() -> None:
         stats_display = _round_for_visuals(stats_df)
         st.dataframe(
             stats_display,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config=_number_cols_no_decimals(stats_display),
         )
@@ -4775,7 +4790,7 @@ def _render_alm_section() -> None:
                 st.session_state["alm_last_initial_asset_market_value"] = float(aum0)
                 st.session_state["alm_last_pricing_run_id"] = st.session_state.get("pricing_run_id")
                 _invalidate_diagnostics_export()
-                _refresh_pricing_excel_workbook_in_session()
+                _mark_pricing_excel_workbook_dirty()
                 st.success("ALM projection complete.")
             except Exception as ex:
                 st.error(f"ALM run failed: {ex!r}")
@@ -5082,7 +5097,7 @@ def _render_alm_section() -> None:
                             "pricing_run_id"
                         )
                         _invalidate_diagnostics_export()
-                        _refresh_pricing_excel_workbook_in_session()
+                        _mark_pricing_excel_workbook_dirty()
                         st.session_state["alm_opt_notice"] = {
                             "level": "warning",
                             "message": (
@@ -5114,7 +5129,7 @@ def _render_alm_section() -> None:
                         "pricing_run_id"
                     )
                     _invalidate_diagnostics_export()
-                    _refresh_pricing_excel_workbook_in_session()
+                    _mark_pricing_excel_workbook_dirty()
                     if opt_krd_match:
                         krd_msg = (
                             "Optimized allocation found (KRD screen: match asset key-rate sensitivities to liability "
@@ -5243,7 +5258,7 @@ def _render_alm_section() -> None:
             )
             .properties(height=320)
         )
-        st.altair_chart(bucket_mv_chart.interactive(), use_container_width=True)
+        st.altair_chart(bucket_mv_chart.interactive(), width="stretch")
 
         st.markdown("##### Portfolio composition by asset type (%)")
         aum_series = pd.Series(last.asset_market_value, index=age_ax, dtype=float).replace(
@@ -5281,7 +5296,7 @@ def _render_alm_section() -> None:
             )
             .properties(height=320)
         )
-        st.altair_chart(comp_chart.interactive(), use_container_width=True)
+        st.altair_chart(comp_chart.interactive(), width="stretch")
 
         # Yield decomposition: portfolio weighted yield plus per-asset-class contributions.
         # Contributions are weight * bucket annualized zero yield (incl. spread), shown in percentage points.
@@ -5312,7 +5327,7 @@ def _render_alm_section() -> None:
             )
             .properties(height=320)
         )
-        st.altair_chart(yld_total.interactive(), use_container_width=True)
+        st.altair_chart(yld_total.interactive(), width="stretch")
 
         kpi_tbl = pd.DataFrame(
             {
@@ -5329,7 +5344,7 @@ def _render_alm_section() -> None:
         )
         kpi_tbl_show["Mac duration assets"] = kpi_tbl_show["Mac duration assets"].round(4)
         kpi_tbl_show["Mac duration liabilities"] = kpi_tbl_show["Mac duration liabilities"].round(4)
-        st.dataframe(kpi_tbl_show, use_container_width=True, hide_index=True)
+        st.dataframe(kpi_tbl_show, width="stretch", hide_index=True)
 
         st.markdown("##### Key rate duration by tenor (1 bp localized bump)")
         try:
@@ -5443,7 +5458,7 @@ def _render_alm_section() -> None:
                     alt.layer(bars, surplus_line)
                     .resolve_scale(y="independent")
                     .properties(height=320),
-                    use_container_width=True,
+                    width="stretch",
                 )
                 st.caption(
                     "Interpretation: Surplus KRD is the key-rate sensitivity of net surplus (assets minus liabilities), "
@@ -5877,7 +5892,7 @@ def _render_seriatim_portfolio_drilldown(res: PortfolioResult) -> None:
     out = out.sort_values(sort_col, ascending=True, na_position="last")
     st.dataframe(
         _round_for_visuals(out),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config=_number_cols_no_decimals(out),
     )
@@ -5982,7 +5997,7 @@ def _render_portfolio_section() -> None:
         st.markdown("##### Assembled inforce preview")
         st.dataframe(
             _portfolio_manual_rows_dataframe(),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -6093,7 +6108,7 @@ def _render_portfolio_section() -> None:
                     ),
                 }
             )
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
         for pr in res.policy_results:
             with st.expander(f"{pr.policy_id} — {pr.product_type.value}"):
                 pv = getattr(pr.pricing, "pv_benefit", None)

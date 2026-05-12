@@ -177,6 +177,61 @@ def test_monte_carlo_shape():
     assert np.isfinite(mc.premium_mean)
 
 
+def test_monte_carlo_explicit_premium_path_matches_deterministic_projection():
+    contract = rp.RILAContract(
+        issue_age=70,
+        sex="female",
+        participation=1.0,
+        cap=0.12,
+        floor=0.0,
+        rider_fee_annual=0.01,
+        single_premium=100_000.0,
+    )
+    yc = sp.YieldCurve.from_flat_rate(0.04)
+    ages = np.arange(0, 121, dtype=int)
+    qx = np.full_like(ages, 0.03, dtype=float)
+    mort = sp.MortalityTableQx(ages, qx)
+    seed = 123
+    annual_drift = 0.05
+    annual_vol = 0.12
+    horizon_age = 71
+    s0 = 100.0
+    path = sp.simulate_index_levels_gbm(
+        n_sims=1,
+        n_months=12,
+        s0=s0,
+        annual_drift=annual_drift,
+        annual_vol=annual_vol,
+        seed=seed,
+    )[0]
+    det = rp.price_rila_single_premium(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        valuation_year=None,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        index_s0=float(path[0]),
+        index_levels_payment=path[1:],
+    )
+    mc = rp.price_rila_single_premium_monte_carlo(
+        contract=contract,
+        yield_curve=yc,
+        mortality=mort,
+        horizon_age=horizon_age,
+        spread=0.0,
+        valuation_year=None,
+        expenses=sp.ExpenseAssumptions(0.0, 0.0, 0.0),
+        n_sims=1,
+        annual_drift=annual_drift,
+        annual_vol=annual_vol,
+        seed=seed,
+        s0=s0,
+    )
+    assert mc.single_premium[0] == pytest.approx(det.single_premium)
+    assert mc.pv_benefit[0] == pytest.approx(det.pv_benefit)
+
+
 def test_pricing_infeasible_raises_with_loading_details():
     """Aggressive crediting can push K + premium_expense_rate to 1 or above."""
     contract = rp.RILAContract(

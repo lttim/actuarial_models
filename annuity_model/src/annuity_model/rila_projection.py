@@ -544,6 +544,21 @@ def price_rila_single_premium_monte_carlo(
         fail, the worst-case :class:`RILAPricingInfeasibleError` is raised.
       - ``"raise"``: re-raise the first :class:`RILAPricingInfeasibleError` (legacy behavior).
     """
+    if contract.payment_freq_per_year != 12:
+        raise ValueError("RILA scaffold assumes monthly frequency.")
+    if contract.participation < 0.0:
+        raise ValueError("participation must be non-negative.")
+    if contract.cap < contract.floor:
+        raise ValueError("cap must be >= floor.")
+    if not (0.0 <= contract.rider_fee_annual <= 1.0):
+        raise ValueError("rider_fee_annual must be in [0, 1].")
+    if contract.single_premium is not None:
+        single_premium_input = float(contract.single_premium)
+        if not np.isfinite(single_premium_input) or single_premium_input <= 0.0:
+            raise ValueError("single_premium must be finite and > 0 when provided.")
+    else:
+        single_premium_input = None
+
     dt = 1.0 / 12.0
     n_months = int(round((horizon_age - contract.issue_age) / dt))
     n_months = max(n_months, 1)
@@ -564,6 +579,10 @@ def price_rila_single_premium_monte_carlo(
             n_months=n_months,
             valuation_year=valuation_year,
         )
+    survival_start = np.empty_like(survival)
+    survival_start[0] = 1.0
+    survival_start[1:] = survival[:-1]
+    death_prob = np.clip(survival_start - survival, 0.0, 1.0)
     months = np.arange(1, n_months + 1, dtype=int)
     times_years = months * dt
     df = yield_curve.discount_factors(times_years, spread=spread)
@@ -609,36 +628,73 @@ def price_rila_single_premium_monte_carlo(
         path = idx_paths[i, :]
         if path.shape[0] != n_months + 1:
             raise ValueError("unexpected GBM path shape")
+        path_s0 = float(path[0])
         levels_payment = path[1:].astype(float)
-        try:
-            res = price_rila_single_premium(
-                contract=contract,
-                yield_curve=yield_curve,
-                mortality=mortality,
-                horizon_age=horizon_age,
-                spread=spread,
-                valuation_year=valuation_year,
-                expenses=expenses,
-                expenses_csv_path=expenses_csv_path,
-                index_s0=float(path[0]),
-                index_levels_payment=levels_payment,
-                expense_annual_inflation=expense_annual_inflation,
+        if (
+            np.any(levels_payment <= 0.0)
+            or np.any(~np.isfinite(levels_payment))
+            or not np.isfinite(path_s0)
+            or path_s0 <= 0.0
+        ):
+            raise ValueError("index levels and index_s0 must be finite and strictly positive.")
+
+        L = levels_end_by_policy_month(s0=path_s0, levels_payment=levels_payment)
+        (
+            claims_rel,
+            _av_end_rel,
+            _cred_m,
+            withdrawal_rel,
+            _surrender_charge_rel,
+            _surrender_value_rel,
+            _benefit_base_rel,
+            glwb_withdrawal_rel,
+        ) = _rila_claims_rel_per_premium_dollar(
+            contract=contract,
+            L=L,
+            death_prob=death_prob,
+        )
+        access_rel = (withdrawal_rel + glwb_withdrawal_rel) * survival_start
+        K = float(np.sum((claims_rel + access_rel) * df))
+        if single_premium_input is None:
+            denom = 1.0 - rate - K
+            if denom <= 1e-12:
+                exc = RILAPricingInfeasibleError(
+                    k_loading=float(K),
+                    premium_expense_rate=float(rate),
+                )
+                if infeasible_path_policy == "raise":
+                    raise RILAPricingInfeasibleError(
+                        k_loading=exc.k_loading,
+                        premium_expense_rate=exc.premium_expense_rate,
+                        detail=f"(Monte Carlo path index {i} of {n_sims})",
+                    ) from exc
+                n_infeasible += 1
+                loading = float(exc.k_loading) + float(exc.premium_expense_rate)
+                if loading > worst_loading:
+                    worst_loading = loading
+                    worst_exc = exc
+                continue
+            single_premium = float(
+                (float(expenses.policy_expense_dollars) + pv_monthly_expenses_single) / denom
             )
-        except RILAPricingInfeasibleError as exc:
-            if infeasible_path_policy == "raise":
-                raise RILAPricingInfeasibleError(
-                    k_loading=exc.k_loading,
-                    premium_expense_rate=exc.premium_expense_rate,
-                    detail=f"(Monte Carlo path index {i} of {n_sims})",
-                ) from exc
-            n_infeasible += 1
-            loading = float(exc.k_loading) + float(exc.premium_expense_rate)
-            if loading > worst_loading:
-                worst_loading = loading
-                worst_exc = exc
-            continue
-        prem[i] = float(res.single_premium)
-        pvb[i] = float(res.pv_benefit)
+        else:
+            single_premium = single_premium_input
+        if single_premium_input is None and (
+            not np.isfinite(single_premium) or single_premium <= 0.0
+        ):
+            raise ValueError(
+                "RILA priced single premium is non-positive. With the current implicit premium "
+                "formula, the numerator is policy expenses plus the PV of scheduled monthly "
+                "expenses; if both are zero (and there is no premium expense loading that "
+                "forces a positive premium), the closed-form premium collapses to zero and "
+                "all scaled cashflows vanish. Load non-zero :class:`~pricing_projection.ExpenseAssumptions` "
+                "(for example via ``ExpenseAssumptions.load_from_csv(pricing_projection.DEFAULT_EXPENSES_CSV)``) "
+                "or pass explicit positive policy / monthly expense dollars."
+            )
+        benefit_scale = 1.0 if single_premium_input is not None else float(single_premium)
+        expected_benefit_cashflows = (claims_rel + access_rel) * benefit_scale
+        prem[i] = float(single_premium)
+        pvb[i] = float(np.sum(expected_benefit_cashflows * df))
         n_feasible += 1
 
     if n_feasible == 0:

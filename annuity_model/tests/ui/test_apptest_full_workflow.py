@@ -344,6 +344,13 @@ def test_run_pricing_button_populates_session_result(
         f"{result_attr!r}; got {type(res).__name__} with attrs "
         f"{sorted(a for a in dir(res) if not a.startswith('_'))[:10]}..."
     )
+    assert _session_get(at, "pricing_xlsx_dirty") is True, (
+        f"{product_label} pricing run should mark workbook bytes dirty for lazy export."
+    )
+    assert _session_get(at, "pricing_xlsx_bytes") is None, (
+        f"{product_label} pricing run rebuilt Excel bytes synchronously; "
+        "the workbook should be deferred until the Excel Replicator/download surface."
+    )
 
     contract = _session_get(at, "pricing_contract")
     assert contract is not None, (

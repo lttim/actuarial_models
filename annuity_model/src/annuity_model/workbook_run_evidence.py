@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import io
 import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from openpyxl import Workbook, load_workbook
+from openpyxl import Workbook
 from openpyxl.styles import Font
-
-from annuity_model.excel_workbook_validator import validate_workbook_or_raise
 
 RUN_LEDGER_SHEET = "RunLedger"
 ASSUMPTION_EVIDENCE_SHEET = "AssumptionEvidence"
@@ -97,24 +94,8 @@ def _write_assumption_evidence_sheet(wb: Workbook, rows: Sequence[Any]) -> None:
             ws.cell(row=row_idx, column=col, value=value)
 
 
-def add_run_evidence_to_workbook_bytes(
-    raw: bytes,
-    run_summary: Mapping[str, Any] | None,
-) -> bytes:
-    """Return workbook bytes with run-evidence sheets appended."""
-    if not run_summary:
-        return raw
-    wb = load_workbook(io.BytesIO(raw))
-    write_run_evidence_sheets(wb, run_summary)
-    validate_workbook_or_raise(wb)
-    out = io.BytesIO()
-    wb.save(out)
-    return out.getvalue()
-
-
 __all__ = [
     "ASSUMPTION_EVIDENCE_SHEET",
     "RUN_LEDGER_SHEET",
-    "add_run_evidence_to_workbook_bytes",
     "write_run_evidence_sheets",
 ]

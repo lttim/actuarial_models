@@ -6,9 +6,11 @@ ALM helper finds the SPIA/Term-style layout.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -32,6 +34,7 @@ from annuity_model.recalc_excel_shared import (
     write_monthly_curve_logdf,
     write_yield_curve_sheet,
 )
+from annuity_model.workbook_run_evidence import write_run_evidence_sheets
 
 LIABILITY_SHEET_NAME = "Liabilities"
 SHEET_INPUTS = "Inputs"
@@ -101,6 +104,7 @@ def build_wl_workbook_from_spec(
     spec: WLExcelBuildSpec,
     *,
     out_path: str | Path | None = None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     res = wl.price_wl_single_premium(
         contract=spec.contract,
@@ -340,6 +344,7 @@ def build_wl_workbook_from_spec(
         ),
     )
 
+    write_run_evidence_sheets(wb, run_summary)
     validate_workbook_or_raise(wb)
     buf = BytesIO()
     wb.save(buf)

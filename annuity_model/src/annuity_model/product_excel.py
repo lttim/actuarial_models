@@ -32,7 +32,6 @@ from annuity_model.build_va_excel_workbook import VAExcelBuildSpec, build_va_wor
 from annuity_model.build_vul_excel_workbook import VULExcelBuildSpec, build_vul_workbook_from_spec
 from annuity_model.build_wl_excel_workbook import WLExcelBuildSpec, build_wl_workbook_from_spec
 from annuity_model.product_registry import ProductType
-from annuity_model.workbook_run_evidence import add_run_evidence_to_workbook_bytes
 
 # Per-product workbook builder. The signature accepts the union of all
 # kwargs the dispatcher might pass; individual builders pull what they need
@@ -98,6 +97,7 @@ def _build_spia_workbook(
     mc_snapshot: MCExcelSnapshot | None,
     alm_snapshot: ALMExcelSnapshot | None,
     alm_assumptions: sp.ALMAssumptions | None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     return _workbook_bytes(
         build_workbook_from_spec(
@@ -107,6 +107,7 @@ def _build_spia_workbook(
             mc_snapshot=mc_snapshot,
             alm_snapshot=alm_snapshot,
             alm_assumptions=alm_assumptions,
+            run_summary=run_summary,
         )
     )
 
@@ -120,6 +121,7 @@ def _build_term_workbook(
     mc_snapshot: MCExcelSnapshot | None,
     alm_snapshot: ALMExcelSnapshot | None,
     alm_assumptions: sp.ALMAssumptions | None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     # Term builder doesn't take python_snapshot / mc_snapshot today (no
     # ESG/MC sheets are emitted for level-monthly term). Accept and drop
@@ -131,6 +133,7 @@ def _build_term_workbook(
             out_path=out_path,
             alm_snapshot=alm_snapshot,
             alm_assumptions=alm_assumptions,
+            run_summary=run_summary,
         )
     )
 
@@ -144,6 +147,7 @@ def _build_rila_workbook(
     mc_snapshot: MCExcelSnapshot | None,
     alm_snapshot: ALMExcelSnapshot | None,
     alm_assumptions: sp.ALMAssumptions | None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     # RILA builder takes alm_* but not python_snapshot / mc_snapshot at
     # this layer (the RILA workbook embeds its own MC sheet from the
@@ -155,6 +159,7 @@ def _build_rila_workbook(
             out_path=out_path,
             alm_snapshot=alm_snapshot,
             alm_assumptions=alm_assumptions,
+            run_summary=run_summary,
         )
     )
 
@@ -176,9 +181,12 @@ def _build_myga_workbook(
     mc_snapshot: MCExcelSnapshot | None,
     alm_snapshot: ALMExcelSnapshot | None,
     alm_assumptions: sp.ALMAssumptions | None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
-    return _workbook_bytes(build_myga_workbook_from_spec(spec, out_path=out_path))
+    return _workbook_bytes(
+        build_myga_workbook_from_spec(spec, out_path=out_path, run_summary=run_summary)
+    )
 
 
 @register_builder(ProductType.FIA, spec_type=FIAExcelBuildSpec)
@@ -190,9 +198,12 @@ def _build_fia_workbook(
     mc_snapshot: MCExcelSnapshot | None,
     alm_snapshot: ALMExcelSnapshot | None,
     alm_assumptions: sp.ALMAssumptions | None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
-    return _workbook_bytes(build_fia_workbook_from_spec(spec, out_path=out_path))
+    return _workbook_bytes(
+        build_fia_workbook_from_spec(spec, out_path=out_path, run_summary=run_summary)
+    )
 
 
 @register_builder(ProductType.VARIABLE_ANNUITY, spec_type=VAExcelBuildSpec)
@@ -204,9 +215,12 @@ def _build_va_workbook(
     mc_snapshot: MCExcelSnapshot | None,
     alm_snapshot: ALMExcelSnapshot | None,
     alm_assumptions: sp.ALMAssumptions | None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
-    return _workbook_bytes(build_va_workbook_from_spec(spec, out_path=out_path))
+    return _workbook_bytes(
+        build_va_workbook_from_spec(spec, out_path=out_path, run_summary=run_summary)
+    )
 
 
 @register_builder(ProductType.WHOLE_LIFE, spec_type=WLExcelBuildSpec)
@@ -218,9 +232,12 @@ def _build_wl_workbook(
     mc_snapshot: MCExcelSnapshot | None,
     alm_snapshot: ALMExcelSnapshot | None,
     alm_assumptions: sp.ALMAssumptions | None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
-    return _workbook_bytes(build_wl_workbook_from_spec(spec, out_path=out_path))
+    return _workbook_bytes(
+        build_wl_workbook_from_spec(spec, out_path=out_path, run_summary=run_summary)
+    )
 
 
 @register_builder(ProductType.UNIVERSAL_LIFE, spec_type=ULExcelBuildSpec)
@@ -232,9 +249,12 @@ def _build_ul_workbook(
     mc_snapshot: MCExcelSnapshot | None,
     alm_snapshot: ALMExcelSnapshot | None,
     alm_assumptions: sp.ALMAssumptions | None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
-    return _workbook_bytes(build_ul_workbook_from_spec(spec, out_path=out_path))
+    return _workbook_bytes(
+        build_ul_workbook_from_spec(spec, out_path=out_path, run_summary=run_summary)
+    )
 
 
 @register_builder(ProductType.INDEXED_UL, spec_type=IULExcelBuildSpec)
@@ -246,9 +266,12 @@ def _build_iul_workbook(
     mc_snapshot: MCExcelSnapshot | None,
     alm_snapshot: ALMExcelSnapshot | None,
     alm_assumptions: sp.ALMAssumptions | None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
-    return _workbook_bytes(build_iul_workbook_from_spec(spec, out_path=out_path))
+    return _workbook_bytes(
+        build_iul_workbook_from_spec(spec, out_path=out_path, run_summary=run_summary)
+    )
 
 
 @register_builder(ProductType.VARIABLE_UL, spec_type=VULExcelBuildSpec)
@@ -260,9 +283,12 @@ def _build_vul_workbook(
     mc_snapshot: MCExcelSnapshot | None,
     alm_snapshot: ALMExcelSnapshot | None,
     alm_assumptions: sp.ALMAssumptions | None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     del python_snapshot, mc_snapshot, alm_snapshot, alm_assumptions
-    return _workbook_bytes(build_vul_workbook_from_spec(spec, out_path=out_path))
+    return _workbook_bytes(
+        build_vul_workbook_from_spec(spec, out_path=out_path, run_summary=run_summary)
+    )
 
 
 def registered_builders() -> tuple[ProductType, ...]:
@@ -335,5 +361,6 @@ def build_product_workbook(
         mc_snapshot=mc_snapshot,
         alm_snapshot=alm_snapshot,
         alm_assumptions=alm_assumptions,
+        run_summary=run_summary,
     )
-    return add_run_evidence_to_workbook_bytes(raw, run_summary)
+    return raw

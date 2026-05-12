@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 import pandas as pd
@@ -37,6 +38,7 @@ from annuity_model.recalc_excel_shared import (
     write_monthly_curve_logdf,
     write_yield_curve_sheet,
 )
+from annuity_model.workbook_run_evidence import write_run_evidence_sheets
 
 TERM_PROJ_MAX_ROWS = 600
 
@@ -163,6 +165,7 @@ def build_term_workbook_from_spec(
     out_path: str | Path | None = None,
     alm_snapshot: ALMExcelSnapshot | None = None,
     alm_assumptions: sp.ALMAssumptions | None = None,
+    run_summary: Mapping[str, Any] | None = None,
 ) -> bytes:
     res = tp.price_term_life_level_monthly(
         contract=spec.contract,
@@ -416,6 +419,7 @@ def build_term_workbook_from_spec(
         ),
     )
 
+    write_run_evidence_sheets(wb, run_summary)
     from annuity_model.excel_workbook_validator import validate_workbook_or_raise
 
     validate_workbook_or_raise(wb)
