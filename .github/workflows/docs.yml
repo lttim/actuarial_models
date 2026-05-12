@@ -54,7 +54,7 @@ jobs:
       # repo on first run -- without this, the action fails with
       # "Get Pages site failed ... Not Found" until someone manually flips
       # Settings -> Pages -> Source = "GitHub Actions".
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         with:
           enablement: true
       - uses: actions/upload-pages-artifact@v3
