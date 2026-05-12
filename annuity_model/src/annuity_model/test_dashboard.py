@@ -208,13 +208,13 @@ def _base_test_name(name: str) -> str:
 
 
 def _render_pytest_unavailable(setup_error: str) -> None:
-    st.warning("Unit tests are local development tooling and are not runnable here.")
+    st.warning("Unit tests require a pytest-capable interpreter.")
     st.markdown(
-        "This environment does not have a pytest-capable interpreter. Streamlit Cloud installs "
-        "only the production dependencies from the root `requirements.txt`, so the app can run "
-        "without shipping the local test runner."
+        "This environment is missing the minimal test dependencies needed to collect and run "
+        "the in-app Unit Tests tab. On Streamlit Cloud, confirm the root `requirements.txt` "
+        "was installed; locally, install the project runtime and dev dependency files."
     )
-    st.markdown("To run this tab locally:")
+    st.markdown("Local setup:")
     st.code(LOCAL_PYTEST_SETUP, language="bash")
     with st.expander("Interpreter details"):
         st.code(setup_error, language="text")

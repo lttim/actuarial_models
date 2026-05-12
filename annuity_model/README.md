@@ -31,7 +31,7 @@ annuity_model/
 │   └── data/                      # packaged mortality, curves, scenarios
 ├── scripts/
 │   ├── deep_smoke.py              # end-to-end smoke (10 products, full validate)
-│   ├── streamlit_cloud_smoke.py   # root requirements.txt + streamlit_app.py boot gate
+│   ├── streamlit_cloud_smoke.py   # root requirements.txt + streamlit_app.py + Unit Tests gate
 │   ├── parity_trace.py            # python-vs-excel CSV trace for parity debug
 │   ├── render_parity_contract.py  # rebuilds tolerance tables from constants
 │   ├── render_actuarial_benchmarks.py  # rebuilds per-product band tables

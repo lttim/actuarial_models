@@ -17,10 +17,11 @@ assumption governance remains disclosure-based rather than blocking.
   parity contract template, parity-trace exporter).
 - [streamlit_app.py](streamlit_app.py) — Streamlit Cloud entry point that wires
   in `annuity_model/`.
-- [requirements.txt](requirements.txt) — Streamlit Cloud production runtime
-  manifest, mirrored exactly to
+- [requirements.txt](requirements.txt) — Streamlit Cloud app manifest: product
+  runtime pins plus the minimal `pytest` / `hypothesis` deps needed by the
+  online Unit Tests tab. Product runtime pins mirror
   [annuity_model/requirements.txt](annuity_model/requirements.txt) and
-  `annuity_model/pyproject.toml` runtime dependencies. Test/dev tools live in
+  `annuity_model/pyproject.toml`; the full local/CI dev toolchain lives in
   [annuity_model/requirements-dev.txt](annuity_model/requirements-dev.txt).
 - [DOCUMENTATION_MAP.md](DOCUMENTATION_MAP.md) — complete inventory of tracked
   docs with one-line purpose per file.

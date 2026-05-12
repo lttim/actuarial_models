@@ -10,6 +10,19 @@ ALM rules, RILA crediting) MUST also be logged in
 
 ## [Unreleased]
 
+### Fixed — Streamlit Cloud Unit Tests tab
+
+- Restored online Unit Tests support by adding the minimal test dependencies
+  (`pytest==9.0.3`, `hypothesis==6.152.1`) to the root Streamlit Cloud
+  manifest. The product runtime manifest and `[project].dependencies` remain
+  runtime-only.
+- Updated the dependency manifest invariant so root `requirements.txt` is
+  guarded as the Cloud app manifest: runtime pins plus a small, pinned Unit
+  Tests extra set aligned with dev dependencies and `requirements.lock`.
+- Strengthened `scripts/streamlit_cloud_smoke.py` so the Cloud runtime gate
+  navigates to the Unit Tests tab and fails unless tests are actually
+  collected.
+
 ### Fixed — Streamlit Cloud runtime dependency gate
 
 - Declared `defusedxml==0.7.1` as a direct runtime dependency in root
@@ -23,7 +36,7 @@ ALM rules, RILA crediting) MUST also be logged in
   production manifest.
 - Added `scripts/streamlit_cloud_smoke.py` plus a dedicated GitHub Actions job
   that installs only root `requirements.txt` and boots `streamlit_app.py`
-  without relying on dev dependencies, the lockfile, or editable install.
+  without relying on the full dev toolchain, the lockfile, or editable install.
 
 ### Added — Seven-product rollout (Phases 0-9)
 

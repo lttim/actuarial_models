@@ -128,7 +128,7 @@ def test_discover_tests_metadata_with_error_preserves_collection_diagnostics(
     assert td.discover_tests_metadata() == []
 
 
-def test_render_unit_tests_page_missing_pytest_shows_dev_only_state(
+def test_render_unit_tests_page_missing_pytest_shows_setup_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_st = _FakeStreamlit()
@@ -138,7 +138,8 @@ def test_render_unit_tests_page_missing_pytest_shows_dev_only_state(
     td.render_unit_tests_page(embedded=True)
 
     assert fake_st.subheaders == ["Unit tests"]
-    assert any("local development tooling" in message for message in fake_st.warnings)
+    assert fake_st.warnings == ["Unit tests require a pytest-capable interpreter."]
+    assert any("minimal test dependencies" in message for message in fake_st.markdowns)
     assert any("requirements-dev.txt" in block for block in fake_st.codes)
     assert any("pytest missing" in block for block in fake_st.codes)
     assert not fake_st.errors

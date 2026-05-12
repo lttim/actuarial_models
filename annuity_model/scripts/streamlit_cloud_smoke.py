@@ -2,12 +2,12 @@
 
 This intentionally emulates Streamlit Community Cloud's production install
 surface: root ``requirements.txt`` plus root ``streamlit_app.py``. It must not
-depend on an editable package install, ``requirements.lock``, or dev tools.
+depend on an editable package install, ``requirements.lock``, or the full dev
+toolchain.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,6 +21,7 @@ OLD_TEST_COLLECTION_ERROR = (
     "confirm pytest is installed in the selected interpreter."
 )
 PYTEST_DEV_ONLY_MESSAGE = "Unit tests are local development tooling"
+PYTEST_UNAVAILABLE_MESSAGE = "Unit tests require a pytest-capable interpreter."
 
 
 def _element_values(elements: Any) -> list[str]:
@@ -51,6 +52,17 @@ def _rendered_text(at: Any) -> str:
         getattr(at, "warning", []),
     ]
     return "\n".join(value for group in groups for value in _element_values(group))
+
+
+def _metric_value(at: Any, label: str) -> int | None:
+    for metric in getattr(at, "metric", []):
+        if getattr(metric, "label", None) == label:
+            raw = getattr(metric, "value", None) or getattr(metric, "body", None)
+            try:
+                return int(str(raw).replace(",", ""))
+            except (TypeError, ValueError):
+                return None
+    return None
 
 
 def _assert_no_exception(at: Any, *, context: str) -> bool:
@@ -104,15 +116,22 @@ def main() -> int:
     if OLD_TEST_COLLECTION_ERROR in rendered_text:
         print("FAIL: Unit Tests tab showed the legacy pytest collection error.", file=sys.stderr)
         return 1
-    if importlib.util.find_spec("pytest") is None and PYTEST_DEV_ONLY_MESSAGE not in rendered_text:
+    if PYTEST_DEV_ONLY_MESSAGE in rendered_text or PYTEST_UNAVAILABLE_MESSAGE in rendered_text:
         print(
-            "FAIL: Unit Tests tab did not explain that pytest is local development tooling.",
+            "FAIL: Unit Tests tab did not collect tests under the Streamlit Cloud manifest.",
+            file=sys.stderr,
+        )
+        return 1
+    total_tests = _metric_value(at, "Total tests")
+    if total_tests is None or total_tests <= 0:
+        print(
+            f"FAIL: Unit Tests tab did not render a positive collected test count: {total_tests!r}.",
             file=sys.stderr,
         )
         return 1
 
     print(
-        "PASS: streamlit_app.py boots and the Unit Tests tab degrades under the Streamlit Cloud runtime surface."
+        f"PASS: streamlit_app.py boots and the Unit Tests tab collects {total_tests} tests under the Streamlit Cloud runtime surface."
     )
     return 0
 

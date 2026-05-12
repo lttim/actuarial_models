@@ -47,7 +47,7 @@ to bend.
 | ProductType enum & adapter Protocol | [`product_registry.py`](../src/annuity_model/product_registry.py) | Enum, adapter seed implementations, term label parsers, and `validate_run_inputs(state)` compatibility hook. |
 | Per-product source of truth (engine/excel/ui/converter/formatter/capability/mortality/validator/order) | [`products/<name>/__init__.py`](../src/annuity_model/products/) | Use `register_product(ProductDefinition(...))`. Legacy public registry views derive from this canonical record. |
 | Streamlit run-form state keys | [`pricing_run_form_state.py`](../src/annuity_model/pricing_run_form_state.py) | Constants live here -- never hardcode `"run_*"` literals elsewhere. |
-| Streamlit Cloud runtime dependencies | root [`requirements.txt`](../../requirements.txt), [`requirements.txt`](../requirements.txt), [`pyproject.toml`](../pyproject.toml), [`tests/test_runtime_dependency_manifests.py`](../tests/test_runtime_dependency_manifests.py), [`scripts/streamlit_cloud_smoke.py`](../scripts/streamlit_cloud_smoke.py) | Root `requirements.txt` is the Streamlit Cloud production manifest. Direct runtime imports must be declared there, mirrored in product requirements and pyproject, and smoke-tested without the lockfile/dev deps/editable install. |
+| Streamlit Cloud dependencies | root [`requirements.txt`](../../requirements.txt), [`requirements.txt`](../requirements.txt), [`pyproject.toml`](../pyproject.toml), [`tests/test_runtime_dependency_manifests.py`](../tests/test_runtime_dependency_manifests.py), [`scripts/streamlit_cloud_smoke.py`](../scripts/streamlit_cloud_smoke.py) | Root `requirements.txt` is the Streamlit Cloud app manifest: product runtime pins plus minimal online Unit Tests deps. Runtime pins must be mirrored in product requirements and pyproject, while Cloud test extras stay pinned against dev deps and lockfile. Smoke-test without the lockfile/full dev deps/editable install. |
 | Multi-policy portfolio runner | [`portfolio_runner_spec.md`](portfolio_runner_spec.md) + [`portfolio_runner.py`](../src/annuity_model/portfolio_runner.py) | UI/CLI enablement: [`portfolio_config.py`](../src/annuity_model/portfolio_config.py) (`portfolio_v1_enabled`); see also `docs/portfolio_parity_contract.md`. |
 | ALM dispatch (pricing-result -> liability-path) | [`liability_dispatch.py`](../src/annuity_model/liability_dispatch.py) | Plug-in registry; `register_liability_path_converter`. |
 | Workbook-builder dispatch | [`product_excel.py`](../src/annuity_model/product_excel.py) | Plug-in registry; `register_builder`. |
@@ -241,7 +241,8 @@ Streamlit changes never bypass parity, but they have an extra constraint:
 * Run `python scripts/streamlit_cloud_smoke.py` when touching
   `streamlit_app.py`, runtime dependencies, packaging, or UI import wiring.
   The smoke intentionally uses the Streamlit Cloud entry and root
-  `requirements.txt` surface, not the locked/dev install surface.
+  `requirements.txt` surface, including the online Unit Tests tab, not the
+  locked/full-dev install surface.
 * If the change adds a widget that becomes a contract input, also add
   it to `validate_run_inputs(state)` in `product_registry.py`.
 

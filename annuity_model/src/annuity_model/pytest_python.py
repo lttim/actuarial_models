@@ -86,7 +86,7 @@ def select_pytest_interpreter(anchor: Path | None = None) -> tuple[str | None, s
                 return str(venv_py), None
             return None, (
                 f"The project virtualenv at `{venv_py}` does not have pytest installed. "
-                "Install local development dependencies with:\n"
+                "Install the project test dependencies with:\n"
                 "  cd annuity_model && .venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt\n"
                 "Then launch Streamlit via `./run_pricing_ui.sh` or `./run_test_dashboard.sh`."
             )
@@ -101,9 +101,10 @@ def select_pytest_interpreter(anchor: Path | None = None) -> tuple[str | None, s
             return sys.executable, None
         return None, (
             "The selected Python interpreter does not have pytest installed. "
-            "The Unit Tests tab is local development tooling; Streamlit Cloud installs "
-            "only the production dependencies from the root `requirements.txt`.\n"
-            "For local test execution, run:\n"
+            "The Unit Tests tab requires the minimal test dependencies from the root "
+            "`requirements.txt` on Streamlit Cloud, or the local dev dependencies in "
+            "`annuity_model/requirements-dev.txt` during development.\n"
+            "For local execution, run:\n"
             "  cd annuity_model\n"
             "  python3.12 -m venv .venv\n"
             "  .venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt\n"

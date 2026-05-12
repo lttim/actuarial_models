@@ -1,9 +1,10 @@
 """Runtime dependency manifest invariants.
 
 Streamlit Community Cloud installs the repository-root ``requirements.txt``
-before executing ``streamlit_app.py``. CI and local development also use the
-locked dependency tree, so the Cloud manifest needs its own guard: direct
-runtime imports in app code must be present in the loose runtime manifests.
+before executing ``streamlit_app.py``. That root manifest is the Cloud app
+surface: product runtime dependencies plus the minimal test dependencies
+needed by the online Unit Tests tab. The product manifest and pyproject runtime
+dependencies stay runtime-only.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ ROOT_REQUIREMENTS = REPO_ROOT / "requirements.txt"
 PROJECT_REQUIREMENTS = PROJECT_ROOT / "requirements.txt"
 PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 LOCKFILE = PROJECT_ROOT / "requirements.lock"
+CLOUD_TEST_EXTRAS = {"pytest", "hypothesis"}
 
 pytestmark = [pytest.mark.invariant]
 
@@ -50,6 +52,17 @@ def _pyproject_runtime_deps() -> dict[str, str]:
     for raw in data["project"]["dependencies"]:
         if "==" not in raw:
             raise AssertionError(f"pyproject runtime dependency is not an exact == pin: {raw!r}")
+        name, version = raw.split("==", 1)
+        pins[name.lower().replace("_", "-")] = version
+    return pins
+
+
+def _pyproject_dev_deps() -> dict[str, str]:
+    data = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    pins: dict[str, str] = {}
+    for raw in data["project"]["optional-dependencies"]["dev"]:
+        if "==" not in raw:
+            raise AssertionError(f"pyproject dev dependency is not an exact == pin: {raw!r}")
         name, version = raw.split("==", 1)
         pins[name.lower().replace("_", "-")] = version
     return pins
@@ -87,13 +100,55 @@ def test_runtime_manifests_match_exactly() -> None:
     project_reqs = _parse_pinned_requirements(PROJECT_REQUIREMENTS)
     pyproject_reqs = _pyproject_runtime_deps()
 
-    assert root_reqs == project_reqs, (
-        "Root requirements.txt is the Streamlit Cloud install manifest and "
-        "must stay exactly mirrored with annuity_model/requirements.txt."
+    assert project_reqs == pyproject_reqs, (
+        "annuity_model/requirements.txt and pyproject.toml [project].dependencies "
+        "must declare the same direct product runtime dependencies."
     )
-    assert root_reqs == pyproject_reqs, (
-        "Runtime requirements.txt files and pyproject.toml [project].dependencies "
-        "must declare the same direct runtime dependencies."
+
+    root_extras = set(root_reqs) - set(project_reqs)
+    missing_runtime = set(project_reqs) - set(root_reqs)
+    assert missing_runtime == set(), (
+        "Root requirements.txt is the Streamlit Cloud app manifest and must include every "
+        f"product runtime dependency: {sorted(missing_runtime)}"
+    )
+    assert root_extras == CLOUD_TEST_EXTRAS, (
+        "Root requirements.txt may differ from annuity_model/requirements.txt only by the "
+        f"minimal Cloud Unit Tests extras {sorted(CLOUD_TEST_EXTRAS)}; saw {sorted(root_extras)}."
+    )
+    for name, version in project_reqs.items():
+        assert root_reqs[name] == version, (
+            f"Root requirements runtime pin drift for {name}: "
+            f"root={root_reqs[name]} project={version}"
+        )
+
+
+def test_cloud_unit_test_dependency_pins_match_dev_and_lockfile() -> None:
+    root_reqs = _parse_pinned_requirements(ROOT_REQUIREMENTS)
+    dev_reqs = _parse_pinned_requirements(PROJECT_ROOT / "requirements-dev.txt")
+    pyproject_dev_reqs = _pyproject_dev_deps()
+    lock_reqs = _parse_pinned_requirements(LOCKFILE)
+
+    for name in sorted(CLOUD_TEST_EXTRAS):
+        assert name in root_reqs, f"root requirements.txt missing Cloud Unit Tests dep {name}"
+        assert root_reqs[name] == dev_reqs.get(name), (
+            f"Cloud Unit Tests pin drift for {name}: "
+            f"root={root_reqs[name]} requirements-dev={dev_reqs.get(name)}"
+        )
+        assert root_reqs[name] == pyproject_dev_reqs.get(name), (
+            f"Cloud Unit Tests pin drift for {name}: "
+            f"root={root_reqs[name]} pyproject dev={pyproject_dev_reqs.get(name)}"
+        )
+        assert root_reqs[name] == lock_reqs.get(name), (
+            f"Cloud Unit Tests pin drift for {name}: "
+            f"root={root_reqs[name]} lock={lock_reqs.get(name)}"
+        )
+
+    unexpected_root_test_deps = {
+        name for name in root_reqs if name in pyproject_dev_reqs and name not in CLOUD_TEST_EXTRAS
+    }
+    assert unexpected_root_test_deps == set(), (
+        "Root requirements.txt should not pull the full dev toolchain into Streamlit Cloud: "
+        + ", ".join(sorted(unexpected_root_test_deps))
     )
 
 

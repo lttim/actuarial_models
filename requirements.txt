@@ -1,5 +1,6 @@
 # Streamlit Cloud reads this from the repo root when main file is streamlit_app.py.
-# Keep in sync with annuity_model/requirements.txt.
+# Runtime pins mirror annuity_model/requirements.txt. The final section adds the
+# minimal test dependencies needed by the online Unit Tests tab.
 # Pinned to the versions used in the M5 dev venv on 2026-04 (Python 3.12).
 # Pin Streamlit: unpinned, uv can pick ancient streamlit (e.g. 1.19) while resolving
 # altair 6+, which drops altair.vegalite.v4 -> ModuleNotFoundError at import time.
@@ -11,3 +12,8 @@ streamlit==1.56.0
 matplotlib==3.10.8
 openpyxl==3.1.5
 defusedxml==0.7.1
+
+# Streamlit Cloud Unit Tests tab support. Keep these pins aligned with
+# annuity_model/requirements-dev.txt, pyproject optional dev deps, and lockfile.
+pytest==9.0.3
+hypothesis==6.152.1

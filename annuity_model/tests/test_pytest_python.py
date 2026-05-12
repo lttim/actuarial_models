@@ -65,6 +65,7 @@ def test_select_pytest_interpreter_rejects_interpreter_without_pytest(
     assert exe is None
     assert err is not None
     assert "pytest" in err
+    assert "root `requirements.txt`" in err
     assert "requirements-dev.txt" in err
 
 
