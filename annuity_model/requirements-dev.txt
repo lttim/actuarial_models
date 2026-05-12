@@ -13,7 +13,7 @@ pytest-html==4.2.0
 # When bumping ruff or mypy, also bump the matching `rev:` in
 # .pre-commit-config.yaml so local pre-commit and CI use the same checker.
 ruff==0.15.11
-mypy==1.20.1
+mypy==2.1.0
 
 # Documentation site (mkdocs --serve / GitHub Pages deploy)
 mkdocs==1.6.1
