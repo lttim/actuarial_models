@@ -3,7 +3,7 @@
 # Production / Streamlit-Cloud installs MUST NOT pull this file.
 # Pinned to the versions in the M5 dev venv on 2026-04 (Python 3.12).
 setuptools==80.9.0
-wheel==0.46.2
+wheel==0.47.0
 pytest==9.0.3
 pytest-html==4.2.0
 
@@ -12,17 +12,17 @@ pytest-html==4.2.0
 # formatting (black-compatible output, no double-formatter conflict).
 # When bumping ruff or mypy, also bump the matching `rev:` in
 # .pre-commit-config.yaml so local pre-commit and CI use the same checker.
-ruff==0.15.11
+ruff==0.15.13
 mypy==1.20.1
 
 # Documentation site (mkdocs --serve / GitHub Pages deploy)
 mkdocs==1.6.1
 mkdocs-material==9.7.6
 mkdocstrings[python]==1.0.4
-pymdown-extensions==10.21.2
+pymdown-extensions==10.21.3
 
 # Property tests + perf gates + mutation pilot (P4)
-hypothesis==6.152.1
+hypothesis==6.152.7
 pytest-benchmark==5.2.3
 pytest-cov==7.1.0
 mutmut==3.5.0
