@@ -6,7 +6,7 @@
 # altair 6+, which drops altair.vegalite.v4 -> ModuleNotFoundError at import time.
 numpy==2.4.4
 pandas==3.0.2
-pyarrow==23.0.1
+pyarrow==24.0.0
 altair==6.0.0
 streamlit==1.56.0
 matplotlib==3.10.8
