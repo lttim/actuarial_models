@@ -3,8 +3,8 @@
 # Production / Streamlit-Cloud installs MUST NOT pull this file.
 # Pinned to the versions in the M5 dev venv on 2026-04 (Python 3.12).
 setuptools==80.9.0
-wheel==0.46.2
-pytest==9.0.3
+wheel==0.47.0
+pytest==9.1.1
 pytest-html==4.2.0
 
 # Static-analysis / formatter (mirrored by pre-commit + CI)
@@ -12,7 +12,7 @@ pytest-html==4.2.0
 # formatting (black-compatible output, no double-formatter conflict).
 # When bumping ruff or mypy, also bump the matching `rev:` in
 # .pre-commit-config.yaml so local pre-commit and CI use the same checker.
-ruff==0.15.11
+ruff==0.15.20
 mypy==1.20.1
 
 # Documentation site (mkdocs --serve / GitHub Pages deploy)
@@ -22,10 +22,10 @@ mkdocstrings[python]==1.0.4
 pymdown-extensions==10.21.2
 
 # Property tests + perf gates + mutation pilot (P4)
-hypothesis==6.152.1
+hypothesis==6.155.7
 pytest-benchmark==5.2.3
 pytest-cov==7.1.0
-mutmut==3.5.0
+mutmut==3.6.0
 
 # Workbook parity is enforced with project tests and the static workbook
 # validator. Do not add desktop spreadsheet automation dependencies here;
@@ -35,5 +35,5 @@ mutmut==3.5.0
 # When bumping these, also bump the matching hardcoded versions in
 # .github/workflows/security.yml (pip-audit / bandit jobs install fixed
 # versions to avoid surprise CI failures from new rule sets).
-pip-audit==2.10.0
+pip-audit==2.10.1
 bandit==1.9.4
